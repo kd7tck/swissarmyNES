@@ -44,21 +44,18 @@ impl CodeGenerator {
         self.ram_pointer = 0x0300;
 
         for decl in &program.declarations {
-            match decl {
-                TopLevel::Dim(name, _dtype) => {
-                    // Assign address
-                    // Update symbol table
-                    // We need to resolve the symbol first
-                    // The symbol table passed in `new` should already have these defined from Semantic Analysis
-                    // We just need to set the address.
-                    self.symbol_table.assign_address(name, self.ram_pointer)?;
-                    self.output.push(format!("; {} @ ${:04X}", name, self.ram_pointer));
+            if let TopLevel::Dim(name, _dtype) = decl {
+                // Assign address
+                // Update symbol table
+                // We need to resolve the symbol first
+                // The symbol table passed in `new` should already have these defined from Semantic Analysis
+                // We just need to set the address.
+                self.symbol_table.assign_address(name, self.ram_pointer)?;
+                self.output.push(format!("; {} @ ${:04X}", name, self.ram_pointer));
 
-                    // Increment pointer (assume 1 byte for now for everything)
-                    // TODO: Handle WORD (2 bytes)
-                    self.ram_pointer += 1;
-                },
-                _ => {}
+                // Increment pointer (assume 1 byte for now for everything)
+                // TODO: Handle WORD (2 bytes)
+                self.ram_pointer += 1;
             }
         }
         Ok(())

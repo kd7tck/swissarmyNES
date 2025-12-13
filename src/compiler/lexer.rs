@@ -33,6 +33,7 @@ pub enum Token {
     And,
     Or,
     Not,
+    Let,
 
     // Identifiers
     Identifier(String),
@@ -247,6 +248,7 @@ impl<'a> Lexer<'a> {
             "AND" => Token::And,
             "OR" => Token::Or,
             "NOT" => Token::Not,
+            "LET" => Token::Let,
             _ => Token::Identifier(ident),
         }
     }
@@ -329,6 +331,22 @@ impl<'a> Lexer<'a> {
 
         Token::Illegal(format!("\"{}", str_val)) // Unterminated string
     }
+
+    pub fn tokenize(&mut self) -> Result<Vec<Token>, String> {
+        let mut tokens = Vec::new();
+        loop {
+            let token = self.next_token();
+            if let Token::Illegal(s) = &token {
+                return Err(format!("Illegal token: {}", s));
+            }
+            if token == Token::EOF {
+                tokens.push(token);
+                break;
+            }
+            tokens.push(token);
+        }
+        Ok(tokens)
+    }
 }
 
 fn is_letter(ch: char) -> bool {
@@ -337,16 +355,7 @@ fn is_letter(ch: char) -> bool {
 
 pub fn tokenize(input: &str) -> Vec<Token> {
     let mut lexer = Lexer::new(input);
-    let mut tokens = Vec::new();
-    loop {
-        let token = lexer.next_token();
-        if token == Token::EOF {
-            tokens.push(token);
-            break;
-        }
-        tokens.push(token);
-    }
-    tokens
+    lexer.tokenize().unwrap_or_else(|_| vec![Token::EOF])
 }
 
 #[cfg(test)]

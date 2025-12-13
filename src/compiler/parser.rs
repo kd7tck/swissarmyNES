@@ -28,6 +28,10 @@ impl Parser {
         }
     }
 
+    pub fn parse(&mut self) -> Result<Program, String> {
+        self.parse_program()
+    }
+
     pub fn parse_program(&mut self) -> Result<Program, String> {
         let mut declarations = Vec::new();
 
@@ -176,6 +180,17 @@ impl Parser {
     // --- Statement Parsing ---
 
     fn parse_statement(&mut self) -> Result<Statement, String> {
+        if self.match_token(Token::Let) {
+            // Explicit Let
+             let name = if let Token::Identifier(n) = self.advance().clone() {
+                n
+            } else {
+                return Err("Expected identifier after LET".to_string());
+            };
+            self.consume(Token::Equal, "Expected '=' after variable name in LET")?;
+            let expr = self.parse_expression()?;
+            return Ok(Statement::Let(name, expr));
+        }
         if self.match_token(Token::If) {
             return self.parse_if();
         }

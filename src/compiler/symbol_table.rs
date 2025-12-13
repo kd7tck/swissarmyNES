@@ -16,6 +16,7 @@ pub struct Symbol {
     pub data_type: DataType,
     pub kind: SymbolKind,
     pub address: Option<u16>,
+    pub value: Option<i32>, // Added for Constants
 }
 
 pub struct SymbolTable {
@@ -55,6 +56,7 @@ impl SymbolTable {
                 data_type,
                 kind,
                 address: None,
+                value: None,
             };
             scope.insert(name, symbol);
             Ok(())
@@ -86,6 +88,16 @@ impl SymbolTable {
         for scope in self.scopes.iter_mut().rev() {
             if let Some(symbol) = scope.get_mut(name) {
                 symbol.address = Some(address);
+                return Ok(());
+            }
+        }
+        Err(format!("Symbol '{}' not found", name))
+    }
+
+    pub fn assign_value(&mut self, name: &str, value: i32) -> Result<(), String> {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(symbol) = scope.get_mut(name) {
+                symbol.value = Some(value);
                 return Ok(());
             }
         }

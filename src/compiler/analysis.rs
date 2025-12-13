@@ -2,7 +2,7 @@ use crate::compiler::ast::{Program, TopLevel, Statement, Expression, DataType};
 use crate::compiler::symbol_table::{SymbolTable, SymbolKind};
 
 pub struct SemanticAnalyzer {
-    symbol_table: SymbolTable,
+    pub symbol_table: SymbolTable,
     errors: Vec<String>,
 }
 
@@ -24,12 +24,17 @@ impl SemanticAnalyzer {
         // First pass: register all top-level symbols (CONST, DIM, SUB names)
         for decl in &program.declarations {
             match decl {
-                TopLevel::Const(name, _val) => {
-                    // TODO: Infer type of const? For now assume Byte or inferred later.
-                    // Let's assume Byte for generic constants for now or use a dedicated "Const" type?
-                    // DataType::Byte is safe-ish default for NES.
+                TopLevel::Const(name, val) => {
+                    // For now, only Integer constants are supported in expression resolution
                     if let Err(e) = self.symbol_table.define(name.clone(), DataType::Byte, SymbolKind::Constant) {
                         self.errors.push(e);
+                    } else {
+                        // Try to evaluate constant value if it's an integer
+                        if let Expression::Integer(v) = val {
+                             if let Err(e) = self.symbol_table.assign_value(name, *v) {
+                                 self.errors.push(e);
+                             }
+                        }
                     }
                 },
                 TopLevel::Dim(name, dtype) => {

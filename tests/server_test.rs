@@ -3,15 +3,13 @@ mod tests {
     use axum::{
         body::Body,
         http::{Request, StatusCode},
-        Router,
     };
     use tower::ServiceExt;
-    use tower_http::services::ServeDir;
+    use swissarmynes::server;
 
     #[tokio::test]
     async fn test_static_file_serving() {
-        let app = Router::new()
-            .nest_service("/", ServeDir::new("static"));
+        let app = server::app();
 
         // Test index.html
         let response = app

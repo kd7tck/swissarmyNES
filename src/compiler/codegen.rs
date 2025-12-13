@@ -135,6 +135,14 @@ impl CodeGenerator {
         match expr {
             Expression::Integer(val) => {
                 // Load immediate
+                if *val > 255 || *val < -128 {
+                    // For now, only 8-bit immediate values are supported
+                    // We could treat > 255 as error, but keeping silent truncation matching original behavior for now,
+                    // just explicit about it or error?
+                    // Let's return error to be safe as per "Improve Code Safety" plan.
+                    return Err(format!("Integer literal {} exceeds 8-bit limit (0-255)", val));
+                }
+
                 // Mask to 8-bit to ensure valid assembly
                 let byte_val = (val & 0xFF) as u8;
                 self.output.push(format!("  LDA #${:02X}", byte_val));
@@ -144,12 +152,12 @@ impl CodeGenerator {
                      if let Some(addr) = sym.address {
                          self.output.push(format!("  LDA ${:04X} ; {}", addr, name));
                      } else if sym.kind == crate::compiler::symbol_table::SymbolKind::Constant {
-                         // Need to get value of constant.
-                         // Symbol struct only has type/kind/name/address. It doesn't store the value of the const.
-                         // AST has the value. SymbolTable might need to store Const Value?
-                         // For now, let's fail or assume we can't emit consts yet without value.
-                         // Or we depend on AST optimization (Constant Folding) to replace Identifier with Integer before codegen.
-                         return Err(format!("Constant '{}' value resolution not implemented in codegen", name));
+                         if let Some(val) = sym.value {
+                             let byte_val = (val & 0xFF) as u8;
+                             self.output.push(format!("  LDA #${:02X}", byte_val));
+                         } else {
+                             return Err(format!("Constant '{}' has no value assigned", name));
+                         }
                      } else {
                          return Err(format!("Variable '{}' has no address", name));
                      }

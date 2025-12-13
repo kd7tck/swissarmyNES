@@ -4,3 +4,4 @@ pub mod parser;
 pub mod symbol_table;
 pub mod analysis;
 pub mod codegen;
+pub mod assembler;

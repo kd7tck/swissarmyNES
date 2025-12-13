@@ -55,5 +55,17 @@
 *   `static/`: Frontend assets (HTML, CSS, JS).
 *   `tests/`: Integration tests.
 
+## Troubleshooting
+
+### CI Failure: Clippy Warnings in Integration Tests
+If you encounter a Clippy failure related to `find_sequence` or other helper functions in integration tests (e.g., `tests/hello_world_test.rs`), it may be due to the function being flagged as unused in certain configurations.
+
+**Solution:**
+Mark the helper function with `#[allow(dead_code)]`:
+```rust
+#[allow(dead_code)]
+fn find_sequence(...) { ... }
+```
+
 ## License
 [License Information]

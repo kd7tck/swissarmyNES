@@ -88,6 +88,7 @@ mod tests {
         assert!(find_sequence(&rom, &pattern4), "Did not find POKE(PPU_MASK, %00001010)");
     }
 
+    #[allow(dead_code)]
     fn find_sequence(data: &[u8], pattern: &[u8]) -> bool {
         data.windows(pattern.len()).any(|window| window == pattern)
     }

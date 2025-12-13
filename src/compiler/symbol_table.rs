@@ -15,6 +15,7 @@ pub struct Symbol {
     pub name: String,
     pub data_type: DataType,
     pub kind: SymbolKind,
+    pub address: Option<u16>,
 }
 
 pub struct SymbolTable {
@@ -53,6 +54,7 @@ impl SymbolTable {
                 name: name.clone(),
                 data_type,
                 kind,
+                address: None,
             };
             scope.insert(name, symbol);
             Ok(())
@@ -77,6 +79,17 @@ impl SymbolTable {
         } else {
             false
         }
+    }
+
+    pub fn assign_address(&mut self, name: &str, address: u16) -> Result<(), String> {
+        // Search from top (innermost) scope to bottom (global)
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(symbol) = scope.get_mut(name) {
+                symbol.address = Some(address);
+                return Ok(());
+            }
+        }
+        Err(format!("Symbol '{}' not found", name))
     }
 }
 

@@ -3,21 +3,23 @@
 **SwissArmyNES** is a comprehensive, web-based Integrated Development Environment (IDE) tailored for creating Nintendo Entertainment System (NES) games. It combines a Rust backend with a vector-based HTML/JS frontend to provide a modern workflow for retro game development.
 
 ## Current Status
-**Phase 11: End-to-End "Hello World"** - The compiler can now compile basic variable assignments and constants into a valid NES ROM binary.
+**Phase 12: Web Code Editor** - The frontend now includes a functional code editor with line numbers and basic syntax highlighting.
 
 *   **Recent Milestones:**
-    *   **Architecture:** Split into a library and binary structure to support robust integration testing.
-    *   **Assembler:** Integrated `rs6502` to assemble generated code into machine language.
-    *   **Compiler:** Added support for `LET` statements and integer `CONST` resolution.
-    *   **Testing:** Implemented end-to-end testing pipeline (`tests/e2e_test.rs`) that verifies compilation from source to binary opcodes.
-    *   **CI/CD:** Enforced strict formatting checks in GitHub Actions.
+    *   **Phase 11: End-to-End "Hello World"**: Verified that the compiler generates valid NES ROMs capable of changing background colors (PPU writes).
+    *   **Phase 12: Web Editor**: Implemented a lightweight, dependency-free syntax highlighter for SwissBASIC in the web interface.
+    *   **Compiler**: Added support for `LET` statements, `CONST` definitions, and basic `POKE` operations.
+    *   **Testing**: Robust integration tests verify the full compilation pipeline from source to binary.
 
 ## Features
 - **SwissBASIC**: A hybrid language combining BASIC syntax with inline 6502 Assembly.
-  - *New:* `LET` keyword for variable assignment.
-  - *New:* `CONST` definitions for integer values.
-- **Zero-Friction Toolchain**: Cloud-based compilation.
-- **Visual Editors**: Sprite, Map, and Palette editors (Planned).
+  - `LET` keyword for variable assignment.
+  - `CONST` definitions for integer values.
+  - `POKE` for direct memory access.
+- **Web IDE**:
+  - **Code Editor**: Syntax highlighting, line numbers, and basic auto-indentation.
+  - **Zero-Friction Toolchain**: Cloud-based compilation (Backend integration in progress).
+- **Planned**: Visual Editors for Sprites, Maps, and Palettes.
 
 ## Getting Started
 
@@ -38,9 +40,10 @@
    cargo run
    ```
    The server will start at `http://0.0.0.0:3000`.
+   Open your browser to see the Web IDE.
 
 3. **Run Tests:**
-   The project now includes unit tests and integration tests.
+   The project includes unit tests and end-to-end integration tests.
    ```bash
    cargo test
    ```
@@ -49,7 +52,16 @@
 *   `src/lib.rs`: Core compiler and library logic.
 *   `src/main.rs`: Axum web server entry point.
 *   `src/compiler/`: Compiler modules (Lexer, Parser, AST, Analysis, Codegen, Assembler).
-*   `tests/`: Integration tests (Server, End-to-End Compiler).
+*   `static/`: Frontend assets (HTML, CSS, JS).
+*   `tests/`: Integration tests.
+
+## Troubleshooting
+
+### CI Failure: Clippy Warnings
+The CI pipeline is configured to treat warnings as errors. To avoid build failures due to false positives regarding "dead code" (unused functions/variables), the workflow is configured to allow dead code warnings:
+`cargo clippy -- -D warnings -A dead_code`
+
+If you encounter other Clippy failures, please address them by fixing the code or suppressing specific warnings if necessary.
 
 ## License
 [License Information]

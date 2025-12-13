@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
+    use swissarmynes::compiler::analysis::SemanticAnalyzer;
+    use swissarmynes::compiler::assembler::Assembler;
+    use swissarmynes::compiler::codegen::CodeGenerator;
     use swissarmynes::compiler::lexer::Lexer;
     use swissarmynes::compiler::parser::Parser;
-    use swissarmynes::compiler::analysis::SemanticAnalyzer;
-    use swissarmynes::compiler::codegen::CodeGenerator;
-    use swissarmynes::compiler::assembler::Assembler;
 
     #[test]
     fn test_e2e_compile_to_rom() {
@@ -58,8 +58,8 @@ mod tests {
 
         // Debug: Print ROM dump around beginning
         println!("ROM Dump:");
-        for i in 0..32 {
-            print!("{:02X} ", rom[i]);
+        for byte in rom.iter().take(32) {
+            print!("{:02X} ", byte);
         }
         println!();
 
@@ -82,8 +82,8 @@ mod tests {
         // LDA #$2A
 
         let mut found = false;
-        for i in 0..rom.len()-1 {
-            if rom[i] == 0xA9 && rom[i+1] == 0x2A {
+        for i in 0..rom.len() - 1 {
+            if rom[i] == 0xA9 && rom[i + 1] == 0x2A {
                 found = true;
                 break;
             }

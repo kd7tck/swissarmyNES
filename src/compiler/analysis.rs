@@ -1,5 +1,5 @@
-use crate::compiler::ast::{Program, TopLevel, Statement, Expression, DataType};
-use crate::compiler::symbol_table::{SymbolTable, SymbolKind};
+use crate::compiler::ast::{DataType, Expression, Program, Statement, TopLevel};
+use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 
 pub struct SemanticAnalyzer {
     pub symbol_table: SymbolTable,
@@ -26,39 +26,51 @@ impl SemanticAnalyzer {
             match decl {
                 TopLevel::Const(name, val) => {
                     // For now, only Integer constants are supported in expression resolution
-                    if let Err(e) = self.symbol_table.define(name.clone(), DataType::Byte, SymbolKind::Constant) {
+                    if let Err(e) =
+                        self.symbol_table
+                            .define(name.clone(), DataType::Byte, SymbolKind::Constant)
+                    {
                         self.errors.push(e);
                     } else {
                         // Try to evaluate constant value if it's an integer
                         if let Expression::Integer(v) = val {
-                             if let Err(e) = self.symbol_table.assign_value(name, *v) {
-                                 self.errors.push(e);
-                             }
+                            if let Err(e) = self.symbol_table.assign_value(name, *v) {
+                                self.errors.push(e);
+                            }
                         }
                     }
-                },
+                }
                 TopLevel::Dim(name, dtype) => {
-                    if let Err(e) = self.symbol_table.define(name.clone(), dtype.clone(), SymbolKind::Variable) {
+                    if let Err(e) =
+                        self.symbol_table
+                            .define(name.clone(), dtype.clone(), SymbolKind::Variable)
+                    {
                         self.errors.push(e);
                     }
-                },
+                }
                 TopLevel::Sub(name, _params, _body) => {
-                     // Register Sub name
-                     // Sub return type? Procedures usually void/no return val in BASIC unless function.
-                     // We'll treat SUB as "void" effectively, but maybe just store it.
-                     // Using DataType::Byte as placeholder or maybe we need DataType::Void?
-                     if let Err(e) = self.symbol_table.define(name.clone(), DataType::Byte, SymbolKind::Sub) {
+                    // Register Sub name
+                    // Sub return type? Procedures usually void/no return val in BASIC unless function.
+                    // We'll treat SUB as "void" effectively, but maybe just store it.
+                    // Using DataType::Byte as placeholder or maybe we need DataType::Void?
+                    if let Err(e) =
+                        self.symbol_table
+                            .define(name.clone(), DataType::Byte, SymbolKind::Sub)
+                    {
                         self.errors.push(e);
-                     }
-                },
+                    }
+                }
                 TopLevel::Interrupt(name, _body) => {
                     // Interrupts are special, they aren't called by user usually.
                     // But we should register them to prevent name collision.
-                    if let Err(e) = self.symbol_table.define(name.clone(), DataType::Byte, SymbolKind::Sub) {
+                    if let Err(e) =
+                        self.symbol_table
+                            .define(name.clone(), DataType::Byte, SymbolKind::Sub)
+                    {
                         self.errors.push(e);
                     }
-                },
-                TopLevel::Asm(_) => {}, // No symbols in ASM block visible to BASIC usually
+                }
+                TopLevel::Asm(_) => {} // No symbols in ASM block visible to BASIC usually
             }
         }
 
@@ -70,7 +82,11 @@ impl SemanticAnalyzer {
 
                     // Register params
                     for (p_name, p_type) in params {
-                        if let Err(e) = self.symbol_table.define(p_name.clone(), p_type.clone(), SymbolKind::Param) {
+                        if let Err(e) = self.symbol_table.define(
+                            p_name.clone(),
+                            p_type.clone(),
+                            SymbolKind::Param,
+                        ) {
                             self.errors.push(e);
                         }
                     }
@@ -79,12 +95,12 @@ impl SemanticAnalyzer {
                     self.analyze_block(body);
 
                     self.symbol_table.exit_scope();
-                },
+                }
                 TopLevel::Interrupt(_name, body) => {
                     self.symbol_table.enter_scope();
                     self.analyze_block(body);
                     self.symbol_table.exit_scope();
-                },
+                }
                 _ => {} // Const/Dim/Asm don't have bodies to analyze
             }
         }
@@ -110,17 +126,21 @@ impl SemanticAnalyzer {
                 // If resolved, check if it's writable (not CONST).
                 if let Some(sym) = self.symbol_table.resolve(name) {
                     if sym.kind == SymbolKind::Constant {
-                        self.errors.push(format!("Cannot assign to constant '{}'", name));
+                        self.errors
+                            .push(format!("Cannot assign to constant '{}'", name));
                     }
                 } else {
                     // Implicit declaration (Integer/Byte default?)
                     // Define in current scope
-                     if let Err(e) = self.symbol_table.define(name.clone(), DataType::Byte, SymbolKind::Local) {
+                    if let Err(e) =
+                        self.symbol_table
+                            .define(name.clone(), DataType::Byte, SymbolKind::Local)
+                    {
                         self.errors.push(e);
-                     }
+                    }
                 }
                 self.analyze_expression(expr);
-            },
+            }
             Statement::If(cond, then_block, else_block) => {
                 self.analyze_expression(cond);
                 // IF blocks don't necessarily create new scope in BASIC, usually function-scoped.
@@ -131,28 +151,32 @@ impl SemanticAnalyzer {
                 if let Some(else_b) = else_block {
                     self.analyze_block(else_b);
                 }
-            },
+            }
             Statement::While(cond, body) => {
                 self.analyze_expression(cond);
                 self.analyze_block(body);
-            },
+            }
             Statement::DoWhile(body, cond) => {
                 self.analyze_block(body);
                 self.analyze_expression(cond);
-            },
+            }
             Statement::For(var, start, end, step, body) => {
                 // FOR variable is implicitly defined if not present
                 if self.symbol_table.resolve(var).is_none() {
-                     if let Err(e) = self.symbol_table.define(var.clone(), DataType::Byte, SymbolKind::Local) {
+                    if let Err(e) =
+                        self.symbol_table
+                            .define(var.clone(), DataType::Byte, SymbolKind::Local)
+                    {
                         self.errors.push(e);
-                     }
+                    }
                 } else {
-                     // Check if constant
-                     if let Some(sym) = self.symbol_table.resolve(var) {
+                    // Check if constant
+                    if let Some(sym) = self.symbol_table.resolve(var) {
                         if sym.kind == SymbolKind::Constant {
-                             self.errors.push(format!("Cannot use constant '{}' as FOR variable", var));
+                            self.errors
+                                .push(format!("Cannot use constant '{}' as FOR variable", var));
                         }
-                     }
+                    }
                 }
 
                 self.analyze_expression(start);
@@ -161,38 +185,40 @@ impl SemanticAnalyzer {
                     self.analyze_expression(s);
                 }
                 self.analyze_block(body);
-            },
+            }
             Statement::Return(expr_opt) => {
                 if let Some(expr) = expr_opt {
                     self.analyze_expression(expr);
                 }
-            },
+            }
             Statement::Call(name, args) => {
                 // Check if SUB exists
                 if self.symbol_table.resolve(name).is_none() {
-                    self.errors.push(format!("Undefined function/sub '{}'", name));
+                    self.errors
+                        .push(format!("Undefined function/sub '{}'", name));
                 }
                 for arg in args {
                     self.analyze_expression(arg);
                 }
-            },
+            }
             Statement::Poke(addr, val) => {
                 self.analyze_expression(addr);
                 self.analyze_expression(val);
-            },
+            }
             Statement::Print(args) => {
                 for arg in args {
                     self.analyze_expression(arg);
                 }
-            },
-            Statement::Asm(_) => {},
-            Statement::Comment(_) => {},
+            }
+            Statement::Asm(_) => {}
+            Statement::Comment(_) => {}
             Statement::On(_intr_name, handler_name) => {
                 // Check handler exists?
                 // intr_name is NMI, IRQ usually.
                 // handler_name is a SUB.
                 if self.symbol_table.resolve(handler_name).is_none() {
-                     self.errors.push(format!("Undefined interrupt handler '{}'", handler_name));
+                    self.errors
+                        .push(format!("Undefined interrupt handler '{}'", handler_name));
                 }
             }
         }
@@ -204,26 +230,26 @@ impl SemanticAnalyzer {
                 if self.symbol_table.resolve(name).is_none() {
                     self.errors.push(format!("Undefined variable '{}'", name));
                 }
-            },
+            }
             Expression::BinaryOp(left, _, right) => {
                 self.analyze_expression(left);
                 self.analyze_expression(right);
-            },
+            }
             Expression::UnaryOp(_, operand) => {
                 self.analyze_expression(operand);
-            },
+            }
             Expression::FunctionCall(name, args) => {
-                 if self.symbol_table.resolve(name).is_none() {
+                if self.symbol_table.resolve(name).is_none() {
                     self.errors.push(format!("Undefined function '{}'", name));
                 }
                 for arg in args {
                     self.analyze_expression(arg);
                 }
-            },
+            }
             Expression::Peek(addr) => {
                 self.analyze_expression(addr);
-            },
-            _ => {}, // Literals
+            }
+            _ => {} // Literals
         }
     }
 }

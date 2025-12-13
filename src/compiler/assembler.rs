@@ -15,7 +15,8 @@ impl Assembler {
     pub fn assemble(&self, source: &str) -> Result<Vec<u8>, String> {
         let mut assembler = Rs6502Assembler::new();
         // 0 as offset means no global offset override, respect .ORG
-        let segments = assembler.assemble_string(source, 0)
+        let segments = assembler
+            .assemble_string(source, 0)
             .map_err(|e| format!("Assembler error: {:?}", e))?;
 
         // NES ROMs are usually contiguous in PRG-ROM, but the assembler returns segments based on .ORG
@@ -31,12 +32,18 @@ impl Assembler {
 
             // Check bounds
             if start < 0x8000 {
-                return Err(format!("Code segment starts at ${:04X}, which is outside PRG-ROM space ($8000+)", start));
+                return Err(format!(
+                    "Code segment starts at ${:04X}, which is outside PRG-ROM space ($8000+)",
+                    start
+                ));
             }
 
             let offset = (start - 0x8000) as usize;
             if offset + code.len() > prg_rom.len() {
-                return Err(format!("Code segment at ${:04X} exceeds PRG-ROM size", start));
+                return Err(format!(
+                    "Code segment at ${:04X} exceeds PRG-ROM size",
+                    start
+                ));
             }
 
             // Copy code into PRG ROM buffer

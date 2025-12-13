@@ -33,6 +33,7 @@ pub enum Token {
     And,
     Or,
     Not,
+    Let,
 
     // Identifiers
     Identifier(String),
@@ -42,21 +43,21 @@ pub enum Token {
     StringLiteral(String),
 
     // Operators & Symbols
-    Plus,           // +
-    Minus,          // -
-    Star,           // *
-    Slash,          // /
-    Equal,          // =
-    Less,           // <
-    Greater,        // >
-    LessEqual,      // <=
-    GreaterEqual,   // >=
-    NotEqual,       // <>
-    LParen,         // (
-    RParen,         // )
-    Comma,          // ,
-    Colon,          // :
-    Hash,           // #
+    Plus,         // +
+    Minus,        // -
+    Star,         // *
+    Slash,        // /
+    Equal,        // =
+    Less,         // <
+    Greater,      // >
+    LessEqual,    // <=
+    GreaterEqual, // >=
+    NotEqual,     // <>
+    LParen,       // (
+    RParen,       // )
+    Comma,        // ,
+    Colon,        // :
+    Hash,         // #
 
     // Delimiters
     Newline,
@@ -86,27 +87,27 @@ impl<'a> Lexer<'a> {
                     '\n' => {
                         self.input.next();
                         Token::Newline
-                    },
+                    }
                     '+' => {
                         self.input.next();
                         Token::Plus
-                    },
+                    }
                     '-' => {
                         self.input.next();
                         Token::Minus
-                    },
+                    }
                     '*' => {
                         self.input.next();
                         Token::Star
-                    },
+                    }
                     '/' => {
                         self.input.next();
                         Token::Slash
-                    },
+                    }
                     '=' => {
                         self.input.next();
                         Token::Equal
-                    },
+                    }
                     '<' => {
                         self.input.next();
                         if let Some(&'=') = self.input.peek() {
@@ -118,7 +119,7 @@ impl<'a> Lexer<'a> {
                         } else {
                             Token::Less
                         }
-                    },
+                    }
                     '>' => {
                         self.input.next();
                         if let Some(&'=') = self.input.peek() {
@@ -127,42 +128,46 @@ impl<'a> Lexer<'a> {
                         } else {
                             Token::Greater
                         }
-                    },
+                    }
                     '(' => {
                         self.input.next();
                         Token::LParen
-                    },
+                    }
                     ')' => {
                         self.input.next();
                         Token::RParen
-                    },
+                    }
                     ',' => {
                         self.input.next();
                         Token::Comma
-                    },
+                    }
                     ':' => {
                         self.input.next();
                         Token::Colon
-                    },
+                    }
                     '#' => {
                         self.input.next();
                         Token::Hash
-                    },
-                    '\'' => { // Comment
+                    }
+                    '\'' => {
+                        // Comment
                         self.read_comment();
                         self.next_token() // Skip comment and return next token (likely Newline)
-                    },
-                    '$' => { // Hex literal
+                    }
+                    '$' => {
+                        // Hex literal
                         self.input.next();
                         self.read_hex_number()
-                    },
-                    '%' => { // Binary literal
+                    }
+                    '%' => {
+                        // Binary literal
                         self.input.next();
                         self.read_binary_number()
-                    },
-                    '"' => { // String literal
+                    }
+                    '"' => {
+                        // String literal
                         self.read_string()
-                    },
+                    }
                     _ => {
                         if ch.is_ascii_digit() {
                             self.read_number()
@@ -174,7 +179,7 @@ impl<'a> Lexer<'a> {
                         }
                     }
                 }
-            },
+            }
             None => Token::EOF,
         }
     }
@@ -215,7 +220,7 @@ impl<'a> Lexer<'a> {
             "REM" => {
                 self.read_comment();
                 self.next_token()
-            },
+            }
             "BEGIN" => Token::Begin,
             "END" => Token::End,
             "NEXT" => Token::Next,
@@ -247,6 +252,7 @@ impl<'a> Lexer<'a> {
             "AND" => Token::And,
             "OR" => Token::Or,
             "NOT" => Token::Not,
+            "LET" => Token::Let,
             _ => Token::Identifier(ident),
         }
     }
@@ -280,7 +286,7 @@ impl<'a> Lexer<'a> {
         }
 
         if num_str.is_empty() {
-             return Token::Illegal("$".to_string());
+            return Token::Illegal("$".to_string());
         }
 
         match i32::from_str_radix(&num_str, 16) {
@@ -321,13 +327,29 @@ impl<'a> Lexer<'a> {
             }
             if ch == '\n' || ch == '\r' {
                 // String shouldn't span lines in simple BASIC usually, or at least handle it gracefully
-                 break;
+                break;
             }
             str_val.push(ch);
             self.input.next();
         }
 
         Token::Illegal(format!("\"{}", str_val)) // Unterminated string
+    }
+
+    pub fn tokenize(&mut self) -> Result<Vec<Token>, String> {
+        let mut tokens = Vec::new();
+        loop {
+            let token = self.next_token();
+            if let Token::Illegal(s) = &token {
+                return Err(format!("Illegal token: {}", s));
+            }
+            if token == Token::EOF {
+                tokens.push(token);
+                break;
+            }
+            tokens.push(token);
+        }
+        Ok(tokens)
     }
 }
 
@@ -337,16 +359,7 @@ fn is_letter(ch: char) -> bool {
 
 pub fn tokenize(input: &str) -> Vec<Token> {
     let mut lexer = Lexer::new(input);
-    let mut tokens = Vec::new();
-    loop {
-        let token = lexer.next_token();
-        if token == Token::EOF {
-            tokens.push(token);
-            break;
-        }
-        tokens.push(token);
-    }
-    tokens
+    lexer.tokenize().unwrap_or_else(|_| vec![Token::EOF])
 }
 
 #[cfg(test)]
@@ -419,12 +432,7 @@ mod tests {
         let input = "if Then else";
         let tokens = tokenize(input);
 
-        let expected = vec![
-            Token::If,
-            Token::Then,
-            Token::Else,
-            Token::EOF,
-        ];
+        let expected = vec![Token::If, Token::Then, Token::Else, Token::EOF];
 
         assert_eq!(tokens, expected);
     }

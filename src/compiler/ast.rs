@@ -37,10 +37,16 @@ pub enum Statement {
     If(Expression, Vec<Statement>, Option<Vec<Statement>>), // condition, then_block, else_block
     While(Expression, Vec<Statement>),
     DoWhile(Vec<Statement>, Expression), // DO ... LOOP WHILE expr
-    For(String, Expression, Expression, Option<Expression>, Vec<Statement>), // var, start, end, step, body
+    For(
+        String,
+        Expression,
+        Expression,
+        Option<Expression>,
+        Vec<Statement>,
+    ), // var, start, end, step, body
     Return(Option<Expression>),
     Call(String, Vec<Expression>), // CALL SubName(args)
-    Poke(Expression, Expression), // address, value
+    Poke(Expression, Expression),  // address, value
     Print(Vec<Expression>),
     Asm(Vec<String>), // Raw assembly lines (if inside a SUB, though usually ASM is top-level too, but can be inline)
     Comment(String),
@@ -50,12 +56,12 @@ pub enum Statement {
 #[derive(Debug, PartialEq, Clone)]
 pub enum TopLevel {
     Sub(String, Vec<(String, DataType)>, Vec<Statement>), // Name, Params, Body
-    Interrupt(String, Vec<Statement>), // Interrupt Name (NMI/IRQ), Body
-    Const(String, Expression), // Global Const
-    Dim(String, DataType), // Global Dim
-    Asm(Vec<String>), // Top-level ASM block
-    // We could allow generic statements at top level if we want a "script" mode,
-    // but strict separation is safer for a compiled language targeting NES.
+    Interrupt(String, Vec<Statement>),                    // Interrupt Name (NMI/IRQ), Body
+    Const(String, Expression),                            // Global Const
+    Dim(String, DataType),                                // Global Dim
+    Asm(Vec<String>),                                     // Top-level ASM block
+                                                          // We could allow generic statements at top level if we want a "script" mode,
+                                                          // but strict separation is safer for a compiled language targeting NES.
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -96,9 +102,7 @@ mod tests {
         let sub = TopLevel::Sub(
             "Main".to_string(),
             vec![],
-            vec![
-                Statement::Let("x".to_string(), Expression::Integer(1))
-            ]
+            vec![Statement::Let("x".to_string(), Expression::Integer(1))],
         );
 
         if let TopLevel::Sub(name, params, body) = sub {

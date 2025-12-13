@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::compiler::ast::DataType;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SymbolKind {
@@ -16,6 +16,7 @@ pub struct Symbol {
     pub data_type: DataType,
     pub kind: SymbolKind,
     pub address: Option<u16>,
+    pub value: Option<i32>, // Added for Constants
 }
 
 pub struct SymbolTable {
@@ -45,16 +46,25 @@ impl SymbolTable {
         }
     }
 
-    pub fn define(&mut self, name: String, data_type: DataType, kind: SymbolKind) -> Result<(), String> {
+    pub fn define(
+        &mut self,
+        name: String,
+        data_type: DataType,
+        kind: SymbolKind,
+    ) -> Result<(), String> {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(&name) {
-                return Err(format!("Symbol '{}' already defined in current scope", name));
+                return Err(format!(
+                    "Symbol '{}' already defined in current scope",
+                    name
+                ));
             }
             let symbol = Symbol {
                 name: name.clone(),
                 data_type,
                 kind,
                 address: None,
+                value: None,
             };
             scope.insert(name, symbol);
             Ok(())
@@ -91,6 +101,16 @@ impl SymbolTable {
         }
         Err(format!("Symbol '{}' not found", name))
     }
+
+    pub fn assign_value(&mut self, name: &str, value: i32) -> Result<(), String> {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(symbol) = scope.get_mut(name) {
+                symbol.value = Some(value);
+                return Ok(());
+            }
+        }
+        Err(format!("Symbol '{}' not found", name))
+    }
 }
 
 #[cfg(test)]
@@ -100,7 +120,9 @@ mod tests {
     #[test]
     fn test_define_and_resolve_global() {
         let mut table = SymbolTable::new();
-        table.define("x".to_string(), DataType::Byte, SymbolKind::Variable).unwrap();
+        table
+            .define("x".to_string(), DataType::Byte, SymbolKind::Variable)
+            .unwrap();
 
         let sym = table.resolve("x");
         assert!(sym.is_some());
@@ -113,10 +135,14 @@ mod tests {
     #[test]
     fn test_shadowing() {
         let mut table = SymbolTable::new();
-        table.define("x".to_string(), DataType::Byte, SymbolKind::Variable).unwrap();
+        table
+            .define("x".to_string(), DataType::Byte, SymbolKind::Variable)
+            .unwrap();
 
         table.enter_scope();
-        table.define("x".to_string(), DataType::Word, SymbolKind::Local).unwrap();
+        table
+            .define("x".to_string(), DataType::Word, SymbolKind::Local)
+            .unwrap();
 
         let sym = table.resolve("x");
         assert!(sym.is_some());
@@ -136,7 +162,9 @@ mod tests {
     #[test]
     fn test_duplicate_definition_error() {
         let mut table = SymbolTable::new();
-        table.define("x".to_string(), DataType::Byte, SymbolKind::Variable).unwrap();
+        table
+            .define("x".to_string(), DataType::Byte, SymbolKind::Variable)
+            .unwrap();
         let res = table.define("x".to_string(), DataType::Byte, SymbolKind::Variable);
         assert!(res.is_err());
     }

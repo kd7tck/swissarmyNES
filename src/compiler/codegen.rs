@@ -1,4 +1,4 @@
-use crate::compiler::ast::{Program, TopLevel, Statement, Expression, BinaryOperator};
+use crate::compiler::ast::{BinaryOperator, Expression, Program, Statement, TopLevel};
 use crate::compiler::symbol_table::SymbolTable;
 
 pub struct CodeGenerator {
@@ -51,7 +51,8 @@ impl CodeGenerator {
                 // The symbol table passed in `new` should already have these defined from Semantic Analysis
                 // We just need to set the address.
                 self.symbol_table.assign_address(name, self.ram_pointer)?;
-                self.output.push(format!("; {} @ ${:04X}", name, self.ram_pointer));
+                self.output
+                    .push(format!("; {} @ ${:04X}", name, self.ram_pointer));
 
                 // Increment pointer (assume 1 byte for now for everything)
                 // TODO: Handle WORD (2 bytes)
@@ -68,20 +69,20 @@ impl CodeGenerator {
                 self.generate_block(body)?;
                 self.output.push("  RTS".to_string());
                 self.output.push("".to_string()); // Newline for readability
-            },
+            }
             TopLevel::Interrupt(name, body) => {
                 self.output.push(format!("{}:", name));
                 self.generate_block(body)?;
                 self.output.push("  RTI".to_string());
                 self.output.push("".to_string());
-            },
+            }
             TopLevel::Const(_, _) => {
                 // Constants are inlined usually, or we could emit equates?
                 // For now, resolved at compile time if possible.
-            },
+            }
             TopLevel::Dim(_, _) => {
                 // Handled in allocation pass
-            },
+            }
             TopLevel::Asm(lines) => {
                 for line in lines {
                     self.output.push(format!("  {}", line));
@@ -111,20 +112,24 @@ impl CodeGenerator {
                     } else {
                         // If it's a local variable (allocated on stack or temp zp), handling is more complex.
                         // For Phase 7, maybe we assume only globals or we allocate locals too?
-                        return Err(format!("Variable '{}' has no address assigned (Locals not supported yet)", name));
+                        return Err(format!(
+                            "Variable '{}' has no address assigned (Locals not supported yet)",
+                            name
+                        ));
                     }
                 } else {
-                     return Err(format!("Undefined variable '{}'", name));
+                    return Err(format!("Undefined variable '{}'", name));
                 }
-            },
+            }
             Statement::Asm(lines) => {
                 for line in lines {
                     self.output.push(format!("  {}", line));
                 }
-            },
+            }
             // TODO: Handle other statements (If, While, etc in Phase 8)
             _ => {
-                self.output.push(format!("; Unimplemented statement: {:?}", stmt));
+                self.output
+                    .push(format!("; Unimplemented statement: {:?}", stmt));
             }
         }
         Ok(())
@@ -135,28 +140,39 @@ impl CodeGenerator {
         match expr {
             Expression::Integer(val) => {
                 // Load immediate
+                if *val > 255 || *val < -128 {
+                    // For now, only 8-bit immediate values are supported
+                    // We could treat > 255 as error, but keeping silent truncation matching original behavior for now,
+                    // just explicit about it or error?
+                    // Let's return error to be safe as per "Improve Code Safety" plan.
+                    return Err(format!(
+                        "Integer literal {} exceeds 8-bit limit (0-255)",
+                        val
+                    ));
+                }
+
                 // Mask to 8-bit to ensure valid assembly
                 let byte_val = (val & 0xFF) as u8;
                 self.output.push(format!("  LDA #${:02X}", byte_val));
-            },
+            }
             Expression::Identifier(name) => {
                 if let Some(sym) = self.symbol_table.resolve(name) {
-                     if let Some(addr) = sym.address {
-                         self.output.push(format!("  LDA ${:04X} ; {}", addr, name));
-                     } else if sym.kind == crate::compiler::symbol_table::SymbolKind::Constant {
-                         // Need to get value of constant.
-                         // Symbol struct only has type/kind/name/address. It doesn't store the value of the const.
-                         // AST has the value. SymbolTable might need to store Const Value?
-                         // For now, let's fail or assume we can't emit consts yet without value.
-                         // Or we depend on AST optimization (Constant Folding) to replace Identifier with Integer before codegen.
-                         return Err(format!("Constant '{}' value resolution not implemented in codegen", name));
-                     } else {
-                         return Err(format!("Variable '{}' has no address", name));
-                     }
+                    if let Some(addr) = sym.address {
+                        self.output.push(format!("  LDA ${:04X} ; {}", addr, name));
+                    } else if sym.kind == crate::compiler::symbol_table::SymbolKind::Constant {
+                        if let Some(val) = sym.value {
+                            let byte_val = (val & 0xFF) as u8;
+                            self.output.push(format!("  LDA #${:02X}", byte_val));
+                        } else {
+                            return Err(format!("Constant '{}' has no value assigned", name));
+                        }
+                    } else {
+                        return Err(format!("Variable '{}' has no address", name));
+                    }
                 } else {
                     return Err(format!("Undefined variable '{}'", name));
                 }
-            },
+            }
             Expression::BinaryOp(left, op, right) => {
                 // General case (Recursive) using Stack to preserve values:
                 // 1. Eval Left -> A
@@ -181,25 +197,27 @@ impl CodeGenerator {
                     BinaryOperator::Add => {
                         self.output.push("  CLC".to_string());
                         self.output.push("  ADC $00".to_string());
-                    },
+                    }
                     BinaryOperator::Subtract => {
                         self.output.push("  SEC".to_string());
                         self.output.push("  SBC $00".to_string());
-                    },
+                    }
                     BinaryOperator::And => {
                         self.output.push("  AND $00".to_string());
-                    },
+                    }
                     BinaryOperator::Or => {
                         self.output.push("  ORA $00".to_string());
-                    },
-                     // TODO: Multiply/Divide/Compare
+                    }
+                    // TODO: Multiply/Divide/Compare
                     _ => {
-                         self.output.push(format!("; Unimplemented binary op: {:?}", op));
+                        self.output
+                            .push(format!("; Unimplemented binary op: {:?}", op));
                     }
                 }
-            },
+            }
             _ => {
-                self.output.push(format!("; Unimplemented expression: {:?}", expr));
+                self.output
+                    .push(format!("; Unimplemented expression: {:?}", expr));
             }
         }
         Ok(())
@@ -216,22 +234,31 @@ mod tests {
     fn test_codegen_var_assignment() {
         let mut st = SymbolTable::new();
         // Register symbols that analysis phase would have caught
-        st.define("x".to_string(), DataType::Byte, SymbolKind::Variable).unwrap();
-        st.define("y".to_string(), DataType::Byte, SymbolKind::Variable).unwrap();
+        st.define("x".to_string(), DataType::Byte, SymbolKind::Variable)
+            .unwrap();
+        st.define("y".to_string(), DataType::Byte, SymbolKind::Variable)
+            .unwrap();
 
         let program = Program {
             declarations: vec![
                 TopLevel::Dim("x".to_string(), DataType::Byte),
                 TopLevel::Dim("y".to_string(), DataType::Byte),
-                TopLevel::Sub("Main".to_string(), vec![], vec![
-                    Statement::Let("x".to_string(), Expression::Integer(10)),
-                    Statement::Let("y".to_string(), Expression::BinaryOp(
-                        Box::new(Expression::Identifier("x".to_string())),
-                        BinaryOperator::Add,
-                        Box::new(Expression::Integer(5))
-                    ))
-                ])
-            ]
+                TopLevel::Sub(
+                    "Main".to_string(),
+                    vec![],
+                    vec![
+                        Statement::Let("x".to_string(), Expression::Integer(10)),
+                        Statement::Let(
+                            "y".to_string(),
+                            Expression::BinaryOp(
+                                Box::new(Expression::Identifier("x".to_string())),
+                                BinaryOperator::Add,
+                                Box::new(Expression::Integer(5)),
+                            ),
+                        ),
+                    ],
+                ),
+            ],
         };
 
         let mut cg = CodeGenerator::new(st);
@@ -248,23 +275,29 @@ mod tests {
     fn test_codegen_nested_expression() {
         // Test (1 + 2) + 3
         let mut st = SymbolTable::new();
-        st.define("z".to_string(), DataType::Byte, SymbolKind::Variable).unwrap();
+        st.define("z".to_string(), DataType::Byte, SymbolKind::Variable)
+            .unwrap();
 
         let program = Program {
             declarations: vec![
                 TopLevel::Dim("z".to_string(), DataType::Byte),
-                TopLevel::Sub("Main".to_string(), vec![], vec![
-                    Statement::Let("z".to_string(), Expression::BinaryOp(
-                        Box::new(Expression::BinaryOp(
-                            Box::new(Expression::Integer(1)),
+                TopLevel::Sub(
+                    "Main".to_string(),
+                    vec![],
+                    vec![Statement::Let(
+                        "z".to_string(),
+                        Expression::BinaryOp(
+                            Box::new(Expression::BinaryOp(
+                                Box::new(Expression::Integer(1)),
+                                BinaryOperator::Add,
+                                Box::new(Expression::Integer(2)),
+                            )),
                             BinaryOperator::Add,
-                            Box::new(Expression::Integer(2))
-                        )),
-                        BinaryOperator::Add,
-                        Box::new(Expression::Integer(3))
-                    ))
-                ])
-            ]
+                            Box::new(Expression::Integer(3)),
+                        ),
+                    )],
+                ),
+            ],
         };
 
         let mut cg = CodeGenerator::new(st);

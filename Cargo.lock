@@ -81,6 +81,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "812e12b5285cc515a9c72a5c1d3b6d46a19dac5acfef5265968c166106e31dd3"
 
 [[package]]
+name = "byteorder"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fc10e8cc6b2580fda3f36eb6dc5316657f812a3df879a44a66fc9f0fdbc4855"
+
+[[package]]
 name = "bytes"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -369,6 +375,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rs6502"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ff949fa1726938573e7ad4d34262595c07a99d4be5b37d0906290b04eaea13f"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -481,6 +496,7 @@ name = "swissarmynes"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "rs6502",
  "tokio",
  "tower",
  "tower-http",

@@ -695,14 +695,14 @@ mod tests {
 
         if let Statement::If(cond, then_block, else_block) = stmt {
             // Check condition: x = 1
-            if let Expression::BinaryOp(left, op, right) = cond {
+            if let Expression::BinaryOp(_left, op, _right) = cond {
                 assert_eq!(op, BinaryOperator::Equal);
             } else {
                 panic!("Expected BinaryOp in IF condition");
             }
             // Check body
             assert_eq!(then_block.len(), 1);
-            if let Statement::Let(name, val) = &then_block[0] {
+            if let Statement::Let(name, _val) = &then_block[0] {
                 assert_eq!(name, "y");
             } else {
                 panic!("Expected Let in THEN block");

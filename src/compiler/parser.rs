@@ -62,32 +62,19 @@ impl Parser {
         }
 
         if self.match_token(Token::Dim) {
-            // DIM Name AS Type  -- Wait, syntax?
-            // DESIGN.md: "DIM(String, DataType)"
-            // Example not explicit on DIM syntax.
-            // Usually: DIM x AS BYTE or DIM x as BYTE?
-            // Lexer doesn't have AS.
-            // Maybe: DIM x Byte?
-            // Or Pascal style: DIM x: Byte?
-            // Let's assume `DIM Name AS Type` but we lack AS token.
-            // Or maybe `DIM Name Type`.
-            // Let's look at `ast.rs`: `Dim(String, DataType)`.
-            // I'll assume standard BASIC-ish: `DIM x AS Byte`.
-            // I need `AS` token?
-            // Or `DIM x` implies default?
-            // Let's check Lexer. No `AS`.
-            // Maybe it is C-style? `BYTE x`?
-            // But we have `Dim` token.
-            // Maybe `DIM BYTE x`?
-            // Let's assume `DIM Name AS Type` and fail because AS is missing.
-            // I will add `As` to Lexer or assume implicit?
-            // "SwissBASIC syntax ... familiar to QBASIC".
-            // QBASIC: `DIM x AS INTEGER`.
-            // So I probably need `AS`.
-            // BUT, wait. `TopLevel::Sub` has `Vec<(String, DataType)>`.
-            // This implies typed parameters. `SUB Main(x AS Byte)`?
-            // I will add `As` to Lexer.
-            return Err("DIM not fully supported (missing AS token)".to_string());
+            // DIM Name AS Type
+            let name = if let Token::Identifier(n) = self.advance().clone() {
+                n
+            } else {
+                return Err("Expected identifier after DIM".to_string());
+            };
+
+            self.consume(Token::As, "Expected AS after DIM name")?;
+            let data_type = self.parse_type()?;
+
+            // Optional newline
+            self.match_token(Token::Newline);
+            return Ok(TopLevel::Dim(name, data_type));
         }
 
         if self.match_token(Token::Sub) {
@@ -107,19 +94,8 @@ impl Parser {
                         return Err("Expected parameter name".to_string());
                     };
 
-                    // We need a type. Assume `Name AS Type`.
-                    // Since I don't have AS yet, I'll assume `Name Type` for now or fail.
-                    // Let's skip type parsing for a moment or mock it.
-                    // Actually, I'll just error if I don't have AS.
-                    // But I can support `SUB Main()` with no args.
-
-                    // If I want to support types I definitely need AS token or some separator.
-                    // I will pause here and add `As` to Lexer in next step?
-                    // Or do it now.
-                    // I'll finish scaffolding `parse_top_level` first.
-
-                    // Hack: Expect `Name` then check if next is a Type keyword directly?
-                    // `SUB Foo(x Byte)`?
+                    // Name AS Type
+                    self.consume(Token::As, "Expected AS after parameter name")?;
                     let param_type = self.parse_type()?;
                     params.push((param_name, param_type));
 
@@ -790,9 +766,24 @@ END SUB
     }
 
     #[test]
+    fn test_parse_dim() {
+        let input = "DIM x AS BYTE";
+        let tokens = tokenize(input);
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse_program().expect("Failed to parse program");
+
+        if let TopLevel::Dim(name, dtype) = &program.declarations[0] {
+            assert_eq!(name, "x");
+            assert_eq!(*dtype, DataType::Byte);
+        } else {
+            panic!("Expected Dim");
+        }
+    }
+
+    #[test]
     fn test_parse_sub_with_params() {
         let input = r#"
-SUB MyFunc(x BYTE, y WORD)
+SUB MyFunc(x AS BYTE, y AS WORD)
   RETURN
 END SUB
 "#;

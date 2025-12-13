@@ -13,6 +13,7 @@ pub enum Token {
     Interrupt,
     Asm,
     On,
+    As, // Added for DIM Name AS Type
     Do,
     While,
     For,
@@ -226,6 +227,7 @@ impl<'a> Lexer<'a> {
             "INTERRUPT" => Token::Interrupt,
             "ASM" => Token::Asm,
             "ON" => Token::On,
+            "AS" => Token::As,
             "DO" => Token::Do,
             "WHILE" => Token::While,
             "FOR" => Token::For,
@@ -380,7 +382,7 @@ mod tests {
 
     #[test]
     fn test_keywords() {
-        let input = "IF THEN ELSE END SUB WHILE WEND DO CONST DIM BYTE WORD BOOL PEEK POKE PRINT RETURN CALL AND OR NOT";
+        let input = "IF THEN ELSE END SUB WHILE WEND DO CONST DIM AS BYTE WORD BOOL PEEK POKE PRINT RETURN CALL AND OR NOT";
         let tokens = tokenize(input);
 
         let expected = vec![
@@ -394,6 +396,7 @@ mod tests {
             Token::Do,
             Token::Const,
             Token::Dim,
+            Token::As,
             Token::Byte,
             Token::Word,
             Token::Bool,

@@ -61,7 +61,10 @@ mod tests {
         // PLA      -> 68
         // STA $2006 -> 8D 06 20
         let pattern1 = vec![0xA9, 0x3F, 0x48, 0x68, 0x8D, 0x06, 0x20];
-        assert!(find_sequence(&rom, &pattern1), "Did not find POKE(PPU_ADDR, $3F)");
+        assert!(
+            rom.windows(pattern1.len()).any(|w| w == pattern1),
+            "Did not find POKE(PPU_ADDR, $3F)"
+        );
 
         // Pattern 2: POKE(PPU_ADDR, $00)
         // LDA #$00 -> A9 00
@@ -69,7 +72,10 @@ mod tests {
         // PLA      -> 68
         // STA $2006 -> 8D 06 20
         let pattern2 = vec![0xA9, 0x00, 0x48, 0x68, 0x8D, 0x06, 0x20];
-        assert!(find_sequence(&rom, &pattern2), "Did not find POKE(PPU_ADDR, $00)");
+        assert!(
+            rom.windows(pattern2.len()).any(|w| w == pattern2),
+            "Did not find POKE(PPU_ADDR, $00)"
+        );
 
         // Pattern 3: POKE(PPU_DATA, $11)
         // LDA #$11 -> A9 11
@@ -77,7 +83,10 @@ mod tests {
         // PLA      -> 68
         // STA $2007 -> 8D 07 20
         let pattern3 = vec![0xA9, 0x11, 0x48, 0x68, 0x8D, 0x07, 0x20];
-        assert!(find_sequence(&rom, &pattern3), "Did not find POKE(PPU_DATA, $11)");
+        assert!(
+            rom.windows(pattern3.len()).any(|w| w == pattern3),
+            "Did not find POKE(PPU_DATA, $11)"
+        );
 
         // Pattern 4: POKE(PPU_MASK, %00001010) -> $0A
         // LDA #$0A -> A9 0A
@@ -85,11 +94,9 @@ mod tests {
         // PLA      -> 68
         // STA $2001 -> 8D 01 20
         let pattern4 = vec![0xA9, 0x0A, 0x48, 0x68, 0x8D, 0x01, 0x20];
-        assert!(find_sequence(&rom, &pattern4), "Did not find POKE(PPU_MASK, %00001010)");
-    }
-
-    #[allow(dead_code)]
-    fn find_sequence(data: &[u8], pattern: &[u8]) -> bool {
-        data.windows(pattern.len()).any(|window| window == pattern)
+        assert!(
+            rom.windows(pattern4.len()).any(|w| w == pattern4),
+            "Did not find POKE(PPU_MASK, %00001010)"
+        );
     }
 }

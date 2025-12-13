@@ -240,7 +240,11 @@ This roadmap assumes an iterative agile approach, verifying functionality at eac
 *   Ensure the IDE is responsive (works on smaller screens/tablets).
 *   Add keyboard shortcuts (Ctrl+S to save, F5 to compile/run).
 
-### Phase 30: Documentation & Examples
+### Phase 30: Integrate Jules API
+*   Integrate Jules API allowing jules to create and maintain NES projects.
+*   Further expand on Jules API integration by integrating it into the full project scope.
+
+### Phase 31: Documentation & Examples
 *   Write the "SwissBASIC Reference Manual".
 *   Create 3-5 example projects (Pong clone, Platformer demo).
 *   Include these examples as "New Project" templates.

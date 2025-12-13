@@ -173,7 +173,7 @@ impl Parser {
                           Token::Comma => line.push(','),
                           Token::Hash => line.push('#'),
                           Token::Colon => line.push(':'),
-                          _ => line.push_str("?"),
+                          _ => line.push('?'),
                       }
                       line.push(' ');
                   }
@@ -265,7 +265,7 @@ impl Parser {
                           Token::Hash => line.push('#'),
                           Token::Colon => line.push(':'),
                            // ... other tokens
-                          _ => line.push_str("?"), // simplified
+                          _ => line.push('?'), // simplified
                       }
                       line.push(' ');
                   }
@@ -388,7 +388,7 @@ impl Parser {
         let condition = self.parse_expression()?;
         // Optional newline
 
-        return Ok(Statement::DoWhile(body, condition));
+        Ok(Statement::DoWhile(body, condition))
     }
 
     fn parse_for(&mut self) -> Result<Statement, String> {

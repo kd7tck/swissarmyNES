@@ -57,15 +57,11 @@
 
 ## Troubleshooting
 
-### CI Failure: Clippy Warnings in Integration Tests
-If you encounter a Clippy failure related to `find_sequence` or other helper functions in integration tests (e.g., `tests/hello_world_test.rs`), it may be due to the function being flagged as unused in certain configurations.
+### CI Failure: Clippy Warnings
+The CI pipeline is configured to treat warnings as errors. To avoid build failures due to false positives regarding "dead code" (unused functions/variables), the workflow is configured to allow dead code warnings:
+`cargo clippy -- -D warnings -A dead_code`
 
-**Solution:**
-Mark the helper function with `#[allow(dead_code)]`:
-```rust
-#[allow(dead_code)]
-fn find_sequence(...) { ... }
-```
+If you encounter other Clippy failures, please address them by fixing the code or suppressing specific warnings if necessary.
 
 ## License
 [License Information]

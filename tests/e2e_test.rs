@@ -36,29 +36,21 @@ mod tests {
         let asm_lines = codegen.generate(&program).expect("Codegen failed");
 
         // Join lines with newlines
-        let mut asm_source = asm_lines.join("\n");
-
-        // Add .ORG and Vectors for valid NES ROM (Simulated)
-        // CodeGenerator outputs code but maybe not .ORG yet.
-        // We need to wrap it to make it assemblable for a specific target.
-        // For this test, we just want to see if it assembles.
-
-        // Prepend .ORG $8000
-        asm_source = format!(".ORG $8000\n{}", asm_source);
+        let asm_source = asm_lines.join("\n");
 
         // 5. Assembler
         let assembler = Assembler::new();
         let rom = assembler.assemble(&asm_source).expect("Assembly failed");
 
-        // Verify we got 32KB
-        assert_eq!(rom.len(), 32768);
+        // Verify we got 40KB (16 Header + 32KB PRG + 8KB CHR)
+        assert_eq!(rom.len(), 40976);
 
         // Debug: Print generated assembly
         println!("Generated Assembly:\n{}", asm_source);
 
-        // Debug: Print ROM dump around beginning
-        println!("ROM Dump:");
-        for byte in rom.iter().take(32) {
+        // Debug: Print ROM dump around beginning (Skip header)
+        println!("PRG ROM Dump:");
+        for byte in rom.iter().skip(16).take(32) {
             print!("{:02X} ", byte);
         }
         println!();

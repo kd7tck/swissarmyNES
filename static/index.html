@@ -30,9 +30,19 @@
         </nav>
         <main class="content">
             <section id="code" class="view active">
-                <h1>Code Editor</h1>
-                <p>SwissBASIC editor will go here.</p>
-                <textarea id="code-editor" placeholder="PRINT 'HELLO WORLD'"></textarea>
+                <div class="toolbar">
+                    <button id="btn-compile">Compile</button>
+                    <button id="btn-run">Run (Emulator)</button>
+                </div>
+                <div class="editor-container">
+                    <div class="line-numbers" id="line-numbers">1</div>
+                    <div class="code-wrapper">
+                        <!-- The highlighting layer (behind) -->
+                        <pre id="code-highlight" aria-hidden="true"></pre>
+                        <!-- The input layer (front, transparent) -->
+                        <textarea id="code-editor" spellcheck="false" placeholder="REM Hello World"></textarea>
+                    </div>
+                </div>
             </section>
             <section id="graphics" class="view">
                 <h1>Graphics Editor</h1>
@@ -45,6 +55,7 @@
             </section>
         </main>
     </div>
+    <script src="/js/editor.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

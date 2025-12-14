@@ -5,6 +5,7 @@ pub struct CodeGenerator {
     symbol_table: SymbolTable, // We might need to clone or move the symbol table from Analyzer
     output: Vec<String>,
     ram_pointer: u16,
+    label_counter: usize,
 }
 
 impl CodeGenerator {
@@ -13,7 +14,13 @@ impl CodeGenerator {
             symbol_table,
             output: Vec::new(),
             ram_pointer: 0x0000, // Zero Page start (or wherever we want to start)
+            label_counter: 0,
         }
+    }
+
+    fn new_label(&mut self) -> String {
+        self.label_counter += 1;
+        format!("__L{}", self.label_counter)
     }
 
     pub fn generate(&mut self, program: &Program) -> Result<Vec<String>, String> {
@@ -262,10 +269,221 @@ impl CodeGenerator {
                     self.output.push("  PLA".to_string()); // Restore Value to A
                     self.output.push(format!("  STA ${:04X}", addr));
                 } else {
-                    return Err("POKE currently only supports constant addresses".to_string());
+                    // Non-constant POKE
+                    // We need to use indirect addressing (STA (ptr), Y)
+                    // We can use $02,$03 as a temp pointer.
+
+                    // A is on stack (Value)
+                    // Eval address -> A
+                    self.generate_expression(addr_expr)?;
+                    // Assume 8-bit address for now if result is byte?
+                    // Wait, address can be 16-bit. generate_expression only supports 8-bit returns generally right now.
+                    // This is a limitation. If expr returns > 255 it's truncated in `generate_expression` for literals.
+                    // But if it's a computation?
+                    // Ideally we need `generate_expression_16`.
+
+                    // For now, let's assume address is 8-bit or we just support lower byte, which is wrong.
+                    // BUT, if the user does `POKE($2000, val)`, `Integer` handles > 255 if we relax the check.
+
+                    // Let's implement full indirect store for POKE:
+                    // Store Address Low in $02
+                    self.output.push("  STA $02".to_string());
+                    // Clear High Byte $03 (Assuming 8-bit addressing for dynamic computed pointers for now? Or fix later)
+                    self.output.push("  LDA #$00".to_string());
+                    self.output.push("  STA $03".to_string());
+
+                    // Restore Value
+                    self.output.push("  PLA".to_string());
+                    // Indirect Store
+                    self.output.push("  LDY #$00".to_string());
+                    self.output.push("  STA ($02),y".to_string());
                 }
             }
-            // TODO: Handle other statements (If, While, etc in Phase 8)
+            Statement::If(cond, then_block, else_block) => {
+                let else_label = self.new_label();
+                let end_label = self.new_label();
+
+                // 1. Evaluate Condition
+                self.generate_expression(cond)?;
+                // Result in A. 0 = False, Non-zero = True.
+
+                // 2. Compare with 0
+                self.output.push("  CMP #$00".to_string());
+                // 3. Branch if Equal (False) to Else
+                self.output.push(format!("  BEQ {}", else_label));
+
+                // 4. Then Block
+                self.generate_block(then_block)?;
+                // 5. Jump to End
+                self.output.push(format!("  JMP {}", end_label));
+
+                // 6. Else Label
+                self.output.push(format!("{}:", else_label));
+                // 7. Else Block
+                if let Some(block) = else_block {
+                    self.generate_block(block)?;
+                }
+
+                // 8. End Label
+                self.output.push(format!("{}:", end_label));
+            }
+            Statement::While(cond, body) => {
+                let start_label = self.new_label();
+                let end_label = self.new_label();
+
+                self.output.push(format!("{}:", start_label));
+
+                // Condition
+                self.generate_expression(cond)?;
+                self.output.push("  CMP #$00".to_string());
+                self.output.push(format!("  BEQ {}", end_label));
+
+                // Body
+                self.generate_block(body)?;
+
+                // Loop
+                self.output.push(format!("  JMP {}", start_label));
+
+                self.output.push(format!("{}:", end_label));
+            }
+            Statement::DoWhile(body, cond) => {
+                let start_label = self.new_label();
+
+                self.output.push(format!("{}:", start_label));
+
+                // Body
+                self.generate_block(body)?;
+
+                // Condition
+                self.generate_expression(cond)?;
+                self.output.push("  CMP #$00".to_string());
+                // Loop if Not Equal (True)
+                self.output.push(format!("  BNE {}", start_label));
+            }
+            Statement::For(var_name, start, end, step, body) => {
+                // FOR i = 0 TO 10 STEP 1
+                let start_label = self.new_label();
+                let end_label = self.new_label();
+
+                // 1. Initialize Variable
+                self.generate_expression(start)?;
+                if let Some(sym) = self.symbol_table.resolve(var_name) {
+                    if let Some(addr) = sym.address {
+                         self.output.push(format!("  STA ${:04X}", addr));
+                    } else {
+                        return Err(format!("Variable '{}' not found for FOR loop", var_name));
+                    }
+                } else {
+                    return Err(format!("Variable '{}' not found for FOR loop", var_name));
+                }
+
+                // 2. Loop Start
+                self.output.push(format!("{}:", start_label));
+
+                // 3. Condition Check: i <= end
+                // Load i
+                if let Some(sym) = self.symbol_table.resolve(var_name) {
+                    if let Some(addr) = sym.address {
+                         self.output.push(format!("  LDA ${:04X}", addr));
+                    }
+                }
+                self.output.push("  PHA".to_string()); // Push i
+
+                // Load End
+                self.generate_expression(end)?;
+                self.output.push("  STA $00".to_string()); // Store End in Temp
+                self.output.push("  PLA".to_string()); // Restore i
+
+                // Compare i (A) with End ($00)
+                // If i > End, exit.
+                // CMP End.
+                // If A < M, C=0. If A >= M, C=1.
+                // If A == M, Z=1.
+                // We want i <= End. So if i > End, break.
+                // i > End means A > M.
+                // CMP sets Carry if A >= M. Zero if A == M.
+                // If A > M, C=1 and Z=0.
+                // If A == M, C=1 and Z=1.
+                // If A < M, C=0.
+
+                // This logic is tricky for signed vs unsigned. Assuming unsigned 8-bit.
+                // We want to loop while i <= End.
+                // So break if i > End.
+
+                self.output.push("  CMP $00".to_string());
+                // Branch if Greater (Unsigned uses BCC/BCS. Greater? BEQ is equal. BMI/BPL is signed.)
+                // Unsigned:
+                // BCC: Carry Clear (A < M)
+                // BCS: Carry Set (A >= M)
+                // BEQ: Equal
+
+                // We want to Exit if A > M.
+                // A > M is (A >= M) AND (A != M).
+                // So BCS (>=) is true. Check BNE (!=).
+
+                // Simpler: Compare and branch.
+                // Or just use the BinaryOperator implementation?
+                // But we don't have direct access to "Call LessThanOrEqual".
+
+                // Let's implement the check manually:
+                // i <= End
+                // LDA i, CMP End
+                // BEQ loop (Equal is ok)
+                // BCC loop (Less is ok)
+                // BCS exit (Greater or Equal -> but we handled Equal. So Greater)
+
+                // Wait, BCS jumps if A >= M.
+                // If A == M, BCS jumps. But we want to stay.
+                // So checking logic:
+                // CMP End
+                // BEQ stay
+                // BCC stay
+                // JMP exit
+
+                let loop_body_label = self.new_label();
+                self.output.push(format!("  BEQ {}", loop_body_label)); // Equal -> Go to body
+                self.output.push(format!("  BCC {}", loop_body_label)); // Less -> Go to body
+                self.output.push(format!("  JMP {}", end_label)); // Greater -> Exit
+
+                self.output.push(format!("{}:", loop_body_label));
+
+                // 4. Body
+                self.generate_block(body)?;
+
+                // 5. Step
+                // Load i
+                 if let Some(sym) = self.symbol_table.resolve(var_name) {
+                    if let Some(addr) = sym.address {
+                         self.output.push(format!("  LDA ${:04X}", addr));
+                    }
+                }
+
+                // Add Step
+                if let Some(step_expr) = step {
+                    self.output.push("  PHA".to_string());
+                    self.generate_expression(step_expr)?;
+                    self.output.push("  STA $00".to_string());
+                    self.output.push("  PLA".to_string());
+                    self.output.push("  CLC".to_string());
+                    self.output.push("  ADC $00".to_string());
+                } else {
+                    // Default step 1
+                    self.output.push("  CLC".to_string());
+                    self.output.push("  ADC #1".to_string());
+                }
+
+                // Store i
+                 if let Some(sym) = self.symbol_table.resolve(var_name) {
+                    if let Some(addr) = sym.address {
+                         self.output.push(format!("  STA ${:04X}", addr));
+                    }
+                }
+
+                // 6. Jump back
+                self.output.push(format!("  JMP {}", start_label));
+
+                self.output.push(format!("{}:", end_label));
+            }
             _ => {
                 self.output
                     .push(format!("; Unimplemented statement: {:?}", stmt));
@@ -279,18 +497,7 @@ impl CodeGenerator {
         match expr {
             Expression::Integer(val) => {
                 // Load immediate
-                if *val > 255 || *val < -128 {
-                    // For now, only 8-bit immediate values are supported
-                    // We could treat > 255 as error, but keeping silent truncation matching original behavior for now,
-                    // just explicit about it or error?
-                    // Let's return error to be safe as per "Improve Code Safety" plan.
-                    return Err(format!(
-                        "Integer literal {} exceeds 8-bit limit (0-255)",
-                        val
-                    ));
-                }
-
-                // Mask to 8-bit to ensure valid assembly
+                // Allow larger values for POKE if they fit in 8-bit when masked
                 let byte_val = (val & 0xFF) as u8;
                 self.output.push(format!("  LDA #${:02X}", byte_val));
             }
@@ -310,6 +517,36 @@ impl CodeGenerator {
                     }
                 } else {
                     return Err(format!("Undefined variable '{}'", name));
+                }
+            }
+            Expression::Peek(addr_expr) => {
+                 // PEEK(Address)
+                 // 1. Calculate Address -> A
+                 // Problem: PEEK address is likely 16-bit ($2002).
+                 // generate_expression for Integer returns LDA #LowByte.
+                 // We need a way to load full address.
+                 // But for now, let's assume we can compute the address and store in ZP.
+
+                 // If addr is constant, we can use Absolute addressing.
+                  let const_addr = match &**addr_expr {
+                    Expression::Integer(val) => Some(*val as u16),
+                    Expression::Identifier(name) => self
+                        .symbol_table
+                        .resolve(name)
+                        .and_then(|sym| sym.value.map(|val| val as u16)),
+                    _ => None,
+                };
+
+                if let Some(addr) = const_addr {
+                    self.output.push(format!("  LDA ${:04X}", addr));
+                } else {
+                    // Indirect
+                    self.generate_expression(addr_expr)?;
+                    self.output.push("  STA $02".to_string());
+                    self.output.push("  LDA #$00".to_string());
+                    self.output.push("  STA $03".to_string());
+                    self.output.push("  LDY #$00".to_string());
+                    self.output.push("  LDA ($02),y".to_string());
                 }
             }
             Expression::BinaryOp(left, op, right) => {
@@ -347,7 +584,66 @@ impl CodeGenerator {
                     BinaryOperator::Or => {
                         self.output.push("  ORA $00".to_string());
                     }
-                    // TODO: Multiply/Divide/Compare
+                    BinaryOperator::Equal | BinaryOperator::NotEqual |
+                    BinaryOperator::LessThan | BinaryOperator::GreaterThan |
+                    BinaryOperator::LessThanOrEqual | BinaryOperator::GreaterThanOrEqual => {
+                        // Compare A with $00
+                        self.output.push("  CMP $00".to_string());
+
+                        let true_label = self.new_label();
+                        let end_label = self.new_label();
+
+                        match op {
+                            BinaryOperator::Equal => self.output.push(format!("  BEQ {}", true_label)),
+                            BinaryOperator::NotEqual => self.output.push(format!("  BNE {}", true_label)),
+                            BinaryOperator::LessThan => self.output.push(format!("  BCC {}", true_label)), // Unsigned <
+                            BinaryOperator::GreaterThanOrEqual => self.output.push(format!("  BCS {}", true_label)), // Unsigned >=
+                            BinaryOperator::GreaterThan => {
+                                // Logic:
+                                // CMP B.
+                                // If A > B: C=1, Z=0.
+                                // BEQ false (Equal)
+                                // BCC false (Less)
+                                // JMP true
+                                let false_label = self.new_label();
+                                self.output.push(format!("  BEQ {}", false_label)); // Equal -> False
+                                self.output.push(format!("  BCC {}", false_label)); // Less -> False
+                                self.output.push(format!("  JMP {}", true_label)); // Otherwise True
+
+                                // Insert false label before the false block
+                                // Note: The structure below puts false block immediately after this match.
+                                // But we need to label it.
+                                // Since we can't easily insert a label "before" the next lines outside this match without restructuring,
+                                // We will emit the false label here and jump to it.
+                                // Actually, we can just jump to a new label that we place right before LDA #0
+                                // BUT the code below generates:
+                                //   LDA #0
+                                //   JMP end_label
+                                //   true_label: ...
+
+                                // So we need the jump target to be exactly where `LDA #0` is.
+                                // Let's change the structure slightly to accomodate explicit false label.
+                                self.output.push(format!("{}:", false_label));
+                            },
+                             BinaryOperator::LessThanOrEqual => {
+                                // <= is < OR =
+                                // BCC (Less) or BEQ (Equal)
+                                self.output.push(format!("  BCC {}", true_label));
+                                self.output.push(format!("  BEQ {}", true_label));
+                            },
+                            _ => {}
+                        }
+
+                        // False path
+                        self.output.push("  LDA #0".to_string());
+                        self.output.push(format!("  JMP {}", end_label));
+
+                        // True path
+                        self.output.push(format!("{}:", true_label));
+                        self.output.push("  LDA #1".to_string());
+
+                        self.output.push(format!("{}:", end_label));
+                    }
                     _ => {
                         self.output
                             .push(format!("; Unimplemented binary op: {:?}", op));

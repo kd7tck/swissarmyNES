@@ -18,9 +18,11 @@
   - **Explorer**: A sidebar "Project Explorer" to easily switch between projects.
   - **Storage**: Projects are stored as folders in the `projects/` directory in the application root.
 - **SwissBASIC**: A hybrid language combining BASIC syntax with inline 6502 Assembly.
+  - **Control Flow**: `IF`, `WHILE`, `FOR`, `DO...LOOP` support implemented.
+  - **Operators**: Relational (`=`, `<>`, `<`, `>`, `<=`, `>=`) and Arithmetic support.
   - `LET` keyword for variable assignment.
   - `CONST` definitions for integer values.
-  - `POKE` for direct memory access.
+  - `PEEK` and `POKE` for direct memory access (Basic support).
 - **Web IDE**:
   - **Code Editor**: Syntax highlighting, line numbers, and basic auto-indentation.
   - **Instant Compilation**: Click "Compile" to generate and download a `.nes` ROM file immediately.

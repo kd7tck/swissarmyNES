@@ -8,7 +8,7 @@
 </head>
 <body>
     <div id="app">
-        <nav class="sidebar">
+        <aside class="sidebar">
             <div class="brand">
                 <svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
                     <rect x="2" y="8" width="28" height="16" rx="2" fill="#333" />
@@ -16,8 +16,23 @@
                 </svg>
                 <span>SwissArmyNES</span>
             </div>
+
+            <div class="project-explorer">
+                <h3>Projects</h3>
+                <div class="project-actions">
+                    <button id="btn-new-project" title="New Project">+</button>
+                    <button id="btn-save-project" title="Save Project">💾</button>
+                </div>
+                <div class="current-project">
+                    <span id="current-project-name">No Project</span>
+                </div>
+                <ul id="project-list" class="project-list">
+                    <!-- Projects injected here -->
+                </ul>
+            </div>
+
             <ul class="nav-links">
-                <li class="nav-item" data-target="code">
+                <li class="nav-item active" data-target="code">
                     <a href="#code">Code</a>
                 </li>
                 <li class="nav-item" data-target="graphics">
@@ -27,7 +42,7 @@
                     <a href="#settings">Settings</a>
                 </li>
             </ul>
-        </nav>
+        </aside>
         <main class="content">
             <section id="code" class="view active">
                 <div class="toolbar">
@@ -56,6 +71,7 @@
         </main>
     </div>
     <script src="/js/editor.js"></script>
+    <script src="/js/project.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

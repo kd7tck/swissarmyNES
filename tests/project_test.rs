@@ -1,10 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs;
     use std::path::Path;
     use swissarmynes::server::project::{
-        self, create_project, get_project, list_projects, save_project,
+        create_project, get_project, list_projects, save_project,
     };
 
     const TEST_PROJECTS_DIR: &str = "projects";

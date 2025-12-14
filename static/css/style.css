@@ -72,6 +72,56 @@ body {
     border-left: 3px solid var(--accent-color);
 }
 
+/* Project Explorer */
+.project-explorer {
+    padding: 10px;
+    border-bottom: 1px solid #333;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.project-explorer h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+    color: #888;
+    text-transform: uppercase;
+}
+
+.project-actions {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.project-actions button {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.current-project {
+    font-size: 0.9rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: var(--accent-color);
+}
+
+.project-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.project-list li {
+    padding: 5px 10px;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.project-list li:hover {
+    background-color: var(--hover-color);
+}
+
 /* Content Area */
 .content {
     flex: 1;

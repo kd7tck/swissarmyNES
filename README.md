@@ -3,16 +3,20 @@
 **SwissArmyNES** is a comprehensive, web-based Integrated Development Environment (IDE) tailored for creating Nintendo Entertainment System (NES) games. It combines a Rust backend with a vector-based HTML/JS frontend to provide a modern workflow for retro game development.
 
 ## Current Status
-**Phase 13: Compiler API** - The frontend is now connected to the backend compiler, enabling users to compile their SwissBASIC code directly from the web interface and download the resulting NES ROM.
+**Phase 14: Project Management System** - A project management system has been implemented to Create, Save, and Load projects directly from the IDE.
 
 *   **Recent Milestones:**
+    *   **Phase 14: Project Management**: Users can now create named projects, which are persisted to the local filesystem.
     *   **Phase 13: Compiler API**: Implemented `/api/compile` endpoint and connected it to the "Compile" button in the frontend.
     *   **Phase 12: Web Editor**: Implemented a lightweight, dependency-free syntax highlighter for SwissBASIC in the web interface.
     *   **Phase 11: End-to-End "Hello World"**: Verified that the compiler generates valid NES ROMs capable of changing background colors (PPU writes).
-    *   **Compiler**: Added support for `LET` statements, `CONST` definitions, and basic `POKE` operations.
-    *   **Testing**: Robust integration tests verify the full compilation pipeline from source to binary.
 
 ## Features
+- **Project Management**:
+  - **Create**: Create new projects with unique names.
+  - **Load/Save**: Persist your source code across sessions.
+  - **Explorer**: A sidebar "Project Explorer" to easily switch between projects.
+  - **Storage**: Projects are stored as folders in the `projects/` directory in the application root.
 - **SwissBASIC**: A hybrid language combining BASIC syntax with inline 6502 Assembly.
   - `LET` keyword for variable assignment.
   - `CONST` definitions for integer values.
@@ -50,9 +54,10 @@
    ```
 
 ### Project Structure
+*   `projects/`: Directory where user projects are stored (created at runtime).
 *   `src/lib.rs`: Core compiler and library logic.
 *   `src/main.rs`: Axum web server entry point.
-*   `src/server/`: Server modules including API handlers (`api.rs`).
+*   `src/server/`: Server modules including API handlers (`api.rs`) and project logic (`project.rs`).
 *   `src/compiler/`: Compiler modules (Lexer, Parser, AST, Analysis, Codegen, Assembler).
 *   `static/`: Frontend assets (HTML, CSS, JS).
 *   `tests/`: Integration tests.

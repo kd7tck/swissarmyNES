@@ -2,10 +2,14 @@ use crate::compiler::{
     analysis::SemanticAnalyzer, assembler::Assembler, codegen::CodeGenerator, lexer::Lexer,
     parser::Parser,
 };
+use crate::server::project;
 use axum::{
+    extract::Path,
     http::StatusCode,
     response::{IntoResponse, Response},
+    Json,
 };
+use serde::Deserialize;
 
 pub async fn compile(body: String) -> impl IntoResponse {
     // Spawn a blocking task for the CPU-intensive compilation process
@@ -72,4 +76,39 @@ fn compile_source(source: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("Assembler Error: {:?}", e))?;
 
     Ok(rom)
+}
+
+// Project API Handlers
+
+pub async fn list_projects() -> impl IntoResponse {
+    match project::list_projects() {
+        Ok(projects) => Json(projects).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct CreateProjectRequest {
+    name: String,
+}
+
+pub async fn create_project(Json(payload): Json<CreateProjectRequest>) -> impl IntoResponse {
+    match project::create_project(&payload.name) {
+        Ok(_) => StatusCode::CREATED.into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
+    }
+}
+
+pub async fn get_project(Path(name): Path<String>) -> impl IntoResponse {
+    match project::get_project(&name) {
+        Ok(proj) => Json(proj).into_response(),
+        Err(e) => (StatusCode::NOT_FOUND, e).into_response(),
+    }
+}
+
+pub async fn save_project(Path(name): Path<String>, body: String) -> impl IntoResponse {
+    match project::save_project(&name, &body) {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
 }

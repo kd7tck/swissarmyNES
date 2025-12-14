@@ -10,6 +10,7 @@
     *   **Phase 13: Compiler API**: Implemented `/api/compile` endpoint and connected it to the "Compile" button in the frontend.
     *   **Phase 12: Web Editor**: Implemented a lightweight, dependency-free syntax highlighter for SwissBASIC in the web interface.
     *   **Phase 11: End-to-End "Hello World"**: Verified that the compiler generates valid NES ROMs capable of changing background colors (PPU writes).
+    *   **Phase 8-10: Compiler Core**: Implemented control flow (`IF`, `WHILE`, `FOR`), variables, expressions, and inline assembly support.
 
 ## Features
 - **Project Management**:
@@ -18,9 +19,10 @@
   - **Explorer**: A sidebar "Project Explorer" to easily switch between projects.
   - **Storage**: Projects are stored as folders in the `projects/` directory in the application root.
 - **SwissBASIC**: A hybrid language combining BASIC syntax with inline 6502 Assembly.
-  - `LET` keyword for variable assignment.
-  - `CONST` definitions for integer values.
-  - `POKE` for direct memory access.
+  - **Variables**: `DIM`, `LET` for integer variables.
+  - **Control Flow**: `IF`, `WHILE`, `FOR...NEXT`, `DO...LOOP`.
+  - **Hardware Access**: `POKE`, `PEEK`, and inline `ASM` blocks.
+  - **Structure**: `SUB`, `INTERRUPT` definitions.
 - **Web IDE**:
   - **Code Editor**: Syntax highlighting, line numbers, and basic auto-indentation.
   - **Instant Compilation**: Click "Compile" to generate and download a `.nes` ROM file immediately.

@@ -10,10 +10,30 @@ pub struct ProjectMetadata {
     pub modified_at: u64,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Palette {
+    pub name: String,
+    pub colors: [u8; 4],
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Nametable {
+    pub name: String,
+    pub data: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ProjectAssets {
+    pub chr_bank: Vec<u8>,
+    pub palettes: Vec<Palette>,
+    pub nametables: Vec<Nametable>,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Project {
     pub metadata: ProjectMetadata,
     pub source: String,
+    pub assets: Option<ProjectAssets>,
 }
 
 const PROJECTS_DIR: &str = "projects";
@@ -71,6 +91,15 @@ pub fn create_project(name: &str) -> Result<(), String> {
     let default_source = "CONST BG_COLOR = $0F\n\nSUB Main()\n    ' Set Palette Address $3F00\n    POKE($2006, $3F)\n    POKE($2006, $00)\n    ' Write Color\n    POKE($2007, BG_COLOR)\nEND SUB";
     fs::write(project_path.join("main.swiss"), default_source).map_err(|e| e.to_string())?;
 
+    // Default assets
+    let default_assets = ProjectAssets {
+        chr_bank: vec![0; 4096], // 4KB empty CHR
+        palettes: vec![],        // Start empty
+        nametables: vec![],      // Start empty
+    };
+    let assets_json = serde_json::to_string_pretty(&default_assets).map_err(|e| e.to_string())?;
+    fs::write(project_path.join("assets.json"), assets_json).map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
@@ -95,7 +124,19 @@ pub fn get_project(name: &str) -> Result<Project, String> {
 
     let source = fs::read_to_string(project_path.join("main.swiss")).map_err(|e| e.to_string())?;
 
-    Ok(Project { metadata, source })
+    let assets_path = project_path.join("assets.json");
+    let assets = if assets_path.exists() {
+        let assets_content = fs::read_to_string(assets_path).map_err(|e| e.to_string())?;
+        Some(serde_json::from_str(&assets_content).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+
+    Ok(Project {
+        metadata,
+        source,
+        assets,
+    })
 }
 
 pub fn save_project(name: &str, source: &str) -> Result<(), String> {

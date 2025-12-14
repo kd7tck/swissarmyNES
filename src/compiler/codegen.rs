@@ -165,7 +165,7 @@ impl CodeGenerator {
         self.ram_pointer = 0x0300;
 
         for decl in &program.declarations {
-            if let TopLevel::Dim(name, _dtype) = decl {
+            if let TopLevel::Dim(name, dtype) = decl {
                 // Assign address
                 // Update symbol table
                 // We need to resolve the symbol first
@@ -175,9 +175,15 @@ impl CodeGenerator {
                 self.output
                     .push(format!("; {} @ ${:04X}", name, self.ram_pointer));
 
-                // Increment pointer (assume 1 byte for now for everything)
-                // TODO: Handle WORD (2 bytes)
-                self.ram_pointer += 1;
+                // Increment pointer
+                match dtype {
+                    crate::compiler::ast::DataType::Byte | crate::compiler::ast::DataType::Bool => {
+                        self.ram_pointer += 1;
+                    }
+                    crate::compiler::ast::DataType::Word => {
+                        self.ram_pointer += 2;
+                    }
+                }
             }
         }
         Ok(())
@@ -272,19 +278,63 @@ impl CodeGenerator {
                     self.output.push(format!("  STA ${:04X}", addr));
                 } else {
                     // Dynamic POKE using indirect Y addressing
-                    // We need a pointer in Zero Page. Let's reserve $02, $03 for generic pointers?
-                    // Or $00, $01 is used for temp.
-                    // Let's use $02, $03.
-                    self.output.push("  ; Dynamic POKE".to_string());
-                    self.output.push("  PLA".to_string()); // Get Value back
-                    self.output.push("  PHA".to_string()); // Save it again
+                    // We use Zero Page locations $02-$03 as a temporary pointer.
+                    // Note: This only works for 8-bit addresses (in A) effectively mapping to ZP.
+                    // If we want full 16-bit dynamic POKE, we need 16-bit expression evaluation.
+                    // For now, we support dynamic POKE to ZP addresses (0-255).
+
+                    self.output.push("  ; Dynamic POKE (Indirect ZP)".to_string());
+                    self.output.push("  PLA".to_string()); // Get Value back into A
+                    self.output.push("  TAY".to_string()); // Save Value in Y temporarily
+
+                    // Evaluate Address -> A
+                    self.generate_expression(addr_expr)?;
+
+                    // Store Address in Pointer Low ($02)
+                    self.output.push("  STA $02".to_string());
+                    // Zero out Pointer High ($03)
+                    self.output.push("  LDA #$00".to_string());
+                    self.output.push("  STA $03".to_string());
+
+                    // Restore Value from Y to A
+                    self.output.push("  TYA".to_string());
+
+                    // Indirect Store: STA ($02), Y (Where Y should be 0)
+                    // Wait, STA (Indirect), Y adds Y to the address.
+                    // We want STA (Indirect). 6502 only has STA (Indirect), Y.
+                    // So we must set Y to 0.
+                    // But we used Y to store the value.
+                    // So:
+                    // 1. Eval Value -> A
+                    // 2. Push A
+                    // 3. Eval Addr -> A
+                    // 4. Store A -> $02
+                    // 5. Zero -> $03
+                    // 6. PLA -> A (Value)
+                    // 7. LDY #0
+                    // 8. STA ($02), y
+
+                    // Let's rewrite the sequence carefully.
+                    // The stack currently has: [Value] (from step 1 above)
+                    // Because `generate_expression(val_expr)` was called, then `PHA`.
+
+                    // Already on stack: Value.
 
                     // Eval Address -> A
-                    // Address can be 16-bit. Expression returns 8-bit or 16-bit?
-                    // Currently generate_expression seems to return 8-bit in A.
-                    // We need full 16-bit expression support for addresses.
-                    // For now, let's just err if it's not constant, as Phase 7/8 might not have full 16-bit math.
-                    return Err("POKE currently only supports constant addresses".to_string());
+                    self.generate_expression(addr_expr)?;
+
+                    self.output.push("  STA $02".to_string());
+                    self.output.push("  LDA #$00".to_string());
+                    self.output.push("  STA $03".to_string());
+
+                    // Prepare Y=0
+                    self.output.push("  LDY #$00".to_string());
+
+                    // Get Value
+                    self.output.push("  PLA".to_string());
+
+                    // Store
+                    self.output.push("  STA ($02),y".to_string());
                 }
             }
             Statement::If(condition, then_block, else_block) => {

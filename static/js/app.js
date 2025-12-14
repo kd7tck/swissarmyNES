@@ -1,6 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
     const navItems = document.querySelectorAll('.nav-item');
     const views = document.querySelectorAll('.view');
+    const btnCompile = document.getElementById('btn-compile');
+    const codeEditor = document.getElementById('code-editor');
 
     function navigateTo(targetId) {
         // Update Nav
@@ -51,4 +53,38 @@ document.addEventListener('DOMContentLoaded', () => {
              navigateTo('code');
          }
     });
+
+    // Handle Compile
+    if (btnCompile && codeEditor) {
+        btnCompile.addEventListener('click', async () => {
+            const source = codeEditor.value;
+            try {
+                const response = await fetch('/api/compile', {
+                    method: 'POST',
+                    body: source
+                });
+
+                if (response.ok) {
+                    // Success: Download the blob
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'game.nes';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    alert('Compilation Successful! ROM downloaded.');
+                } else {
+                    // Error: Show message
+                    const text = await response.text();
+                    alert('Compilation Failed:\n' + text);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Network Error: ' + err.message);
+            }
+        });
+    }
 });

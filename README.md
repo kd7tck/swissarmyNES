@@ -19,14 +19,21 @@
   - **Explorer**: A sidebar "Project Explorer" to easily switch between projects.
   - **Storage**: Projects are stored as folders in the `projects/` directory in the application root.
 - **SwissBASIC**: A hybrid language combining BASIC syntax with inline 6502 Assembly.
-  - **Variables**: `DIM`, `LET` for integer variables.
+  - **Variables**: `DIM` (BYTE, WORD), `LET` assignments.
   - **Control Flow**: `IF`, `WHILE`, `FOR...NEXT`, `DO...LOOP`.
-  - **Hardware Access**: `POKE`, `PEEK`, and inline `ASM` blocks.
+  - **Hardware Access**:
+    - `POKE(addr, val)`: Supports constant addresses (16-bit) and dynamic Zero-Page addresses (8-bit).
+    - `PEEK(addr)`: Supports constant addresses.
+    - Inline `ASM` blocks.
   - **Structure**: `SUB`, `INTERRUPT` definitions.
 - **Web IDE**:
   - **Code Editor**: Syntax highlighting, line numbers, and basic auto-indentation.
   - **Instant Compilation**: Click "Compile" to generate and download a `.nes` ROM file immediately.
 - **Planned**: Visual Editors for Sprites, Maps, and Palettes.
+
+## Limitations
+- **8-Bit Math**: Mathematical expressions are currently evaluated using 8-bit arithmetic (Accumulator). Complex 16-bit math is not yet fully supported.
+- **Dynamic Addressing**: `POKE` with a variable address is currently limited to addresses in the Zero Page ($00-$FF). Use `CONST` for hardware registers (e.g. `$2006`).
 
 ## Getting Started
 

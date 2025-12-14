@@ -283,11 +283,13 @@ impl CodeGenerator {
                     // If we want full 16-bit dynamic POKE, we need 16-bit expression evaluation.
                     // For now, we support dynamic POKE to ZP addresses (0-255).
 
-                    self.output.push("  ; Dynamic POKE (Indirect ZP)".to_string());
-                    self.output.push("  PLA".to_string()); // Get Value back into A
-                    self.output.push("  TAY".to_string()); // Save Value in Y temporarily
+                    self.output
+                        .push("  ; Dynamic POKE (Indirect ZP)".to_string());
 
-                    // Evaluate Address -> A
+                    // The stack currently has: [Value] (from step 1 above)
+                    // Because `generate_expression(val_expr)` was called, then `PHA`.
+
+                    // Eval Address -> A
                     self.generate_expression(addr_expr)?;
 
                     // Store Address in Pointer Low ($02)
@@ -296,44 +298,13 @@ impl CodeGenerator {
                     self.output.push("  LDA #$00".to_string());
                     self.output.push("  STA $03".to_string());
 
-                    // Restore Value from Y to A
-                    self.output.push("  TYA".to_string());
-
-                    // Indirect Store: STA ($02), Y (Where Y should be 0)
-                    // Wait, STA (Indirect), Y adds Y to the address.
-                    // We want STA (Indirect). 6502 only has STA (Indirect), Y.
-                    // So we must set Y to 0.
-                    // But we used Y to store the value.
-                    // So:
-                    // 1. Eval Value -> A
-                    // 2. Push A
-                    // 3. Eval Addr -> A
-                    // 4. Store A -> $02
-                    // 5. Zero -> $03
-                    // 6. PLA -> A (Value)
-                    // 7. LDY #0
-                    // 8. STA ($02), y
-
-                    // Let's rewrite the sequence carefully.
-                    // The stack currently has: [Value] (from step 1 above)
-                    // Because `generate_expression(val_expr)` was called, then `PHA`.
-
-                    // Already on stack: Value.
-
-                    // Eval Address -> A
-                    self.generate_expression(addr_expr)?;
-
-                    self.output.push("  STA $02".to_string());
-                    self.output.push("  LDA #$00".to_string());
-                    self.output.push("  STA $03".to_string());
-
                     // Prepare Y=0
                     self.output.push("  LDY #$00".to_string());
 
-                    // Get Value
+                    // Get Value from Stack
                     self.output.push("  PLA".to_string());
 
-                    // Store
+                    // Store Indirect
                     self.output.push("  STA ($02),y".to_string());
                 }
             }

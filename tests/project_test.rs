@@ -2,9 +2,10 @@
 mod tests {
     use std::fs;
     use std::path::Path;
-    use swissarmynes::server::project::{
-        create_project, get_project, list_projects, save_project,
-    };
+    use swissarmynes::server::project::create_project;
+    use swissarmynes::server::project::get_project;
+    use swissarmynes::server::project::list_projects;
+    use swissarmynes::server::project::save_project;
 
     const TEST_PROJECTS_DIR: &str = "projects";
 

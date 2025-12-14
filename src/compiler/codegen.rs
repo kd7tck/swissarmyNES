@@ -1,5 +1,5 @@
 use crate::compiler::ast::{
-    BinaryOperator, Expression, Program, Statement, TopLevel, UnaryOperator,
+    BinaryOperator, DataType, Expression, Program, Statement, TopLevel, UnaryOperator,
 };
 use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 
@@ -165,7 +165,7 @@ impl CodeGenerator {
         self.ram_pointer = 0x0300;
 
         for decl in &program.declarations {
-            if let TopLevel::Dim(name, _dtype) = decl {
+            if let TopLevel::Dim(name, dtype) = decl {
                 // Assign address
                 // Update symbol table
                 // We need to resolve the symbol first
@@ -175,9 +175,12 @@ impl CodeGenerator {
                 self.output
                     .push(format!("; {} @ ${:04X}", name, self.ram_pointer));
 
-                // Increment pointer (assume 1 byte for now for everything)
-                // TODO: Handle WORD (2 bytes)
-                self.ram_pointer += 1;
+                // Increment pointer based on type
+                let size = match dtype {
+                    DataType::Byte | DataType::Bool => 1,
+                    DataType::Word => 2,
+                };
+                self.ram_pointer += size;
             }
         }
         Ok(())
@@ -467,30 +470,6 @@ impl CodeGenerator {
             }
             Statement::Comment(c) => {
                 self.output.push(format!("  ; {}", c));
-            }
-            Statement::On(vector, routine) => {
-                // This is for dynamic interrupt vector assignment or ON ... GOTO?
-                // The AST says: ON NMI DO RoutineName
-                // This is likely a configuration directive rather than a runtime statement in BASIC sometimes.
-                // But if it is inside SUB, it means changing the vector at runtime?
-                // The NES vectors are in ROM ($FFFA). They cannot be changed at runtime unless they point to RAM (trampoline).
-                // Phase 8 design doesn't specify dynamic vectors.
-                // Phase 4 says "Interrupt Handlers: Special function decorators".
-                // `ON NMI DO VblankRoutine`
-                // If it's a TopLevel declaration, it's handled in `generate_vectors`.
-                // But AST has Statement::On.
-                // If the parser parses `ON NMI ...` as a statement inside a block, then we have an issue.
-                // Looking at parser, `TopLevel::Interrupt` handles `INTERRUPT NMI() ... END INTERRUPT`.
-                // Does `ON ...` exist in Parser?
-                // Lexer has `Token::On`. Parser doesn't seem to implement `parse_statement` for `On`.
-                // Ah, check parser.rs again.
-                // Parser does NOT handle `ON` in `parse_statement`.
-                // So `Statement::On` might be vestigial or for future use.
-                // I will just add a comment in output.
-                self.output.push(format!(
-                    "  ; ON {} DO {} (Not implemented)",
-                    vector, routine
-                ));
             }
         }
         Ok(())

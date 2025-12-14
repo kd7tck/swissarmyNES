@@ -50,7 +50,6 @@ pub enum Statement {
     Print(Vec<Expression>),
     Asm(Vec<String>), // Raw assembly lines (if inside a SUB, though usually ASM is top-level too, but can be inline)
     Comment(String),
-    On(String, String), // ON NMI DO RoutineName
 }
 
 #[derive(Debug, PartialEq, Clone)]

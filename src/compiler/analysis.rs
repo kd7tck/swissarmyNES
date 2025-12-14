@@ -212,15 +212,6 @@ impl SemanticAnalyzer {
             }
             Statement::Asm(_) => {}
             Statement::Comment(_) => {}
-            Statement::On(_intr_name, handler_name) => {
-                // Check handler exists?
-                // intr_name is NMI, IRQ usually.
-                // handler_name is a SUB.
-                if self.symbol_table.resolve(handler_name).is_none() {
-                    self.errors
-                        .push(format!("Undefined interrupt handler '{}'", handler_name));
-                }
-            }
         }
     }
 

@@ -58,10 +58,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnCompile && codeEditor) {
         btnCompile.addEventListener('click', async () => {
             const source = codeEditor.value;
+            // Get assets from the ProjectManager
+            const assets = window.projectManager ? window.projectManager.assets : null;
+
+            const payload = {
+                source: source,
+                assets: assets
+            };
+
             try {
                 const response = await fetch('/api/compile', {
                     method: 'POST',
-                    body: source
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
                 });
 
                 if (response.ok) {

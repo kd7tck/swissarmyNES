@@ -35,12 +35,32 @@
     cursor: pointer;
 }
 
-.chr-canvas {
+/* Tool Bar */
+.chr-tools {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.chr-tools button {
+    padding: 5px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    min-width: 30px;
+}
+
+.chr-canvas-wrapper {
+    position: relative;
     border: 2px solid #555;
     background-color: #000;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.chr-canvas {
+    display: block; /* Remove inline-block spacing */
     cursor: crosshair;
     image-rendering: pixelated;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
 }
 
 .chr-color-picker {
@@ -64,4 +84,61 @@
     border: 2px solid #fff;
     transform: scale(1.1);
     box-shadow: 0 0 5px #fff;
+}
+
+/* Bank View Modal */
+.bank-view-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.bank-view-modal.active {
+    visibility: visible;
+    opacity: 1;
+}
+
+.bank-view-content {
+    background: #222;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    text-align: center;
+}
+
+.bank-canvas {
+    border: 1px solid #555;
+    cursor: pointer;
+    image-rendering: pixelated;
+    background: #000;
+}
+
+.bank-view-header {
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #eee;
+}
+
+.close-modal-btn {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+
+.close-modal-btn:hover {
+    color: #fff;
 }

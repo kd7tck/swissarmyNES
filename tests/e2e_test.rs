@@ -41,7 +41,7 @@ mod tests {
         // 5. Assembler
         let assembler = Assembler::new();
         let rom = assembler
-            .assemble(&asm_source, None, None)
+            .assemble(&asm_source, None, vec![])
             .expect("Assembly failed");
 
         // Verify we got 40KB (16 Header + 32KB PRG + 8KB CHR)

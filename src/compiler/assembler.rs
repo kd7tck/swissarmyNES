@@ -13,12 +13,12 @@ impl Assembler {
     /// # Arguments
     /// * `source` - The assembly source code
     /// * `chr_data` - Optional 8KB CHR-ROM data
-    /// * `palette_data` - Optional 32-byte Palette data to be injected at $E000
+    /// * `injections` - A list of (Address, Data) tuples to inject into PRG-ROM
     pub fn assemble(
         &self,
         source: &str,
         chr_data: Option<&[u8]>,
-        palette_data: Option<&[u8]>,
+        injections: Vec<(u16, Vec<u8>)>,
     ) -> Result<Vec<u8>, String> {
         let mut assembler = Rs6502Assembler::new();
         // 0 as offset means no global offset override, respect .ORG
@@ -59,15 +59,26 @@ impl Assembler {
             }
         }
 
-        // Inject Palette Data at $E000 (Offset 0x6000)
-        if let Some(pal) = palette_data {
-            let offset = 0x6000;
-            if offset + pal.len() <= prg_rom.len() {
-                for (i, byte) in pal.iter().enumerate() {
-                    prg_rom[offset + i] = *byte;
-                }
-            } else {
-                return Err("Palette data injection at $E000 exceeds PRG-ROM size".to_string());
+        // Apply Injections
+        for (addr, data) in injections {
+            if addr < 0x8000 {
+                return Err(format!(
+                    "Injection address ${:04X} is outside PRG-ROM space ($8000+)",
+                    addr
+                ));
+            }
+            let offset = (addr - 0x8000) as usize;
+
+            if offset + data.len() > prg_rom.len() {
+                return Err(format!(
+                    "Injection at ${:04X} with length {} exceeds PRG-ROM size",
+                    addr,
+                    data.len()
+                ));
+            }
+
+            for (i, byte) in data.iter().enumerate() {
+                prg_rom[offset + i] = *byte;
             }
         }
 

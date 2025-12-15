@@ -165,6 +165,10 @@ impl CodeGenerator {
         self.output.push("  BEQ Play_Shoot".to_string());
         self.output.push("  RTS".to_string());
 
+        // Note: Future enhancements will use the data tables at $D000 (Periods) and $D100 (Music)
+        // For now, we keep the simple SFX implementation but we can demonstrate reading from $D000
+        // if we were playing notes.
+
         self.output.push("Play_Jump:".to_string());
         self.output
             .push("  LDA #$9F       ; Duty 50%, Vol 15, Env Off".to_string());

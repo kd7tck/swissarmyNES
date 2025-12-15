@@ -1,5 +1,5 @@
 use crate::compiler::{
-    analysis::SemanticAnalyzer, assembler::Assembler, codegen::CodeGenerator, lexer::Lexer,
+    analysis::SemanticAnalyzer, assembler::Assembler, audio, codegen::CodeGenerator, lexer::Lexer,
     parser::Parser,
 };
 use crate::server::project::{self, ProjectAssets};
@@ -83,7 +83,10 @@ fn compile_source(source: &str, assets: Option<ProjectAssets>) -> Result<Vec<u8>
 
     let chr_data = assets.as_ref().map(|a| a.chr_bank.as_slice());
 
-    // Prepare Palette Data (32 bytes flattened)
+    // Prepare Injections
+    let mut injections: Vec<(u16, Vec<u8>)> = Vec::new();
+
+    // 1. Palette Data at $E000
     let palette_data = if let Some(a) = &assets {
         let mut data = vec![0x0F; 32];
         for (i, pal) in a.palettes.iter().take(8).enumerate() {
@@ -94,13 +97,22 @@ fn compile_source(source: &str, assets: Option<ProjectAssets>) -> Result<Vec<u8>
                 }
             }
         }
-        Some(data)
+        data
     } else {
-        None
+        vec![0x0F; 32] // Default palette
     };
+    injections.push((0xE000, palette_data));
+
+    // 2. Period Table at $D000
+    let period_table = audio::generate_period_table();
+    injections.push((audio::PERIOD_TABLE_ADDR, period_table));
+
+    // 3. Music Data at $D100
+    let music_data = audio::compile_audio_data(&assets);
+    injections.push((audio::MUSIC_DATA_ADDR, music_data));
 
     let rom = assembler
-        .assemble(&asm_source, chr_data, palette_data.as_deref())
+        .assemble(&asm_source, chr_data, injections)
         .map_err(|e| format!("Assembler Error: {:?}", e))?;
 
     Ok(rom)

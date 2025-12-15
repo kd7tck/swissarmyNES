@@ -139,7 +139,11 @@ pub fn get_project(name: &str) -> Result<Project, String> {
     })
 }
 
-pub fn save_project(name: &str, source: &str) -> Result<(), String> {
+pub fn save_project(
+    name: &str,
+    source: Option<&str>,
+    assets: Option<&ProjectAssets>,
+) -> Result<(), String> {
     // Validate name
     if !name
         .chars()
@@ -153,7 +157,14 @@ pub fn save_project(name: &str, source: &str) -> Result<(), String> {
         return Err("Project not found".to_string());
     }
 
-    fs::write(project_path.join("main.swiss"), source).map_err(|e| e.to_string())?;
+    if let Some(src) = source {
+        fs::write(project_path.join("main.swiss"), src).map_err(|e| e.to_string())?;
+    }
+
+    if let Some(asset_data) = assets {
+        let assets_json = serde_json::to_string_pretty(asset_data).map_err(|e| e.to_string())?;
+        fs::write(project_path.join("assets.json"), assets_json).map_err(|e| e.to_string())?;
+    }
 
     // Update modified time in metadata
     let meta_path = project_path.join("project.json");

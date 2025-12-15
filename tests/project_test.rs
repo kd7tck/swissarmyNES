@@ -37,7 +37,7 @@ mod tests {
         create_project(name).unwrap();
 
         let new_source = "CONST FOO = 1";
-        assert!(save_project(name, new_source).is_ok());
+        assert!(save_project(name, Some(new_source), None).is_ok());
 
         let project = get_project(name).unwrap();
         assert_eq!(project.source, new_source);

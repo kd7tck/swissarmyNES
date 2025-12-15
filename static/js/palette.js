@@ -110,6 +110,9 @@ class PaletteEditor {
                     // We are mutating the objects inside assets.palettes directly.
                     // But we might want to notify that data changed?
                     // For now, saving will just read the current state.
+
+                    // Dispatch event for other editors (like CHR editor)
+                    window.dispatchEvent(new CustomEvent('palette-changed'));
                 };
 
                 row.appendChild(swatch);

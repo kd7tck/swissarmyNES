@@ -6,6 +6,7 @@
     <title>SwissArmyNES</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/palette.css">
+    <link rel="stylesheet" href="/css/chr.css">
 </head>
 <body>
     <div id="app">
@@ -63,9 +64,12 @@
             <section id="graphics" class="view">
                 <h1>Graphics Editor</h1>
                 <div class="graphics-container">
-                    <div id="palette-editor-root"></div>
-                    <div class="placeholder-canvas">
-                        <p>Sprite/Tile Editor Coming Soon (Phase 17)</p>
+                    <div class="graphics-col-left">
+                         <div id="palette-editor-root"></div>
+                    </div>
+                    <div class="graphics-col-right">
+                        <h3>Tile Editor</h3>
+                        <div id="chr-editor-root"></div>
                     </div>
                 </div>
             </section>
@@ -78,6 +82,7 @@
     <script src="/js/editor.js"></script>
     <script src="/js/project.js"></script>
     <script src="/js/palette.js"></script>
+    <script src="/js/chr.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

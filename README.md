@@ -6,6 +6,9 @@
 **Phase 14: Project Management System** - A project management system has been implemented to Create, Save, and Load projects directly from the IDE.
 
 *   **Recent Milestones:**
+    *   **Phase 17: CHR (Tile) Editor**: Implemented a basic 8x8 Tile Editor with drawing capabilities and bank navigation.
+    *   **Phase 16: Palette Editor**: Implemented a UI for selecting NES system colors and assigning them to sub-palettes.
+    *   **Phase 15: Asset Management**: Defined JSON schemas for CHR banks, Palettes, and Nametables.
     *   **Phase 14: Project Management**: Users can now create named projects, which are persisted to the local filesystem.
     *   **Phase 13: Compiler API**: Implemented `/api/compile` endpoint and connected it to the "Compile" button in the frontend.
     *   **Phase 12: Web Editor**: Implemented a lightweight, dependency-free syntax highlighter for SwissBASIC in the web interface.
@@ -29,7 +32,10 @@
 - **Web IDE**:
   - **Code Editor**: Syntax highlighting, line numbers, and basic auto-indentation.
   - **Instant Compilation**: Click "Compile" to generate and download a `.nes` ROM file immediately.
-- **Planned**: Visual Editors for Sprites, Maps, and Palettes.
+- **Visual Editors**:
+  - **Palette Editor**: Manage system colors and sub-palettes.
+  - **Tile Editor**: Edit 8x8 CHR tiles with real-time feedback.
+- **Planned**: Map Editor (Nametables).
 
 ## Limitations
 - **8-Bit Math**: Mathematical expressions are currently evaluated using 8-bit arithmetic (Accumulator). Complex 16-bit math is not yet fully supported.

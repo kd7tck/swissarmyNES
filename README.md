@@ -3,9 +3,12 @@
 **SwissArmyNES** is a comprehensive, web-based Integrated Development Environment (IDE) tailored for creating Nintendo Entertainment System (NES) games. It combines a Rust backend with a vector-based HTML/JS frontend to provide a modern workflow for retro game development.
 
 ## Current Status
-**Phase 14: Project Management System** - A project management system has been implemented to Create, Save, and Load projects directly from the IDE.
+**Phase 24: Audio Compilation** - Implemented a complete audio pipeline, allowing users to compose music in the Tracker UI and compile it directly into the NES ROM.
 
 *   **Recent Milestones:**
+    *   **Phase 24: Audio Compilation**: Converted tracker data to a byte stream, injected it into the ROM, and implemented a 3-channel 6502 audio engine.
+    *   **Phase 23: Audio Tracker UI**: Built a piano-roll interface for composing music.
+    *   **Phase 22: Audio Engine Basics**: Added `PLAY_SFX` support.
     *   **Phase 20: Map Attributes**: Added support for painting attribute tables (color palettes) on the Map Editor.
     *   **Phase 19: Nametable (Map) Editor**: Implemented a visual editor to paint tiles onto a 32x30 grid.
     *   **Phase 18: CHR Editor Tools**: Added Flood Fill, Shift, Flip tools, and Bank View to the Tile Editor.
@@ -33,6 +36,7 @@
     - Inline `ASM` blocks.
   - **Audio**:
     - `PLAY_SFX(id)`: Play a sound effect. `1` = Jump, `2` = Shoot.
+    - **Music Engine**: Automatically injects a 3-channel (Pulse 1, Pulse 2, Triangle) sequencer. The engine runs at approx 120 BPM (Speed 8) with support for 24 notes (2 octaves).
   - **Structure**: `SUB`, `INTERRUPT` definitions.
 - **Web IDE**:
   - **Code Editor**: Syntax highlighting, line numbers, and basic auto-indentation.
@@ -41,6 +45,7 @@
   - **Palette Editor**: Manage system colors and sub-palettes.
   - **Tile Editor**: Edit 8x8 CHR tiles with real-time feedback.
   - **Map Editor**: Paint 8x8 tiles onto a 32x30 nametable grid (screen).
+  - **Audio Tracker**: Compose 3-track music loops using a visual piano roll.
 
 ## Limitations
 - **8-Bit Math**: Mathematical expressions are currently evaluated using 8-bit arithmetic (Accumulator). Complex 16-bit math is not yet fully supported.

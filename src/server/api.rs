@@ -74,7 +74,7 @@ fn compile_source(source: &str, assets: Option<ProjectAssets>) -> Result<Vec<u8>
     // Create CodeGenerator (reverted signature)
     let mut codegen = CodeGenerator::new(symbol_table);
     let asm_lines = codegen
-        .generate(&program)
+        .generate(&program, assets.as_ref())
         .map_err(|e| format!("Codegen Error: {:?}", e))?;
     let asm_source = asm_lines.join("\n");
 

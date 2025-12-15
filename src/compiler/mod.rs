@@ -1,6 +1,7 @@
 pub mod analysis;
 pub mod assembler;
 pub mod ast;
+pub mod audio;
 pub mod codegen;
 pub mod lexer;
 pub mod parser;

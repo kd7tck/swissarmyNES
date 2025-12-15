@@ -31,6 +31,40 @@ mod tests {
     }
 
     #[test]
+    fn test_attribute_persistence() {
+        use swissarmynes::server::project::Nametable;
+
+        let name = "test_project_attrs";
+        cleanup(name);
+        create_project(name).unwrap();
+
+        let project = get_project(name).unwrap();
+        let mut assets = project.assets.unwrap();
+
+        // Add a nametable with specific attributes
+        let mut attrs = vec![0; 64];
+        attrs[0] = 0xFF; // Set first byte to all 1s (all palette 3)
+
+        assets.nametables.push(Nametable {
+            name: "NT1".to_string(),
+            data: vec![0; 960],
+            attrs: attrs.clone(),
+        });
+
+        assert!(save_project(name, None, Some(&assets)).is_ok());
+
+        // Reload
+        let project = get_project(name).unwrap();
+        let loaded_assets = project.assets.unwrap();
+        let loaded_nt = &loaded_assets.nametables[0];
+
+        assert_eq!(loaded_nt.attrs.len(), 64);
+        assert_eq!(loaded_nt.attrs[0], 0xFF);
+
+        cleanup(name);
+    }
+
+    #[test]
     fn test_save_project() {
         let name = "test_project_2";
         cleanup(name);

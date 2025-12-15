@@ -20,6 +20,8 @@ pub struct Palette {
 pub struct Nametable {
     pub name: String,
     pub data: Vec<u8>,
+    #[serde(default)]
+    pub attrs: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

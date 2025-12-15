@@ -2,7 +2,7 @@ use crate::compiler::{
     analysis::SemanticAnalyzer, assembler::Assembler, codegen::CodeGenerator, lexer::Lexer,
     parser::Parser,
 };
-use crate::server::project;
+use crate::server::project::{self, ProjectAssets};
 use axum::{
     extract::Path,
     http::StatusCode,
@@ -11,9 +11,15 @@ use axum::{
 };
 use serde::Deserialize;
 
-pub async fn compile(body: String) -> impl IntoResponse {
+#[derive(Deserialize)]
+pub struct CompileRequest {
+    source: String,
+    assets: Option<ProjectAssets>,
+}
+
+pub async fn compile(Json(payload): Json<CompileRequest>) -> impl IntoResponse {
     // Spawn a blocking task for the CPU-intensive compilation process
-    let result = tokio::task::spawn_blocking(move || compile_source(&body)).await;
+    let result = tokio::task::spawn_blocking(move || compile_source(&payload.source, payload.assets)).await;
 
     match result {
         Ok(compile_result) => match compile_result {
@@ -42,7 +48,7 @@ pub async fn compile(body: String) -> impl IntoResponse {
     }
 }
 
-fn compile_source(source: &str) -> Result<Vec<u8>, String> {
+fn compile_source(source: &str, assets: Option<ProjectAssets>) -> Result<Vec<u8>, String> {
     // 1. Lexing
     let mut lexer = Lexer::new(source);
     let tokens = lexer
@@ -63,6 +69,8 @@ fn compile_source(source: &str) -> Result<Vec<u8>, String> {
 
     // 4. Codegen
     let symbol_table = analyzer.symbol_table;
+
+    // Create CodeGenerator (reverted signature)
     let mut codegen = CodeGenerator::new(symbol_table);
     let asm_lines = codegen
         .generate(&program)
@@ -71,8 +79,27 @@ fn compile_source(source: &str) -> Result<Vec<u8>, String> {
 
     // 5. Assembler
     let assembler = Assembler::new();
+
+    let chr_data = assets.as_ref().map(|a| a.chr_bank.as_slice());
+
+    // Prepare Palette Data (32 bytes flattened)
+    let palette_data = if let Some(a) = &assets {
+        let mut data = vec![0x0F; 32];
+        for (i, pal) in a.palettes.iter().take(8).enumerate() {
+            let start_idx = i * 4;
+            for (j, &color) in pal.colors.iter().enumerate() {
+                if start_idx + j < 32 {
+                    data[start_idx + j] = color;
+                }
+            }
+        }
+        Some(data)
+    } else {
+        None
+    };
+
     let rom = assembler
-        .assemble(&asm_source)
+        .assemble(&asm_source, chr_data, palette_data.as_deref())
         .map_err(|e| format!("Assembler Error: {:?}", e))?;
 
     Ok(rom)

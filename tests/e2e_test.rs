@@ -40,7 +40,7 @@ mod tests {
 
         // 5. Assembler
         let assembler = Assembler::new();
-        let rom = assembler.assemble(&asm_source).expect("Assembly failed");
+        let rom = assembler.assemble(&asm_source, None, None).expect("Assembly failed");
 
         // Verify we got 40KB (16 Header + 32KB PRG + 8KB CHR)
         assert_eq!(rom.len(), 40976);

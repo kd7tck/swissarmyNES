@@ -9,7 +9,17 @@ impl Assembler {
 
     /// Assembles a string of 6502 assembly code into a binary ROM with iNES header.
     /// Returns a complete .nes file as a byte vector.
-    pub fn assemble(&self, source: &str) -> Result<Vec<u8>, String> {
+    ///
+    /// # Arguments
+    /// * `source` - The assembly source code
+    /// * `chr_data` - Optional 8KB CHR-ROM data
+    /// * `palette_data` - Optional 32-byte Palette data to be injected at $E000
+    pub fn assemble(
+        &self,
+        source: &str,
+        chr_data: Option<&[u8]>,
+        palette_data: Option<&[u8]>,
+    ) -> Result<Vec<u8>, String> {
         let mut assembler = Rs6502Assembler::new();
         // 0 as offset means no global offset override, respect .ORG
         let segments = assembler
@@ -49,6 +59,18 @@ impl Assembler {
             }
         }
 
+        // Inject Palette Data at $E000 (Offset 0x6000)
+        if let Some(pal) = palette_data {
+            let offset = 0x6000;
+            if offset + pal.len() <= prg_rom.len() {
+                for (i, byte) in pal.iter().enumerate() {
+                    prg_rom[offset + i] = *byte;
+                }
+            } else {
+                 return Err("Palette data injection at $E000 exceeds PRG-ROM size".to_string());
+            }
+        }
+
         // Construct iNES Header (16 bytes)
         // Mapper 0 (NROM), 32KB PRG, 8KB CHR
         let header = vec![
@@ -63,8 +85,13 @@ impl Assembler {
         let mut final_rom = header;
         final_rom.extend_from_slice(&prg_rom);
 
-        // Append 8KB CHR-ROM (filled with zeros for now)
-        final_rom.extend(std::iter::repeat_n(0, 8192));
+        // Append 8KB CHR-ROM
+        let mut final_chr = vec![0u8; 8192];
+        if let Some(data) = chr_data {
+            let len = data.len().min(8192);
+            final_chr[..len].copy_from_slice(&data[..len]);
+        }
+        final_rom.extend(final_chr);
 
         Ok(final_rom)
     }

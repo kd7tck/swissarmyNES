@@ -96,8 +96,23 @@ impl CodeGenerator {
         self.output.push("  BIT $2002".to_string());
         self.output.push("  BPL vblankwait2".to_string());
 
+        // --- Load Palette ---
+        // We load from $E000 where the assembler injected the palette data.
+        self.output.push("  ; Load Palettes".to_string());
+        self.output.push("  LDA #$3F".to_string());
+        self.output.push("  STA $2006".to_string());
+        self.output.push("  LDA #$00".to_string());
+        self.output.push("  STA $2006".to_string());
+
+        self.output.push("  LDX #$00".to_string());
+        self.output.push("LoadPalLoop:".to_string());
+        self.output.push("  LDA $E000, X".to_string());
+        self.output.push("  STA $2007".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  CPX #32".to_string());
+        self.output.push("  BNE LoadPalLoop".to_string());
+
         // Call Main if it exists
-        // We assume Main exists and takes no parameters for now
         self.output.push("  JSR Main".to_string());
 
         // Infinite loop after Main returns

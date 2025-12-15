@@ -46,7 +46,7 @@ mod tests {
 
         // 5. Assembler
         let assembler = Assembler::new();
-        let rom = assembler.assemble(&asm_source).expect("Assembly failed");
+        let rom = assembler.assemble(&asm_source, None, None).expect("Assembly failed");
 
         // Verify ROM size (Header + PRG + CHR)
         assert_eq!(rom.len(), 40976);

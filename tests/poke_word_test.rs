@@ -31,22 +31,26 @@ mod tests {
 
         // Verify Assembly
         // Look for assignment of $2006 to Ptr (at $0300)
-        let found_assignment = asm_lines.iter().any(|line| line.contains("LDA #$06")) &&
-                               asm_lines.iter().any(|line| line.contains("STA $0300")) &&
-                               asm_lines.iter().any(|line| line.contains("LDA #$20")) &&
-                               asm_lines.iter().any(|line| line.contains("STA $0301"));
+        let found_assignment = asm_lines.iter().any(|line| line.contains("LDA #$06"))
+            && asm_lines.iter().any(|line| line.contains("STA $0300"))
+            && asm_lines.iter().any(|line| line.contains("LDA #$20"))
+            && asm_lines.iter().any(|line| line.contains("STA $0301"));
 
-        assert!(found_assignment, "Assignment of WORD not found in assembly:\n{}", asm_source);
+        assert!(
+            found_assignment,
+            "Assignment of WORD not found in assembly:\n{}",
+            asm_source
+        );
 
         // Verify POKE uses indirect addressing
         let found_poke = asm_lines.iter().any(|line| line.contains("STA ($02),y"));
         assert!(found_poke, "Did not find indirect store");
 
         // We want to ensure we are loading from the variable
-        let found_ptr_load = asm_lines.iter().any(|line| line.contains("LDA $0300")) &&
-                             asm_lines.iter().any(|line| line.contains("STA $02")) &&
-                             asm_lines.iter().any(|line| line.contains("LDA $0301")) &&
-                             asm_lines.iter().any(|line| line.contains("STA $03"));
+        let found_ptr_load = asm_lines.iter().any(|line| line.contains("LDA $0300"))
+            && asm_lines.iter().any(|line| line.contains("STA $02"))
+            && asm_lines.iter().any(|line| line.contains("LDA $0301"))
+            && asm_lines.iter().any(|line| line.contains("STA $03"));
 
         assert!(found_ptr_load, "Did not find 16-bit pointer setup");
     }
@@ -77,11 +81,15 @@ mod tests {
 
         // Verify assignment of constant to WORD
         // Should load #$07 and store to Low, load #$20 and store to High
-        let found_assignment = asm_lines.iter().any(|line| line.contains("LDA #$07")) &&
-                               asm_lines.iter().any(|line| line.contains("STA $0300")) &&
-                               asm_lines.iter().any(|line| line.contains("LDA #$20")) &&
-                               asm_lines.iter().any(|line| line.contains("STA $0301"));
+        let found_assignment = asm_lines.iter().any(|line| line.contains("LDA #$07"))
+            && asm_lines.iter().any(|line| line.contains("STA $0300"))
+            && asm_lines.iter().any(|line| line.contains("LDA #$20"))
+            && asm_lines.iter().any(|line| line.contains("STA $0301"));
 
-        assert!(found_assignment, "Assignment of CONST to WORD not found:\n{}", asm_source);
+        assert!(
+            found_assignment,
+            "Assignment of CONST to WORD not found:\n{}",
+            asm_source
+        );
     }
 }

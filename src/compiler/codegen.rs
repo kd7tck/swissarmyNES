@@ -388,26 +388,38 @@ impl CodeGenerator {
                                                     == crate::compiler::ast::DataType::Word
                                                 {
                                                     // Copy Word
-                                                    self.output.push(format!("  LDA ${:04X}", src_addr));
-                                                    self.output.push(format!("  STA ${:04X}", addr));
                                                     self.output
-                                                        .push(format!("  LDA ${:04X}", src_addr + 1));
-                                                    self.output.push(format!("  STA ${:04X}", addr + 1));
+                                                        .push(format!("  LDA ${:04X}", src_addr));
+                                                    self.output
+                                                        .push(format!("  STA ${:04X}", addr));
+                                                    self.output.push(format!(
+                                                        "  LDA ${:04X}",
+                                                        src_addr + 1
+                                                    ));
+                                                    self.output
+                                                        .push(format!("  STA ${:04X}", addr + 1));
                                                 } else {
                                                     // Copy Byte to Word (High = 0)
-                                                    self.output.push(format!("  LDA ${:04X}", src_addr));
-                                                    self.output.push(format!("  STA ${:04X}", addr));
+                                                    self.output
+                                                        .push(format!("  LDA ${:04X}", src_addr));
+                                                    self.output
+                                                        .push(format!("  STA ${:04X}", addr));
                                                     self.output.push("  LDA #0".to_string());
-                                                    self.output.push(format!("  STA ${:04X}", addr + 1));
+                                                    self.output
+                                                        .push(format!("  STA ${:04X}", addr + 1));
                                                 }
                                             } else if src_sym.kind == SymbolKind::Constant {
                                                 if let Some(val) = src_sym.value {
                                                     let low = (val & 0xFF) as u8;
                                                     let high = ((val >> 8) & 0xFF) as u8;
-                                                    self.output.push(format!("  LDA #${:02X}", low));
-                                                    self.output.push(format!("  STA ${:04X}", addr));
-                                                    self.output.push(format!("  LDA #${:02X}", high));
-                                                    self.output.push(format!("  STA ${:04X}", addr + 1));
+                                                    self.output
+                                                        .push(format!("  LDA #${:02X}", low));
+                                                    self.output
+                                                        .push(format!("  STA ${:04X}", addr));
+                                                    self.output
+                                                        .push(format!("  LDA #${:02X}", high));
+                                                    self.output
+                                                        .push(format!("  STA ${:04X}", addr + 1));
                                                 } else {
                                                     return Err(format!(
                                                         "Constant '{}' has no value assigned",
@@ -421,7 +433,10 @@ impl CodeGenerator {
                                                 ));
                                             }
                                         } else {
-                                            return Err(format!("Undefined variable '{}'", src_name));
+                                            return Err(format!(
+                                                "Undefined variable '{}'",
+                                                src_name
+                                            ));
                                         }
                                     }
                                     _ => {

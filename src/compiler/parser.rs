@@ -310,6 +310,29 @@ impl Parser {
                 return Err("Expected function name after CALL".to_string());
             }
         }
+        if self.match_token(Token::On) {
+            // ON <Vector> DO <Routine>
+            // <Vector> is usually NMI or IRQ (Identifiers)
+            let vector = if let Token::Identifier(n) = self.advance().clone() {
+                n
+            } else {
+                return Err("Expected vector name (NMI/IRQ) after ON".to_string());
+            };
+            // Expect DO
+            // Note: Token::Do is usually for DO...LOOP, but here it acts as a separator.
+            // If the lexer emits Token::Do for "DO", we consume it.
+            if !self.match_token(Token::Do) {
+                return Err("Expected DO after vector name".to_string());
+            }
+            // Routine Name
+            let routine = if let Token::Identifier(n) = self.advance().clone() {
+                n
+            } else {
+                return Err("Expected routine name after DO".to_string());
+            };
+
+            return Ok(Statement::On(vector, routine));
+        }
         // Identifier start: Assignment or Label (not supported yet) or Implicit CALL (if we allowed it, but we don't seem to have implicit call syntax in AST?)
         // AST has Let.
         // If it's an identifier, check for =

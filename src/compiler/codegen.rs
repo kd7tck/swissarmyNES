@@ -212,8 +212,9 @@ impl CodeGenerator {
         self.output.push("  RTS".to_string());
 
         // Note: Future enhancements will use the data tables at $D000 (Periods) and $D100 (Music)
-        // For now, we keep the simple SFX implementation but we can demonstrate reading from $D000
-        // if we were playing notes.
+        // The data is currently injected by the Assembler (via api.rs) at those addresses.
+        // This simple engine is a placeholder. To fully implement Phase 22-24, this engine
+        // should be expanded to read the Music Data from $D100 and Periods from $D000.
 
         self.output.push("Play_Jump:".to_string());
         self.output

@@ -1,0 +1,82 @@
+
+.audio-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 100px);
+    background-color: #2e2e2e;
+    padding: 1rem;
+    box-sizing: border-box;
+}
+
+.audio-toolbar {
+    margin-bottom: 1rem;
+    display: flex;
+    gap: 1rem;
+}
+
+.audio-toolbar select, .audio-toolbar button {
+    padding: 0.5rem;
+    font-size: 1rem;
+    background: #444;
+    color: #eee;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.tracker-grid {
+    flex-grow: 1;
+    display: grid;
+    /* 32 columns (steps), 24 rows (pitches - 2 octaves) */
+    grid-template-columns: 40px repeat(32, 1fr);
+    grid-template-rows: repeat(24, 20px);
+    overflow: auto;
+    background: #222;
+    border: 1px solid #444;
+}
+
+.tracker-header-cell {
+    background: #333;
+    border-bottom: 1px solid #555;
+    border-right: 1px solid #555;
+    color: #aaa;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tracker-cell {
+    border-bottom: 1px solid #333;
+    border-right: 1px solid #333;
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+
+.tracker-cell:hover {
+    background-color: #3a3a3a;
+}
+
+.tracker-cell.active {
+    background-color: #f39c12; /* Orange for active note */
+    border: 1px solid #e67e22;
+}
+
+/* Row labels (piano keys approximation) */
+.tracker-row-label {
+    background: #333;
+    color: #ddd;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 5px;
+    border-bottom: 1px solid #555;
+    border-right: 1px solid #555;
+    user-select: none;
+}
+
+.tracker-row-label.black-key {
+    background: #222;
+    color: #aaa;
+}

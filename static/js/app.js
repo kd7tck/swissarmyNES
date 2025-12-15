@@ -36,6 +36,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Handle initial load based on hash
+    // Initialize Audio Tracker
+    if (window.AudioTracker) {
+        window.audioTracker = new window.AudioTracker('audio-tracker-root');
+    }
+
     const initialHash = window.location.hash.replace('#', '');
     if (initialHash && document.getElementById(initialHash)) {
         navigateTo(initialHash);

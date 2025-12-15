@@ -86,6 +86,14 @@ class ProjectManager {
             // Update UI title or status
             document.getElementById('current-project-name').textContent = name;
 
+            // Load Audio Tracks
+            if (window.audioTracker && this.assets.audio_tracks) {
+                window.audioTracker.loadData(this.assets);
+            } else if (window.audioTracker) {
+                // Initialize empty if no tracks
+                window.audioTracker.loadData({ audio_tracks: [] });
+            }
+
             // Dispatch an event to let other components know the project loaded
             window.dispatchEvent(new CustomEvent('project-loaded', { detail: { assets: this.assets } }));
 
@@ -102,6 +110,12 @@ class ProjectManager {
 
         const editor = document.getElementById('code-editor');
         const source = editor.value;
+
+        // Collect Audio Data
+        if (window.audioTracker) {
+             const audioData = window.audioTracker.getData();
+             this.assets.audio_tracks = audioData.tracks;
+        }
 
         // Dispatch event to gather asset data from editors if needed
         // But we rely on the shared `this.assets` object being mutually updated.

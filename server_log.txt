@@ -1,0 +1,4 @@
+   Compiling swissarmynes v0.1.0 (/app)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.13s
+     Running `target/debug/swissarmynes`
+listening on 0.0.0.0:3000

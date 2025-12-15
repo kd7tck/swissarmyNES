@@ -1,0 +1,68 @@
+/* Palette Editor Styles */
+
+.palette-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 10px;
+}
+
+.system-palette {
+    display: grid;
+    grid-template-columns: repeat(16, 1fr);
+    gap: 2px;
+    background: #333;
+    padding: 5px;
+    border-radius: 4px;
+    width: fit-content;
+}
+
+.swatch {
+    width: 24px;
+    height: 24px;
+    border: 1px solid #000;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+.swatch:hover {
+    border: 1px solid #fff;
+    transform: scale(1.1);
+    z-index: 10;
+}
+
+.swatch.selected {
+    border: 2px solid #fff;
+    outline: 2px solid #ff0000;
+    z-index: 2;
+}
+
+.sub-palettes {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.palette-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.palette-label {
+    width: 40px;
+    font-weight: bold;
+    font-family: monospace;
+}
+
+.swatch.big {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: rgba(255,255,255,0.8);
+    text-shadow: 1px 1px 0 #000;
+    font-family: monospace;
+}

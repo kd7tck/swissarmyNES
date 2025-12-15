@@ -106,8 +106,17 @@ pub async fn get_project(Path(name): Path<String>) -> impl IntoResponse {
     }
 }
 
-pub async fn save_project(Path(name): Path<String>, body: String) -> impl IntoResponse {
-    match project::save_project(&name, &body) {
+#[derive(Deserialize)]
+pub struct SaveProjectRequest {
+    source: Option<String>,
+    assets: Option<project::ProjectAssets>,
+}
+
+pub async fn save_project(
+    Path(name): Path<String>,
+    Json(payload): Json<SaveProjectRequest>,
+) -> impl IntoResponse {
+    match project::save_project(&name, payload.source.as_deref(), payload.assets.as_ref()) {
         Ok(_) => StatusCode::OK.into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }

@@ -4,6 +4,7 @@ class ProjectManager {
     constructor() {
         this.projectList = document.getElementById('project-list');
         this.currentProject = null;
+        this.assets = null; // Store project assets here
 
         this.init();
     }
@@ -72,6 +73,7 @@ class ProjectManager {
             const project = await response.json();
 
             this.currentProject = name;
+            this.assets = project.assets || { chr_bank: [], palettes: [], nametables: [] };
 
             // Update Editor
             const editor = document.getElementById('code-editor');
@@ -83,6 +85,9 @@ class ProjectManager {
 
             // Update UI title or status
             document.getElementById('current-project-name').textContent = name;
+
+            // Dispatch an event to let other components know the project loaded
+            window.dispatchEvent(new CustomEvent('project-loaded', { detail: { assets: this.assets } }));
 
         } catch (err) {
             alert('Error loading project: ' + err.message);
@@ -98,10 +103,20 @@ class ProjectManager {
         const editor = document.getElementById('code-editor');
         const source = editor.value;
 
+        // Dispatch event to gather asset data from editors if needed
+        // But we rely on the shared `this.assets` object being mutually updated.
+        // Other editors should update window.projectManager.assets directly or listen for changes.
+
+        const payload = {
+            source: source,
+            assets: this.assets
+        };
+
         try {
             const response = await fetch(`/api/projects/${this.currentProject}`, {
                 method: 'POST',
-                body: source
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
 
             if (!response.ok) throw new Error('Failed to save project');

@@ -291,6 +291,7 @@ class CHREditor {
         if (color & 2) this.assets.chr_bank[highByteIdx] |= bitMask;
 
         this.render();
+        window.dispatchEvent(new Event('chr-changed'));
     }
 
     getPixel(x, y) {
@@ -378,6 +379,7 @@ class CHREditor {
             }
         }
         this.render();
+        window.dispatchEvent(new Event('chr-changed'));
     }
 
     floodFill(startX, startY, targetColor) {
@@ -431,6 +433,7 @@ class CHREditor {
             }
         }
         this.render();
+        window.dispatchEvent(new Event('chr-changed'));
     }
 
     render() {

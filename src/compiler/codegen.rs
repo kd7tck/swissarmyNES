@@ -365,16 +365,81 @@ impl CodeGenerator {
     fn generate_statement(&mut self, stmt: &Statement) -> Result<(), String> {
         match stmt {
             Statement::Let(name, expr) => {
-                // 1. Evaluate expression -> result in A (Accumulator)
-                self.generate_expression(expr)?;
-
-                // 2. Store A into variable address
                 if let Some(sym) = self.symbol_table.resolve(name) {
                     if let Some(addr) = sym.address {
-                        self.output.push(format!("  STA ${:04X} ; {}", addr, name));
+                        match sym.data_type {
+                            crate::compiler::ast::DataType::Word => {
+                                // 16-bit assignment
+                                match expr {
+                                    Expression::Integer(val) => {
+                                        // Valid 16-bit assignment
+                                        let low = (val & 0xFF) as u8;
+                                        let high = ((val >> 8) & 0xFF) as u8;
+                                        self.output.push(format!("  LDA #${:02X}", low));
+                                        self.output.push(format!("  STA ${:04X}", addr));
+                                        self.output.push(format!("  LDA #${:02X}", high));
+                                        self.output.push(format!("  STA ${:04X}", addr + 1));
+                                    }
+                                    Expression::Identifier(src_name) => {
+                                        // Copy from another variable
+                                        if let Some(src_sym) = self.symbol_table.resolve(src_name) {
+                                            if let Some(src_addr) = src_sym.address {
+                                                if src_sym.data_type
+                                                    == crate::compiler::ast::DataType::Word
+                                                {
+                                                    // Copy Word
+                                                    self.output.push(format!("  LDA ${:04X}", src_addr));
+                                                    self.output.push(format!("  STA ${:04X}", addr));
+                                                    self.output
+                                                        .push(format!("  LDA ${:04X}", src_addr + 1));
+                                                    self.output.push(format!("  STA ${:04X}", addr + 1));
+                                                } else {
+                                                    // Copy Byte to Word (High = 0)
+                                                    self.output.push(format!("  LDA ${:04X}", src_addr));
+                                                    self.output.push(format!("  STA ${:04X}", addr));
+                                                    self.output.push("  LDA #0".to_string());
+                                                    self.output.push(format!("  STA ${:04X}", addr + 1));
+                                                }
+                                            } else if src_sym.kind == SymbolKind::Constant {
+                                                if let Some(val) = src_sym.value {
+                                                    let low = (val & 0xFF) as u8;
+                                                    let high = ((val >> 8) & 0xFF) as u8;
+                                                    self.output.push(format!("  LDA #${:02X}", low));
+                                                    self.output.push(format!("  STA ${:04X}", addr));
+                                                    self.output.push(format!("  LDA #${:02X}", high));
+                                                    self.output.push(format!("  STA ${:04X}", addr + 1));
+                                                } else {
+                                                    return Err(format!(
+                                                        "Constant '{}' has no value assigned",
+                                                        src_name
+                                                    ));
+                                                }
+                                            } else {
+                                                return Err(format!(
+                                                    "Variable '{}' has no address",
+                                                    src_name
+                                                ));
+                                            }
+                                        } else {
+                                            return Err(format!("Undefined variable '{}'", src_name));
+                                        }
+                                    }
+                                    _ => {
+                                        // Eval expression (8-bit) and assign to Word (Low)
+                                        self.generate_expression(expr)?;
+                                        self.output.push(format!("  STA ${:04X}", addr));
+                                        self.output.push("  LDA #0".to_string());
+                                        self.output.push(format!("  STA ${:04X}", addr + 1));
+                                    }
+                                }
+                            }
+                            _ => {
+                                // Byte/Bool assignment
+                                self.generate_expression(expr)?;
+                                self.output.push(format!("  STA ${:04X} ; {}", addr, name));
+                            }
+                        }
                     } else {
-                        // If it's a local variable (allocated on stack or temp zp), handling is more complex.
-                        // For Phase 7, maybe we assume only globals or we allocate locals too?
                         return Err(format!(
                             "Variable '{}' has no address assigned (Locals not supported yet)",
                             name
@@ -397,7 +462,7 @@ impl CodeGenerator {
 
                 // 2. Calculate Address
                 // If Address is a Constant Integer or Constant Identifier, we can use absolute addressing directly.
-                // If it is a variable or expression, we need indirect addressing or self-modifying code.
+                // If it is a variable or expression, we need indirect addressing.
 
                 // Helper to check for constant address
                 let const_addr = match addr_expr {
@@ -415,9 +480,6 @@ impl CodeGenerator {
                 } else {
                     // Dynamic POKE using indirect Y addressing
                     // We use Zero Page locations $02-$03 as a temporary pointer.
-                    // Note: This only works for 8-bit addresses (in A) effectively mapping to ZP.
-                    // If we want full 16-bit dynamic POKE, we need 16-bit expression evaluation.
-                    // For now, we support dynamic POKE to ZP addresses (0-255).
 
                     self.output
                         .push("  ; Dynamic POKE (Indirect ZP)".to_string());
@@ -425,14 +487,8 @@ impl CodeGenerator {
                     // The stack currently has: [Value] (from step 1 above)
                     // Because `generate_expression(val_expr)` was called, then `PHA`.
 
-                    // Eval Address -> A
-                    self.generate_expression(addr_expr)?;
-
-                    // Store Address in Pointer Low ($02)
-                    self.output.push("  STA $02".to_string());
-                    // Zero out Pointer High ($03)
-                    self.output.push("  LDA #$00".to_string());
-                    self.output.push("  STA $03".to_string());
+                    // Eval Address -> PtrLow ($02), PtrHigh ($03)
+                    self.generate_address_expression(addr_expr)?;
 
                     // Prepare Y=0
                     self.output.push("  LDY #$00".to_string());
@@ -653,6 +709,63 @@ impl CodeGenerator {
                 // PlaySfx(id)
                 self.generate_expression(id_expr)?;
                 self.output.push("  JSR Sound_Play".to_string());
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_address_expression(&mut self, expr: &Expression) -> Result<(), String> {
+        // Evaluate expression and store result in $02 (Low) and $03 (High)
+        match expr {
+            Expression::Integer(val) => {
+                let low = (val & 0xFF) as u8;
+                let high = ((val >> 8) & 0xFF) as u8;
+                self.output.push(format!("  LDA #${:02X}", low));
+                self.output.push("  STA $02".to_string());
+                self.output.push(format!("  LDA #${:02X}", high));
+                self.output.push("  STA $03".to_string());
+            }
+            Expression::Identifier(name) => {
+                if let Some(sym) = self.symbol_table.resolve(name) {
+                    if let Some(addr) = sym.address {
+                        match sym.data_type {
+                            crate::compiler::ast::DataType::Word => {
+                                self.output.push(format!("  LDA ${:04X}", addr));
+                                self.output.push("  STA $02".to_string());
+                                self.output.push(format!("  LDA ${:04X}", addr + 1));
+                                self.output.push("  STA $03".to_string());
+                            }
+                            _ => {
+                                // Byte to Word
+                                self.output.push(format!("  LDA ${:04X}", addr));
+                                self.output.push("  STA $02".to_string());
+                                self.output.push("  LDA #0".to_string());
+                                self.output.push("  STA $03".to_string());
+                            }
+                        }
+                    } else if sym.kind == SymbolKind::Constant {
+                        // Should be handled by caller usually, but if dynamic use:
+                        if let Some(val) = sym.value {
+                            let low = (val & 0xFF) as u8;
+                            let high = ((val >> 8) & 0xFF) as u8;
+                            self.output.push(format!("  LDA #${:02X}", low));
+                            self.output.push("  STA $02".to_string());
+                            self.output.push(format!("  LDA #${:02X}", high));
+                            self.output.push("  STA $03".to_string());
+                        }
+                    } else {
+                        return Err(format!("Variable '{}' has no address", name));
+                    }
+                } else {
+                    return Err(format!("Undefined variable '{}'", name));
+                }
+            }
+            _ => {
+                // Fallback to 8-bit evaluation
+                self.generate_expression(expr)?;
+                self.output.push("  STA $02".to_string());
+                self.output.push("  LDA #0".to_string());
+                self.output.push("  STA $03".to_string());
             }
         }
         Ok(())

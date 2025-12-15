@@ -32,7 +32,7 @@
   - **Variables**: `DIM` (BYTE, WORD), `LET` assignments.
   - **Control Flow**: `IF`, `WHILE`, `FOR...NEXT`, `DO...LOOP`.
   - **Hardware Access**:
-    - `POKE(addr, val)`: Supports constant addresses (16-bit) and dynamic Zero-Page addresses (8-bit).
+    - `POKE(addr, val)`: Supports constant addresses (16-bit) and dynamic addresses (16-bit via WORD variables).
     - `PEEK(addr)`: Supports constant addresses.
     - Inline `ASM` blocks.
   - **Audio**:
@@ -48,8 +48,8 @@
   - **Map Editor**: Paint 8x8 tiles onto a 32x30 nametable grid (screen).
 
 ## Limitations
-- **8-Bit Math**: Mathematical expressions are currently evaluated using 8-bit arithmetic (Accumulator). Complex 16-bit math is not yet fully supported.
-- **Dynamic Addressing**: `POKE` with a variable address is currently limited to addresses in the Zero Page ($00-$FF). Use `CONST` for hardware registers (e.g. `$2006`).
+- **8-Bit Math**: Mathematical expressions are currently evaluated using 8-bit arithmetic (Accumulator). Complex 16-bit math is not yet fully supported (assignments to WORD variables are supported).
+- **Dynamic Addressing**: Use `WORD` variables for `POKE` to access dynamic addresses. Use `CONST` for hardware registers (e.g. `$2006`).
 
 ## Getting Started
 

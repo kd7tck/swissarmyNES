@@ -67,7 +67,7 @@ impl Assembler {
                     prg_rom[offset + i] = *byte;
                 }
             } else {
-                 return Err("Palette data injection at $E000 exceeds PRG-ROM size".to_string());
+                return Err("Palette data injection at $E000 exceeds PRG-ROM size".to_string());
             }
         }
 

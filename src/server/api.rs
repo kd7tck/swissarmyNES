@@ -19,7 +19,8 @@ pub struct CompileRequest {
 
 pub async fn compile(Json(payload): Json<CompileRequest>) -> impl IntoResponse {
     // Spawn a blocking task for the CPU-intensive compilation process
-    let result = tokio::task::spawn_blocking(move || compile_source(&payload.source, payload.assets)).await;
+    let result =
+        tokio::task::spawn_blocking(move || compile_source(&payload.source, payload.assets)).await;
 
     match result {
         Ok(compile_result) => match compile_result {

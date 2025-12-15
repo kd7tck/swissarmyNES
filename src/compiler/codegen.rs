@@ -3,6 +3,8 @@ use crate::compiler::ast::{
 };
 use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 
+pub const NAMETABLE_ADDR: u16 = 0xD500;
+
 pub struct CodeGenerator {
     symbol_table: SymbolTable, // We might need to clone or move the symbol table from Analyzer
     output: Vec<String>,
@@ -115,6 +117,50 @@ impl CodeGenerator {
         self.output.push("  INX".to_string());
         self.output.push("  CPX #32".to_string());
         self.output.push("  BNE LoadPalLoop".to_string());
+
+        // --- Load Nametable ---
+        // Load from NAMETABLE_ADDR ($D500)
+        self.output.push("  ; Load Nametable".to_string());
+        self.output.push("  LDA #$20".to_string());
+        self.output.push("  STA $2006".to_string());
+        self.output.push("  LDA #$00".to_string());
+        self.output.push("  STA $2006".to_string());
+
+        // Loop 1 (0-255)
+        self.output.push("  LDX #$00".to_string());
+        self.output.push("LoadNT1:".to_string());
+        self.output
+            .push(format!("  LDA ${:04X}, X", NAMETABLE_ADDR));
+        self.output.push("  STA $2007".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  BNE LoadNT1".to_string());
+
+        // Loop 2 (256-511)
+        self.output.push("  LDX #$00".to_string());
+        self.output.push("LoadNT2:".to_string());
+        self.output
+            .push(format!("  LDA ${:04X}, X", NAMETABLE_ADDR + 256));
+        self.output.push("  STA $2007".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  BNE LoadNT2".to_string());
+
+        // Loop 3 (512-767)
+        self.output.push("  LDX #$00".to_string());
+        self.output.push("LoadNT3:".to_string());
+        self.output
+            .push(format!("  LDA ${:04X}, X", NAMETABLE_ADDR + 512));
+        self.output.push("  STA $2007".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  BNE LoadNT3".to_string());
+
+        // Loop 4 (768-1023)
+        self.output.push("  LDX #$00".to_string());
+        self.output.push("LoadNT4:".to_string());
+        self.output
+            .push(format!("  LDA ${:04X}, X", NAMETABLE_ADDR + 768));
+        self.output.push("  STA $2007".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  BNE LoadNT4".to_string());
 
         // Initialize Sound Engine
         self.output.push("  JSR Sound_Init".to_string());

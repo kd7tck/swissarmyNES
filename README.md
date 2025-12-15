@@ -6,6 +6,10 @@
 **Phase 14: Project Management System** - A project management system has been implemented to Create, Save, and Load projects directly from the IDE.
 
 *   **Recent Milestones:**
+    *   **Phase 24: Audio Compilation**: Implemented audio data compilation and injection into the ROM.
+    *   **Phase 23: Audio Tracker UI**: Added a piano-roll interface for composing music and sound effects.
+    *   **Phase 22: Audio Engine**: Implemented a basic 6502 sound engine supporting PlaySfx commands.
+    *   **Phase 21: Asset Compilation**: Added support for compiling and injecting Nametables (Maps) into the ROM startup.
     *   **Phase 20: Map Attributes**: Added support for painting attribute tables (color palettes) on the Map Editor.
     *   **Phase 19: Nametable (Map) Editor**: Implemented a visual editor to paint tiles onto a 32x30 grid.
     *   **Phase 18: CHR Editor Tools**: Added Flood Fill, Shift, Flip tools, and Bank View to the Tile Editor.

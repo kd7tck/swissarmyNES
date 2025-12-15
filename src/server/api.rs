@@ -1,5 +1,9 @@
 use crate::compiler::{
-    analysis::SemanticAnalyzer, assembler::Assembler, audio, codegen::CodeGenerator, lexer::Lexer,
+    analysis::SemanticAnalyzer,
+    assembler::Assembler,
+    audio,
+    codegen::{CodeGenerator, NAMETABLE_ADDR},
+    lexer::Lexer,
     parser::Parser,
 };
 use crate::server::project::{self, ProjectAssets};
@@ -110,6 +114,29 @@ fn compile_source(source: &str, assets: Option<ProjectAssets>) -> Result<Vec<u8>
     // 3. Music Data at $D100
     let music_data = audio::compile_audio_data(&assets);
     injections.push((audio::MUSIC_DATA_ADDR, music_data));
+
+    // 4. Nametable Data at $D500 (NAMETABLE_ADDR)
+    // We only support one nametable for now (Nametable 0)
+    if let Some(a) = &assets {
+        if let Some(nt) = a.nametables.first() {
+            // Nametable data is 960 bytes + 64 bytes attr = 1024 bytes
+            // Check if data is valid length
+            let mut nt_data = nt.data.clone();
+            if nt_data.len() < 960 {
+                nt_data.resize(960, 0);
+            }
+            let mut attr_data = nt.attrs.clone();
+            if attr_data.len() < 64 {
+                attr_data.resize(64, 0);
+            }
+
+            let mut full_nt = Vec::with_capacity(1024);
+            full_nt.extend_from_slice(&nt_data[..960]);
+            full_nt.extend_from_slice(&attr_data[..64]);
+
+            injections.push((NAMETABLE_ADDR, full_nt));
+        }
+    }
 
     let rom = assembler
         .assemble(&asm_source, chr_data, injections)

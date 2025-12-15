@@ -1,0 +1,39 @@
+
+/* Map Editor Styles */
+
+#map-editor-root {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    height: 100%;
+}
+
+.map-controls {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.5rem;
+    background: #333;
+    border-radius: 4px;
+}
+
+.map-controls button {
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+}
+
+.map-canvas-wrapper {
+    flex: 1;
+    background: #222;
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    border-radius: 4px;
+    border: 1px solid #444;
+}
+
+.map-canvas {
+    background: #000;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    cursor: crosshair;
+}

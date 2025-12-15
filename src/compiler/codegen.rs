@@ -167,7 +167,7 @@ impl CodeGenerator {
 
         self.output.push("Play_Jump:".to_string());
         self.output
-            .push("  LDA #%10011111 ; Duty 50%, Vol 15, Env Off".to_string());
+            .push("  LDA #$9F       ; Duty 50%, Vol 15, Env Off".to_string());
         self.output.push("  STA $4000".to_string());
         self.output
             .push("  LDA #$C9       ; Period Low".to_string());
@@ -177,13 +177,13 @@ impl CodeGenerator {
         self.output.push("  STA $4003".to_string());
         self.output.push("  ; Sweep".to_string());
         self.output
-            .push("  LDA #%10011001 ; Enabled, Period 1, Shift 1".to_string());
+            .push("  LDA #$99       ; Enabled, Period 1, Shift 1".to_string());
         self.output.push("  STA $4001".to_string());
         self.output.push("  RTS".to_string());
 
         self.output.push("Play_Shoot:".to_string());
         self.output
-            .push("  LDA #%00011111 ; Env Decay, Vol 15".to_string());
+            .push("  LDA #$9F       ; Duty 50%, Vol 15, Env Off".to_string());
         self.output.push("  STA $400C".to_string());
         self.output.push("  LDA #$06       ; Period 6".to_string());
         self.output.push("  STA $400E".to_string());

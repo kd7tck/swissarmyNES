@@ -6,6 +6,7 @@
 **Phase 14: Project Management System** - A project management system has been implemented to Create, Save, and Load projects directly from the IDE.
 
 *   **Recent Milestones:**
+    *   **Phase 20: Map Attributes**: Added support for painting attribute tables (color palettes) on the Map Editor.
     *   **Phase 19: Nametable (Map) Editor**: Implemented a visual editor to paint tiles onto a 32x30 grid.
     *   **Phase 18: CHR Editor Tools**: Added Flood Fill, Shift, Flip tools, and Bank View to the Tile Editor.
     *   **Phase 17: CHR (Tile) Editor**: Implemented a basic 8x8 Tile Editor with drawing capabilities and bank navigation.

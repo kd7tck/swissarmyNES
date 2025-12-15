@@ -47,6 +47,7 @@ pub enum Statement {
     Return(Option<Expression>),
     Call(String, Vec<Expression>), // CALL SubName(args)
     Poke(Expression, Expression),  // address, value
+    PlaySfx(Expression),           // sfx_id
     Print(Vec<Expression>),
     Asm(Vec<String>), // Raw assembly lines (if inside a SUB, though usually ASM is top-level too, but can be inline)
     Comment(String),

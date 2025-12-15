@@ -221,6 +221,9 @@ impl SemanticAnalyzer {
                         .push(format!("Undefined interrupt handler '{}'", handler_name));
                 }
             }
+            Statement::PlaySfx(id_expr) => {
+                self.analyze_expression(id_expr);
+            }
         }
     }
 

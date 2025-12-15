@@ -34,6 +34,7 @@ pub enum Token {
     Or,
     Not,
     Let,
+    PlaySfx,
 
     // Identifiers
     Identifier(String),
@@ -253,6 +254,7 @@ impl<'a> Lexer<'a> {
             "OR" => Token::Or,
             "NOT" => Token::Not,
             "LET" => Token::Let,
+            "PLAY_SFX" => Token::PlaySfx,
             _ => Token::Identifier(ident),
         }
     }

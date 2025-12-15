@@ -31,6 +31,8 @@
     - `POKE(addr, val)`: Supports constant addresses (16-bit) and dynamic Zero-Page addresses (8-bit).
     - `PEEK(addr)`: Supports constant addresses.
     - Inline `ASM` blocks.
+  - **Audio**:
+    - `PLAY_SFX(id)`: Play a sound effect. `1` = Jump, `2` = Shoot.
   - **Structure**: `SUB`, `INTERRUPT` definitions.
 - **Web IDE**:
   - **Code Editor**: Syntax highlighting, line numbers, and basic auto-indentation.

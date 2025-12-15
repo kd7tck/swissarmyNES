@@ -234,6 +234,13 @@ impl Parser {
             self.consume(Token::RParen, "Expected ')' after POKE value")?;
             return Ok(Statement::Poke(addr, val));
         }
+        if self.match_token(Token::PlaySfx) {
+            // PLAY_SFX(id)
+            self.consume(Token::LParen, "Expected '(' after PLAY_SFX")?;
+            let id = self.parse_expression()?;
+            self.consume(Token::RParen, "Expected ')' after id")?;
+            return Ok(Statement::PlaySfx(id));
+        }
         if self.match_token(Token::Print) {
             let mut args = Vec::new();
             loop {

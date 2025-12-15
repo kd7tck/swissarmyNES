@@ -45,7 +45,11 @@ impl CodeGenerator {
             self.generate_top_level(decl)?;
         }
 
-        // Pass 3: Generate Vectors
+        // Pass 3: Generate Sound Engine Code (append to end of PRG before vectors?)
+        // Or anywhere in PRG space.
+        self.generate_sound_engine();
+
+        // Pass 4: Generate Vectors
         self.generate_vectors(program)?;
 
         Ok(self.output.clone())
@@ -112,6 +116,9 @@ impl CodeGenerator {
         self.output.push("  CPX #32".to_string());
         self.output.push("  BNE LoadPalLoop".to_string());
 
+        // Initialize Sound Engine
+        self.output.push("  JSR Sound_Init".to_string());
+
         // Call Main if it exists
         self.output.push("  JSR Main".to_string());
 
@@ -121,6 +128,69 @@ impl CodeGenerator {
         self.output.push("".to_string());
 
         Ok(())
+    }
+
+    fn generate_sound_engine(&mut self) {
+        // Simple Sound Engine
+        // Reserved Memory:
+        // $02F0: SFX_ID (0 = No Sound)
+        // $02F1: SFX_Timer (Countdown)
+
+        self.output.push("; --- Sound Engine ---".to_string());
+        self.output.push("Sound_Init:".to_string());
+        self.output.push("  LDA #$0F".to_string());
+        self.output
+            .push("  STA $4015    ; Enable Square 1, 2, Triangle, Noise".to_string());
+        self.output.push("  LDA #$00".to_string());
+        self.output
+            .push("  STA $02F0    ; Clear SFX_ID".to_string());
+        self.output
+            .push("  STA $02F1    ; Clear SFX_Timer".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Sound_Play:
+        // Check if SFX_ID is set.
+        // For simplicity, PlaySfx statement sets SFX_ID, and Sound_Update (called in NMI) plays it.
+        // OR: PlaySfx statement plays it immediately.
+        // Let's make PlaySfx statement JSR Sound_Play_Immediate to trigger the sound.
+        //
+        // Sound 1: Jump (Square sweep)
+        // Sound 2: Shoot (Noise decay)
+
+        self.output.push("Sound_Play:".to_string());
+        self.output.push("  ; Input: A = SFX ID".to_string());
+        self.output.push("  CMP #$01".to_string());
+        self.output.push("  BEQ Play_Jump".to_string());
+        self.output.push("  CMP #$02".to_string());
+        self.output.push("  BEQ Play_Shoot".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("Play_Jump:".to_string());
+        self.output
+            .push("  LDA #$9F       ; Duty 50%, Vol 15, Env Off".to_string());
+        self.output.push("  STA $4000".to_string());
+        self.output
+            .push("  LDA #$C9       ; Period Low".to_string());
+        self.output.push("  STA $4002".to_string());
+        self.output
+            .push("  LDA #$08       ; LengthCounter 0, High Period 0".to_string());
+        self.output.push("  STA $4003".to_string());
+        self.output.push("  ; Sweep".to_string());
+        self.output
+            .push("  LDA #$99       ; Enabled, Period 1, Shift 1".to_string());
+        self.output.push("  STA $4001".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("Play_Shoot:".to_string());
+        self.output
+            .push("  LDA #$9F       ; Duty 50%, Vol 15, Env Off".to_string());
+        self.output.push("  STA $400C".to_string());
+        self.output.push("  LDA #$06       ; Period 6".to_string());
+        self.output.push("  STA $400E".to_string());
+        self.output
+            .push("  LDA #$08       ; Length Counter 0".to_string());
+        self.output.push("  STA $400F".to_string());
+        self.output.push("  RTS".to_string());
     }
 
     fn generate_vectors(&mut self, program: &Program) -> Result<(), String> {
@@ -527,6 +597,11 @@ impl CodeGenerator {
                     "  ; ON {} DO {} (Not implemented)",
                     vector, routine
                 ));
+            }
+            Statement::PlaySfx(id_expr) => {
+                // PlaySfx(id)
+                self.generate_expression(id_expr)?;
+                self.output.push("  JSR Sound_Play".to_string());
             }
         }
         Ok(())

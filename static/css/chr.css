@@ -1,0 +1,67 @@
+
+/* Graphics Layout */
+.graphics-container {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.graphics-col-left {
+    flex: 1;
+    min-width: 300px;
+}
+
+.graphics-col-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* CHR Editor */
+.chr-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+    font-family: monospace;
+    font-size: 1.2rem;
+}
+
+.chr-controls button {
+    padding: 5px 10px;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.chr-canvas {
+    border: 2px solid #555;
+    background-color: #000;
+    cursor: crosshair;
+    image-rendering: pixelated;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.chr-color-picker {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 10px;
+    background: #2a2a2a;
+    border-radius: 4px;
+}
+
+.color-btn {
+    width: 32px;
+    height: 32px;
+    border: 2px solid #555;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.color-btn.selected {
+    border: 2px solid #fff;
+    transform: scale(1.1);
+    box-shadow: 0 0 5px #fff;
+}

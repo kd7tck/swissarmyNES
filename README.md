@@ -3,7 +3,7 @@
 **SwissArmyNES** is a comprehensive, web-based Integrated Development Environment (IDE) tailored for creating Nintendo Entertainment System (NES) games. It combines a Rust backend with a vector-based HTML/JS frontend to provide a modern workflow for retro game development.
 
 ## Current Status
-**Phase 14: Project Management System** - A project management system has been implemented to Create, Save, and Load projects directly from the IDE.
+**Phase 24: Audio Compilation Complete** - The Audio pipeline is fully implemented, including a Tracker UI, data compilation, and binary injection into the ROM.
 
 *   **Recent Milestones:**
     *   **Phase 24: Audio Compilation**: Implemented audio data compilation and injection into the ROM.
@@ -37,6 +37,7 @@
     - Inline `ASM` blocks.
   - **Audio**:
     - `PLAY_SFX(id)`: Play a sound effect. `1` = Jump, `2` = Shoot.
+    - **Tracker**: Built-in audio tracker for composing sequences (Pulse 1, Pulse 2, Triangle).
   - **Structure**: `SUB`, `INTERRUPT` definitions.
 - **Web IDE**:
   - **Code Editor**: Syntax highlighting, line numbers, and basic auto-indentation.

@@ -724,6 +724,9 @@ impl CodeGenerator {
                         match sym.data_type {
                             crate::compiler::ast::DataType::Word => {
                                 // 16-bit assignment
+                                // Note: SwissBASIC supports rudimentary 16-bit assignment for addresses.
+                                // Complex 16-bit math is not fully implemented yet (expressions are 8-bit).
+                                // We handle direct assignment of Literals and other WORD variables here.
                                 match expr {
                                     Expression::Integer(val) => {
                                         // Valid 16-bit assignment
@@ -1036,42 +1039,14 @@ impl CodeGenerator {
                 self.output.push("  RTS".to_string());
             }
             Statement::Call(name, args) => {
-                // Handle arguments if any.
-                // We need to look up the parameters of the called function.
-                // This requires access to the Symbol Table's function definitions.
-                // SymbolTable::resolve(name) should return SymbolKind::Sub.
-                // But SymbolTable currently doesn't store parameter list in `Symbol`.
-                // It only stores address/value.
-
-                // We must traverse the AST to find the Sub definition? Or extend SymbolTable.
-                // The SymbolTable struct has `kind: SymbolKind`.
-                // SymbolKind::Sub doesn't carry params.
-
-                // We can't change SymbolTable definition easily here without refactoring Phase 6.
-                // So we will rely on AST traversal or we assume arguments match the order of allocation if we knew it.
-                // BUT we don't know the order of params here just from name.
-
-                // However, we are inside `generate_statement`. We have access to `self.symbol_table`.
-                // If we can't find the params, we can't generate assignment code.
-
-                // Wait! We can resolve the parameter symbols if we knew their names.
-                // But we don't know their names from the Call statement `Call MyFunc(10)`.
-
-                // Limitation: Without extended Symbol info, we can't support parameters easily.
-                // UNLESS `SymbolTable` has a way to inspect child scopes? No.
-
-                // Temporary Solution:
-                // Assume the user provides arguments matching the declaration.
-                // But we need the ADDRESSES of the parameters to store the values into.
-                // Those addresses are in the SymbolTable under the parameter names.
-                // But we don't know the parameter names.
-
-                // Refactor Requirement: SymbolTable MUST store parameter names/types for Subs.
-                // OR we pass `program` context to `generate_statement` so we can look up the Sub.
-
-                // I will assume `program` is NOT available here (it isn't).
-                // I will add `sub_signatures: HashMap<String, Vec<(String, DataType)>>` to CodeGenerator.
-                // I will populate this in `allocate_memory` or `new`.
+                // Implementation Note: Code Generation for Function Calls
+                // We rely on `sub_signatures` populated during the `allocate_memory` pass.
+                // This allows us to know the memory addresses of parameters.
+                //
+                // "Temporary Solution" logic:
+                // We assume arguments are provided in the correct order as defined in the SUB.
+                // We do NOT perform rigorous type checking here beyond basic assignment logic.
+                // 16-bit support for parameters is limited to Literals and direct Copy.
 
                 // Get parameter info. Clone to avoid borrowing self during generation.
                 let params = if let Some(p) = self.sub_signatures.get(name) {
@@ -1096,22 +1071,6 @@ impl CodeGenerator {
                     // Generate code to evaluate expr and store to addr
                     match dtype {
                         crate::compiler::ast::DataType::Word => {
-                            // Eval 16-bit
-                            // Same logic as Statement::Let assignment
-                            // ... (Simplified: assume expr evaluation works)
-                            // But `generate_expression` assumes 8-bit result in A?
-                            // No, `Statement::Let` handles Word assignment by checking expr type or casting.
-                            // But `generate_expression` returns `Result<(), String>` and puts result in A.
-                            // It handles 8-bit.
-                            // If Word, we need logic similar to Let.
-
-                            // To keep it simple: We only support Byte/Bool params for now?
-                            // No, Design says WORD supported.
-                            // `Statement::Let` logic:
-                            // if Identifier -> Copy
-                            // if Integer -> Load immediate
-                            // else -> Eval (8-bit) -> Store low, 0 high.
-
                             match expr {
                                 Expression::Integer(val) => {
                                     let low = (val & 0xFF) as u8;

@@ -232,7 +232,7 @@ impl CodeGenerator {
         }
 
         // Initialize NMI Vector ($03FA)
-        if let Some(_) = &nmi_label {
+        if nmi_label.is_some() {
             if let Some(addr) = init_nmi_addr {
                 self.output.push(format!("  LDA ${:04X}", addr));
                 self.output.push("  STA $03FA".to_string());
@@ -248,7 +248,7 @@ impl CodeGenerator {
         }
 
         // Initialize IRQ Vector ($03FC)
-        if let Some(_) = &irq_label {
+        if irq_label.is_some() {
              if let Some(addr) = init_irq_addr {
                 self.output.push(format!("  LDA ${:04X}", addr));
                 self.output.push("  STA $03FC".to_string());
@@ -444,13 +444,11 @@ impl CodeGenerator {
                         // `SemanticAnalyzer` defined it. But `CodeGenerator` receives `symbol_table`.
                         // `allocate_memory` creates a scope.
                         // We must DEFINE it here so `assign_address` works.
-                        if let Err(e) = self.symbol_table.define(
+                        self.symbol_table.define(
                             param_name.clone(),
                             param_type.clone(),
                             SymbolKind::Param,
-                        ) {
-                            return Err(e);
-                        }
+                        )?;
 
                         self.symbol_table.assign_address(param_name, self.ram_pointer)?;
                         self.output

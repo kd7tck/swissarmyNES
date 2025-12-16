@@ -29,7 +29,7 @@ impl CodeGenerator {
 
     fn new_label(&mut self) -> String {
         self.label_counter += 1;
-        format!("__L{}", self.label_counter)
+        format!("GEN_L{}", self.label_counter)
     }
 
     pub fn generate(&mut self, program: &Program) -> Result<Vec<String>, String> {
@@ -398,6 +398,7 @@ impl CodeGenerator {
         self.output.push("  RTS".to_string());
 
         // Subroutine: Update Channel X
+        // Uses $F4-$F7 as scratchpad to avoid race condition with Sound_Play ($F0-$F1)
         self.output.push("SndChUpdate:".to_string());
         self.output.push("  LDA $02E0, X ; Active?".to_string());
         self.output.push("  BNE SndActive".to_string());
@@ -411,15 +412,15 @@ impl CodeGenerator {
         self.output.push("SndTimerExpired:".to_string());
 
         // Fetch Next Note
-        // Use $F0-$F1 for pointer
+        // Use $F4-$F5 for pointer
         self.output.push("  LDA $02E2, X ; Ptr Low".to_string());
-        self.output.push("  STA $F0".to_string());
+        self.output.push("  STA $F4".to_string());
         self.output.push("  LDA $02E3, X ; Ptr High".to_string());
-        self.output.push("  STA $F1".to_string());
+        self.output.push("  STA $F5".to_string());
 
         // Read Duration
         self.output.push("  LDY #$00".to_string());
-        self.output.push("  LDA ($F0), Y".to_string());
+        self.output.push("  LDA ($F4), Y".to_string());
 
         // If Duration is 0, End Track
         self.output.push("  CMP #$00".to_string());
@@ -452,22 +453,22 @@ impl CodeGenerator {
         self.output.push("  STA $02E1, X ; Set Timer".to_string());
 
         // Advance Ptr
-        self.output.push("  INC $F0".to_string());
+        self.output.push("  INC $F4".to_string());
         self.output.push("  BNE SndPtrInc2".to_string());
-        self.output.push("  INC $F1".to_string());
+        self.output.push("  INC $F5".to_string());
         self.output.push("SndPtrInc2:".to_string());
 
         // Read Pitch Index
-        self.output.push("  LDA ($F0), Y".to_string());
+        self.output.push("  LDA ($F4), Y".to_string());
 
         // Lookup Period from Table at $D000
         // Table is 16-bit (2 bytes) per index
         self.output.push("  ASL          ; Index * 2".to_string());
         self.output.push("  TAY".to_string());
         self.output.push("  LDA $D000, Y ; Period Low".to_string());
-        self.output.push("  STA $F2".to_string());
+        self.output.push("  STA $F6".to_string());
         self.output.push("  LDA $D001, Y ; Period High".to_string());
-        self.output.push("  STA $F3".to_string());
+        self.output.push("  STA $F7".to_string());
 
         // Apply to Registers based on Channel (X)
         self.output.push("  CPX #$00".to_string());
@@ -482,18 +483,18 @@ impl CodeGenerator {
         self.output
             .push("  LDA #$9F     ; Duty 50%, Vol 15".to_string());
         self.output.push("  STA $4000".to_string());
-        self.output.push("  LDA $F2".to_string());
+        self.output.push("  LDA $F6".to_string());
         self.output.push("  STA $4002".to_string());
-        self.output.push("  LDA $F3".to_string());
+        self.output.push("  LDA $F7".to_string());
         self.output.push("  STA $4003".to_string());
         self.output.push("  JMP SndAdvance".to_string());
 
         self.output.push("PlayP2:".to_string());
         self.output.push("  LDA #$9F".to_string());
         self.output.push("  STA $4004".to_string());
-        self.output.push("  LDA $F2".to_string());
+        self.output.push("  LDA $F6".to_string());
         self.output.push("  STA $4006".to_string());
-        self.output.push("  LDA $F3".to_string());
+        self.output.push("  LDA $F7".to_string());
         self.output.push("  STA $4007".to_string());
         self.output.push("  JMP SndAdvance".to_string());
 
@@ -501,22 +502,22 @@ impl CodeGenerator {
         self.output
             .push("  LDA #$FF     ; Linear Counter On".to_string());
         self.output.push("  STA $4008".to_string());
-        self.output.push("  LDA $F2".to_string());
+        self.output.push("  LDA $F6".to_string());
         self.output.push("  STA $400A".to_string());
-        self.output.push("  LDA $F3".to_string());
+        self.output.push("  LDA $F7".to_string());
         self.output.push("  STA $400B".to_string());
 
         self.output.push("SndAdvance:".to_string());
         // Advance Ptr past Pitch
-        self.output.push("  INC $F0".to_string());
+        self.output.push("  INC $F4".to_string());
         self.output.push("  BNE SndPtrInc3".to_string());
-        self.output.push("  INC $F1".to_string());
+        self.output.push("  INC $F5".to_string());
         self.output.push("SndPtrInc3:".to_string());
 
         // Update Stored Pointer
-        self.output.push("  LDA $F0".to_string());
+        self.output.push("  LDA $F4".to_string());
         self.output.push("  STA $02E2, X".to_string());
-        self.output.push("  LDA $F1".to_string());
+        self.output.push("  LDA $F5".to_string());
         self.output.push("  STA $02E3, X".to_string());
 
         self.output.push("SndChEnd:".to_string());
@@ -525,7 +526,41 @@ impl CodeGenerator {
 
     fn generate_math_helpers(&mut self) {
         self.output.push("; --- Math Helpers ---".to_string());
-        // Empty for now to verify build
+
+        // Math_Mul8: A * $00 -> A
+        self.output.push("Math_Mul8:".to_string());
+        self.output.push("  STA $01".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  LDX #8".to_string());
+        self.output.push("Math_MulLoop:".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL $01".to_string());
+        self.output.push("  BCC Math_MulNoAdd".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $00".to_string());
+        self.output.push("Math_MulNoAdd:".to_string());
+        self.output.push("  DEX".to_string());
+        self.output.push("  BNE Math_MulLoop".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Math_Div8: A / $00 -> A
+        self.output.push("Math_Div8:".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $01".to_string());
+        self.output.push("  LDX #8".to_string());
+        self.output.push("Math_DivLoop:".to_string());
+        self.output.push("  ASL $02".to_string());
+        self.output.push("  ROL".to_string());
+        self.output.push("  CMP $00".to_string());
+        self.output.push("  BCC Math_DivSkip".to_string());
+        self.output.push("  SBC $00".to_string());
+        self.output.push("  INC $02".to_string());
+        self.output.push("Math_DivSkip:".to_string());
+        self.output.push("  DEX".to_string());
+        self.output.push("  BNE Math_DivLoop".to_string());
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  RTS".to_string());
     }
 
     fn generate_data_tables(&mut self, program: &Program) -> Result<(), String> {
@@ -1382,12 +1417,12 @@ impl CodeGenerator {
                         self.output.push("  SBC $00".to_string());
                     }
                     BinaryOperator::Multiply => {
-                        self.output.push("  JSR __Mul8".to_string());
+                        self.output.push("  JSR Math_Mul8".to_string());
                     }
                     BinaryOperator::Divide => {
                         // Divisor is in $00. Dividend in A.
                         // Check div by zero?
-                        self.output.push("  JSR __Div8".to_string());
+                        self.output.push("  JSR Math_Div8".to_string());
                     }
                     BinaryOperator::And => {
                         self.output.push("  AND $00".to_string());

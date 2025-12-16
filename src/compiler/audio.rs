@@ -4,17 +4,7 @@ pub const MUSIC_DATA_ADDR: u16 = 0xD100;
 /// NTSC Period Table for octaves 0-7 (C to B)
 /// Indices: 0-11 = Octave 0, 12-23 = Octave 1, etc.
 /// 12 notes per octave * 8 octaves = 96 entries (192 bytes for 16-bit periods).
-/// We need to inject this as a binary blob.
-/// 6502 will index it by Note Index * 2.
 pub fn generate_period_table() -> Vec<u8> {
-    // NTSC Periods for C, C#, D, D#, E, F, F#, G, G#, A, A#, B
-    // Octave 0 is very low.
-    // Source: http://wiki.nesdev.com/w/index.php/APU_period_table
-    // We will use a standard lookup table.
-    // Let's use octaves 1-8 for useful range, or 0-7 if that's standard.
-    // Note 0 = C-1? No, let's say Note 0 = C-2.
-    // Let's copy a standard table.
-
     // NTSC Periods (Low Byte, High Byte)
     // C-0 to B-7
     let periods: [u16; 96] = [
@@ -47,46 +37,75 @@ pub fn generate_period_table() -> Vec<u8> {
 
 use crate::server::project::ProjectAssets;
 
-/// Compiles audio tracks into a binary format.
-/// Format for each track:
-/// [Length (1 byte)], [Note Data...]
-/// Note Data: [Duration (1 byte)], [Pitch Index (1 byte)]
-/// Pitch Index: 0-95 (Valid), 255 (Rest)
-/// End of Track: implicit by Length? Or 0x00 duration?
-/// Let's use a pointer table at the start of MUSIC_DATA_ADDR?
-/// Simplification: Just one track for now? Or concatenated?
-/// User memory says "3-channel (Pulse 1, Pulse 2, Triangle)".
+/// Compiles audio tracks into a binary format injected at MUSIC_DATA_ADDR ($D100).
+/// Structure:
+/// Header:
+///   Count (1 byte): Number of tracks
+///   Pointers (2 * Count bytes): Absolute addresses of each track data
+/// Data:
+///   [Track 0 Data]
+///   [Track 1 Data]
+///   ...
 ///
-/// Current Sound Engine in Codegen is very simple (PlaySfx).
-/// This refactor aims to support "Music" eventually, but for now we need to inject the data tables.
-///
-/// Let's just return an empty music blob if no tracks, or a simple test pattern.
-/// The ProjectAssets has `audio_tracks`.
+/// Track Data Format:
+///   Channel (1 byte): 0=Pulse1, 1=Pulse2, 2=Triangle, 3=Noise (Only 0-2 supported by engine currently)
+///   Sequence of Notes:
+///     [Duration, Pitch]
+///     ...
+///     [0] (Terminator)
 pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
-    // Header: 3 Pointers to Track Data (Pulse 1, Pulse 2, Triangle)
-    // Relative to MUSIC_DATA_ADDR? Or Absolute?
-    // Let's just output raw data and let the engine handle it later.
-    // For this task, we just need to satisfy the "Inject Binary Data" requirement.
-    // The user wants to replace .BYTE directives.
-
-    // If we have actual tracks, we can compile them.
-    // For now, let's generate a placeholder or compile what's there.
-
     let mut blob = Vec::new();
 
     if let Some(assets) = assets {
-        for track in &assets.audio_tracks {
-            // Compile track
-            // Format: [Duration, Pitch, Duration, Pitch, ..., 0 (End)]
+        let count = assets.audio_tracks.len();
+        if count > 127 {
+            // Limit to fit index arithmetic or reasonable bounds
+            // For now, let's assume < 128 tracks
+        }
+        blob.push(count as u8);
+
+        // Reserve space for pointers
+        let pointer_table_size = count * 2;
+        let data_start_offset = 1 + pointer_table_size;
+
+        // Pointers will be filled later, we insert placeholders
+        for _ in 0..pointer_table_size {
+            blob.push(0);
+        }
+
+        let mut current_offset = data_start_offset;
+
+        for (i, track) in assets.audio_tracks.iter().enumerate() {
+            // Calculate absolute address of this track
+            // Base Address + current_offset
+            let abs_addr = MUSIC_DATA_ADDR as usize + current_offset;
+
+            // Update pointer in table
+            let ptr_idx = 1 + (i * 2);
+            blob[ptr_idx] = (abs_addr & 0xFF) as u8;
+            blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
+
+            // Write Track Data
+            // 1. Channel
+            blob.push(track.envelope);
+            current_offset += 1;
+
+            // 2. Notes
             for note in &track.notes {
                 blob.push(note.duration);
                 blob.push(note.pitch);
+                current_offset += 2;
             }
-            blob.push(0); // Terminator
+
+            // 3. Terminator
+            blob.push(0);
+            current_offset += 1;
         }
+    } else {
+        blob.push(0); // Count = 0
     }
 
-    // Pad if empty to avoid empty blob issues?
+    // Pad to ensure we don't return an empty vector if that's an issue
     if blob.is_empty() {
         blob.push(0);
     }

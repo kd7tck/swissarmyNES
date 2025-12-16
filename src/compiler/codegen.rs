@@ -275,6 +275,7 @@ impl CodeGenerator {
 
         // Trampolines
         self.output.push("TrampolineNMI:".to_string());
+        self.output.push("  JSR Sound_Update".to_string()); // Ensure sound engine runs
         self.output.push("  JMP ($03FA)".to_string());
         self.output.push("TrampolineIRQ:".to_string());
         self.output.push("  JMP ($03FC)".to_string());
@@ -284,70 +285,234 @@ impl CodeGenerator {
     }
 
     fn generate_sound_engine(&mut self) {
-        // Simple Sound Engine
-        // Reserved Memory:
-        // $02F0: SFX_ID (0 = No Sound)
-        // $02F1: SFX_Timer (Countdown)
+        // --- Sound Engine ---
+        // State Variables (RAM $02E0 - $02EF)
+        // Channel 0: Pulse 1 ($02E0)
+        // Channel 1: Pulse 2 ($02E4)
+        // Channel 2: Triangle ($02E8)
+        // Per Channel:
+        // +0: Active (Bool/Byte)
+        // +1: Timer (Byte)
+        // +2: Ptr Low
+        // +3: Ptr High
 
         self.output.push("; --- Sound Engine ---".to_string());
+
+        // Sound_Init
         self.output.push("Sound_Init:".to_string());
         self.output.push("  LDA #$0F".to_string());
-        self.output
-            .push("  STA $4015    ; Enable Square 1, 2, Triangle, Noise".to_string());
+        self.output.push("  STA $4015    ; Enable Square 1, 2, Triangle, Noise".to_string());
+
+        // Clear State ($02E0 - $02EF)
+        self.output.push("  LDX #$00".to_string());
         self.output.push("  LDA #$00".to_string());
-        self.output
-            .push("  STA $02F0    ; Clear SFX_ID".to_string());
-        self.output
-            .push("  STA $02F1    ; Clear SFX_Timer".to_string());
+        self.output.push("SndClear:".to_string());
+        self.output.push("  STA $02E0, X".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  CPX #$10".to_string());
+        self.output.push("  BNE SndClear".to_string());
         self.output.push("  RTS".to_string());
 
-        // Sound_Play:
-        // Check if SFX_ID is set.
-        // For simplicity, PlaySfx statement sets SFX_ID, and Sound_Update (called in NMI) plays it.
-        // OR: PlaySfx statement plays it immediately.
-        // Let's make PlaySfx statement JSR Sound_Play_Immediate to trigger the sound.
-        //
-        // Sound 1: Jump (Square sweep)
-        // Sound 2: Shoot (Noise decay)
-
+        // Sound_Play
+        // Input: A = Track ID
+        // Uses $00-$01 as scratch for pointer lookup
         self.output.push("Sound_Play:".to_string());
-        self.output.push("  ; Input: A = SFX ID".to_string());
-        self.output.push("  CMP #$01".to_string());
-        self.output.push("  BEQ Play_Jump".to_string());
-        self.output.push("  CMP #$02".to_string());
-        self.output.push("  BEQ Play_Shoot".to_string());
+        self.output.push("  PHA          ; Save ID".to_string());
+
+        // Check if ID is valid (Count at $D100)
+        self.output.push("  LDA $D100    ; Get Count".to_string());
+        self.output.push("  STA $00".to_string());
+        self.output.push("  PLA          ; Restore ID".to_string());
+        self.output.push("  CMP $00".to_string());
+        self.output.push("  BCS SndPlayEnd ; ID >= Count, Exit".to_string());
+
+        // Calculate Pointer Address: $D101 + (ID * 2)
+        self.output.push("  ASL          ; ID * 2".to_string());
+        self.output.push("  TAX          ; X = ID * 2".to_string());
+
+        // Read Track Pointer
+        self.output.push("  LDA $D101, X ; Low".to_string());
+        self.output.push("  STA $00".to_string());
+        self.output.push("  LDA $D102, X ; High".to_string());
+        self.output.push("  STA $01".to_string());
+
+        // Read Channel Byte (First byte of track)
+        self.output.push("  LDY #$00".to_string());
+        self.output.push("  LDA ($00), Y".to_string());
+        self.output.push("  AND #$03     ; Mask to 0-3".to_string());
+
+        // Calculate Channel Offset (Channel * 4) -> X
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  TAX".to_string());
+
+        // Setup Channel State at $02E0 + X
+        self.output.push("  LDA #$01".to_string());
+        self.output.push("  STA $02E0, X ; Set Active".to_string());
+        self.output.push("  LDA #$01".to_string());
+        self.output.push("  STA $02E1, X ; Set Timer = 1 (Start immediately)".to_string());
+
+        // Advance Pointer by 1 (skip Channel byte)
+        self.output.push("  INC $00".to_string());
+        self.output.push("  BNE SndPtrInc".to_string());
+        self.output.push("  INC $01".to_string());
+        self.output.push("SndPtrInc:".to_string());
+
+        // Store Pointer
+        self.output.push("  LDA $00".to_string());
+        self.output.push("  STA $02E2, X".to_string());
+        self.output.push("  LDA $01".to_string());
+        self.output.push("  STA $02E3, X".to_string());
+
+        self.output.push("SndPlayEnd:".to_string());
         self.output.push("  RTS".to_string());
 
-        // Note: Future enhancements will use the data tables at $D000 (Periods) and $D100 (Music)
-        // The data is currently injected by the Assembler (via api.rs) at those addresses.
-        // This simple engine is a placeholder. To fully implement Phase 22-24, this engine
-        // should be expanded to read the Music Data from $D100 and Periods from $D000.
+        // Sound_Update (Called every frame)
+        // Iterates through 3 channels (Offset 0, 4, 8)
+        self.output.push("Sound_Update:".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  TXA".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  TYA".to_string());
+        self.output.push("  PHA".to_string());
 
-        self.output.push("Play_Jump:".to_string());
-        self.output
-            .push("  LDA #$9F       ; Duty 50%, Vol 15, Env Off".to_string());
+        // Channel 0
+        self.output.push("  LDX #$00".to_string());
+        self.output.push("  JSR SndChUpdate".to_string());
+        // Channel 1
+        self.output.push("  LDX #$04".to_string());
+        self.output.push("  JSR SndChUpdate".to_string());
+        // Channel 2
+        self.output.push("  LDX #$08".to_string());
+        self.output.push("  JSR SndChUpdate".to_string());
+
+        self.output.push("  PLA".to_string());
+        self.output.push("  TAY".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  TAX".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Subroutine: Update Channel X
+        self.output.push("SndChUpdate:".to_string());
+        self.output.push("  LDA $02E0, X ; Active?".to_string());
+        self.output.push("  BNE SndActive".to_string());
+        self.output.push("  RTS".to_string());
+        self.output.push("SndActive:".to_string());
+
+        // Dec Timer
+        self.output.push("  DEC $02E1, X".to_string());
+        self.output.push("  BEQ SndTimerExpired".to_string());
+        self.output.push("  RTS".to_string());
+        self.output.push("SndTimerExpired:".to_string());
+
+        // Fetch Next Note
+        self.output.push("  LDA $02E2, X ; Ptr Low".to_string());
+        self.output.push("  STA $00".to_string());
+        self.output.push("  LDA $02E3, X ; Ptr High".to_string());
+        self.output.push("  STA $01".to_string());
+
+        // Read Duration
+        self.output.push("  LDY #$00".to_string());
+        self.output.push("  LDA ($00), Y".to_string());
+
+        // If Duration is 0, End Track
+        self.output.push("  CMP #$00".to_string());
+        self.output.push("  BNE SndNextNote".to_string());
+        self.output.push("  STA $02E0, X ; Deactivate".to_string());
+
+        // Silence Channel
+        self.output.push("  CPX #$00".to_string());
+        self.output.push("  BEQ SilenceP1".to_string());
+        self.output.push("  CPX #$04".to_string());
+        self.output.push("  BEQ SilenceP2".to_string());
+        self.output.push("  CPX #$08".to_string());
+        self.output.push("  BEQ SilenceTri".to_string());
+        self.output.push("  JMP SndChEnd".to_string());
+
+        self.output.push("SilenceP1:".to_string());
+        self.output.push("  LDA #$30".to_string());
         self.output.push("  STA $4000".to_string());
-        self.output
-            .push("  LDA #$C9       ; Period Low".to_string());
-        self.output.push("  STA $4002".to_string());
-        self.output
-            .push("  LDA #$08       ; LengthCounter 0, High Period 0".to_string());
-        self.output.push("  STA $4003".to_string());
-        self.output.push("  ; Sweep".to_string());
-        self.output
-            .push("  LDA #$99       ; Enabled, Period 1, Shift 1".to_string());
-        self.output.push("  STA $4001".to_string());
-        self.output.push("  RTS".to_string());
+        self.output.push("  JMP SndChEnd".to_string());
+        self.output.push("SilenceP2:".to_string());
+        self.output.push("  LDA #$30".to_string());
+        self.output.push("  STA $4004".to_string());
+        self.output.push("  JMP SndChEnd".to_string());
+        self.output.push("SilenceTri:".to_string());
+        self.output.push("  LDA #$80".to_string());
+        self.output.push("  STA $4008".to_string());
+        self.output.push("  JMP SndChEnd".to_string());
 
-        self.output.push("Play_Shoot:".to_string());
-        self.output
-            .push("  LDA #$9F       ; Duty 50%, Vol 15, Env Off".to_string());
-        self.output.push("  STA $400C".to_string());
-        self.output.push("  LDA #$06       ; Period 6".to_string());
-        self.output.push("  STA $400E".to_string());
-        self.output
-            .push("  LDA #$08       ; Length Counter 0".to_string());
-        self.output.push("  STA $400F".to_string());
+        self.output.push("SndNextNote:".to_string());
+        self.output.push("  STA $02E1, X ; Set Timer".to_string());
+
+        // Advance Ptr
+        self.output.push("  INC $00".to_string());
+        self.output.push("  BNE SndPtrInc2".to_string());
+        self.output.push("  INC $01".to_string());
+        self.output.push("SndPtrInc2:".to_string());
+
+        // Read Pitch Index
+        self.output.push("  LDA ($00), Y".to_string());
+
+        // Lookup Period from Table at $D000
+        // Table is 16-bit (2 bytes) per index
+        self.output.push("  ASL          ; Index * 2".to_string());
+        self.output.push("  TAY".to_string());
+        self.output.push("  LDA $D000, Y ; Period Low".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  LDA $D001, Y ; Period High".to_string());
+        self.output.push("  STA $03".to_string());
+
+        // Apply to Registers based on Channel (X)
+        self.output.push("  CPX #$00".to_string());
+        self.output.push("  BEQ PlayP1".to_string());
+        self.output.push("  CPX #$04".to_string());
+        self.output.push("  BEQ PlayP2".to_string());
+        self.output.push("  CPX #$08".to_string());
+        self.output.push("  BEQ PlayTri".to_string());
+        self.output.push("  JMP SndAdvance".to_string());
+
+        self.output.push("PlayP1:".to_string());
+        self.output.push("  LDA #$9F     ; Duty 50%, Vol 15".to_string());
+        self.output.push("  STA $4000".to_string());
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  STA $4002".to_string());
+        self.output.push("  LDA $03".to_string());
+        self.output.push("  STA $4003".to_string());
+        self.output.push("  JMP SndAdvance".to_string());
+
+        self.output.push("PlayP2:".to_string());
+        self.output.push("  LDA #$9F".to_string());
+        self.output.push("  STA $4004".to_string());
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  STA $4006".to_string());
+        self.output.push("  LDA $03".to_string());
+        self.output.push("  STA $4007".to_string());
+        self.output.push("  JMP SndAdvance".to_string());
+
+        self.output.push("PlayTri:".to_string());
+        self.output.push("  LDA #$FF     ; Linear Counter On".to_string());
+        self.output.push("  STA $4008".to_string());
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  STA $400A".to_string());
+        self.output.push("  LDA $03".to_string());
+        self.output.push("  STA $400B".to_string());
+
+        self.output.push("SndAdvance:".to_string());
+        // Advance Ptr past Pitch
+        self.output.push("  INC $00".to_string());
+        self.output.push("  BNE SndPtrInc3".to_string());
+        self.output.push("  INC $01".to_string());
+        self.output.push("SndPtrInc3:".to_string());
+
+        // Update Stored Pointer
+        self.output.push("  LDA $00".to_string());
+        self.output.push("  STA $02E2, X".to_string());
+        self.output.push("  LDA $01".to_string());
+        self.output.push("  STA $02E3, X".to_string());
+
+        self.output.push("SndChEnd:".to_string());
         self.output.push("  RTS".to_string());
     }
 
@@ -1240,7 +1405,6 @@ impl CodeGenerator {
                         // BCS (Carry Set) if A >= M.
                         // BEQ (Zero Set) if A == M.
                         // So A > M is BCS AND BNE.
-                        // Easier: Swap operands for LessThan? No, order matters.
                         // logic:
                         // CMP M
                         // BEQ False (Equal)

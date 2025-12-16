@@ -301,7 +301,8 @@ impl CodeGenerator {
         // Sound_Init
         self.output.push("Sound_Init:".to_string());
         self.output.push("  LDA #$0F".to_string());
-        self.output.push("  STA $4015    ; Enable Square 1, 2, Triangle, Noise".to_string());
+        self.output
+            .push("  STA $4015    ; Enable Square 1, 2, Triangle, Noise".to_string());
 
         // Clear State ($02E0 - $02EF)
         self.output.push("  LDX #$00".to_string());
@@ -324,7 +325,8 @@ impl CodeGenerator {
         self.output.push("  STA $00".to_string());
         self.output.push("  PLA          ; Restore ID".to_string());
         self.output.push("  CMP $00".to_string());
-        self.output.push("  BCS SndPlayEnd ; ID >= Count, Exit".to_string());
+        self.output
+            .push("  BCS SndPlayEnd ; ID >= Count, Exit".to_string());
 
         // Calculate Pointer Address: $D101 + (ID * 2)
         self.output.push("  ASL          ; ID * 2".to_string());
@@ -350,7 +352,8 @@ impl CodeGenerator {
         self.output.push("  LDA #$01".to_string());
         self.output.push("  STA $02E0, X ; Set Active".to_string());
         self.output.push("  LDA #$01".to_string());
-        self.output.push("  STA $02E1, X ; Set Timer = 1 (Start immediately)".to_string());
+        self.output
+            .push("  STA $02E1, X ; Set Timer = 1 (Start immediately)".to_string());
 
         // Advance Pointer by 1 (skip Channel byte)
         self.output.push("  INC $00".to_string());
@@ -474,7 +477,8 @@ impl CodeGenerator {
         self.output.push("  JMP SndAdvance".to_string());
 
         self.output.push("PlayP1:".to_string());
-        self.output.push("  LDA #$9F     ; Duty 50%, Vol 15".to_string());
+        self.output
+            .push("  LDA #$9F     ; Duty 50%, Vol 15".to_string());
         self.output.push("  STA $4000".to_string());
         self.output.push("  LDA $02".to_string());
         self.output.push("  STA $4002".to_string());
@@ -492,7 +496,8 @@ impl CodeGenerator {
         self.output.push("  JMP SndAdvance".to_string());
 
         self.output.push("PlayTri:".to_string());
-        self.output.push("  LDA #$FF     ; Linear Counter On".to_string());
+        self.output
+            .push("  LDA #$FF     ; Linear Counter On".to_string());
         self.output.push("  STA $4008".to_string());
         self.output.push("  LDA $02".to_string());
         self.output.push("  STA $400A".to_string());

@@ -158,6 +158,7 @@ impl Parser {
                         Token::Comma => line.push(','),
                         Token::Hash => line.push('#'),
                         Token::Colon => line.push(':'),
+                        Token::SemiColon => line.push(';'),
                         _ => line.push('?'),
                     }
                     line.push(' ');
@@ -278,6 +279,7 @@ impl Parser {
                         Token::Comma => line.push(','),
                         Token::Hash => line.push('#'),
                         Token::Colon => line.push(':'),
+                        Token::SemiColon => line.push(';'),
                         // ... other tokens
                         _ => line.push('?'), // simplified
                     }

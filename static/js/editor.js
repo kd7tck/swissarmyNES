@@ -101,7 +101,7 @@ class SwissEditor {
             'SUB', 'INTERRUPT', 'ASM', 'ON', 'AS', 'DO', 'WHILE', 'FOR',
             'TO', 'STEP', 'LOOP', 'CONST', 'DIM', 'BYTE', 'WORD', 'BOOL',
             'PEEK', 'POKE', 'PRINT', 'RETURN', 'CALL', 'AND', 'OR', 'NOT',
-            'LET'
+            'LET', 'PLAY_SFX'
         ];
         const keywordSet = new Set(keywords);
 

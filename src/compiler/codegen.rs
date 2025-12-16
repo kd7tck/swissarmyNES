@@ -316,15 +316,15 @@ impl CodeGenerator {
 
         // Sound_Play
         // Input: A = Track ID
-        // Uses $00-$01 as scratch for pointer lookup
+        // Uses $F0-$F1 as scratch for pointer lookup to avoid clobbering $00-$01 used by main code
         self.output.push("Sound_Play:".to_string());
         self.output.push("  PHA          ; Save ID".to_string());
 
         // Check if ID is valid (Count at $D100)
         self.output.push("  LDA $D100    ; Get Count".to_string());
-        self.output.push("  STA $00".to_string());
+        self.output.push("  STA $F0".to_string());
         self.output.push("  PLA          ; Restore ID".to_string());
-        self.output.push("  CMP $00".to_string());
+        self.output.push("  CMP $F0".to_string());
         self.output
             .push("  BCS SndPlayEnd ; ID >= Count, Exit".to_string());
 
@@ -334,13 +334,13 @@ impl CodeGenerator {
 
         // Read Track Pointer
         self.output.push("  LDA $D101, X ; Low".to_string());
-        self.output.push("  STA $00".to_string());
+        self.output.push("  STA $F0".to_string());
         self.output.push("  LDA $D102, X ; High".to_string());
-        self.output.push("  STA $01".to_string());
+        self.output.push("  STA $F1".to_string());
 
         // Read Channel Byte (First byte of track)
         self.output.push("  LDY #$00".to_string());
-        self.output.push("  LDA ($00), Y".to_string());
+        self.output.push("  LDA ($F0), Y".to_string());
         self.output.push("  AND #$03     ; Mask to 0-3".to_string());
 
         // Calculate Channel Offset (Channel * 4) -> X
@@ -356,15 +356,15 @@ impl CodeGenerator {
             .push("  STA $02E1, X ; Set Timer = 1 (Start immediately)".to_string());
 
         // Advance Pointer by 1 (skip Channel byte)
-        self.output.push("  INC $00".to_string());
+        self.output.push("  INC $F0".to_string());
         self.output.push("  BNE SndPtrInc".to_string());
-        self.output.push("  INC $01".to_string());
+        self.output.push("  INC $F1".to_string());
         self.output.push("SndPtrInc:".to_string());
 
         // Store Pointer
-        self.output.push("  LDA $00".to_string());
+        self.output.push("  LDA $F0".to_string());
         self.output.push("  STA $02E2, X".to_string());
-        self.output.push("  LDA $01".to_string());
+        self.output.push("  LDA $F1".to_string());
         self.output.push("  STA $02E3, X".to_string());
 
         self.output.push("SndPlayEnd:".to_string());
@@ -410,14 +410,15 @@ impl CodeGenerator {
         self.output.push("SndTimerExpired:".to_string());
 
         // Fetch Next Note
+        // Use $F0-$F1 for pointer
         self.output.push("  LDA $02E2, X ; Ptr Low".to_string());
-        self.output.push("  STA $00".to_string());
+        self.output.push("  STA $F0".to_string());
         self.output.push("  LDA $02E3, X ; Ptr High".to_string());
-        self.output.push("  STA $01".to_string());
+        self.output.push("  STA $F1".to_string());
 
         // Read Duration
         self.output.push("  LDY #$00".to_string());
-        self.output.push("  LDA ($00), Y".to_string());
+        self.output.push("  LDA ($F0), Y".to_string());
 
         // If Duration is 0, End Track
         self.output.push("  CMP #$00".to_string());
@@ -450,22 +451,22 @@ impl CodeGenerator {
         self.output.push("  STA $02E1, X ; Set Timer".to_string());
 
         // Advance Ptr
-        self.output.push("  INC $00".to_string());
+        self.output.push("  INC $F0".to_string());
         self.output.push("  BNE SndPtrInc2".to_string());
-        self.output.push("  INC $01".to_string());
+        self.output.push("  INC $F1".to_string());
         self.output.push("SndPtrInc2:".to_string());
 
         // Read Pitch Index
-        self.output.push("  LDA ($00), Y".to_string());
+        self.output.push("  LDA ($F0), Y".to_string());
 
         // Lookup Period from Table at $D000
         // Table is 16-bit (2 bytes) per index
         self.output.push("  ASL          ; Index * 2".to_string());
         self.output.push("  TAY".to_string());
         self.output.push("  LDA $D000, Y ; Period Low".to_string());
-        self.output.push("  STA $02".to_string());
+        self.output.push("  STA $F2".to_string());
         self.output.push("  LDA $D001, Y ; Period High".to_string());
-        self.output.push("  STA $03".to_string());
+        self.output.push("  STA $F3".to_string());
 
         // Apply to Registers based on Channel (X)
         self.output.push("  CPX #$00".to_string());
@@ -480,18 +481,18 @@ impl CodeGenerator {
         self.output
             .push("  LDA #$9F     ; Duty 50%, Vol 15".to_string());
         self.output.push("  STA $4000".to_string());
-        self.output.push("  LDA $02".to_string());
+        self.output.push("  LDA $F2".to_string());
         self.output.push("  STA $4002".to_string());
-        self.output.push("  LDA $03".to_string());
+        self.output.push("  LDA $F3".to_string());
         self.output.push("  STA $4003".to_string());
         self.output.push("  JMP SndAdvance".to_string());
 
         self.output.push("PlayP2:".to_string());
         self.output.push("  LDA #$9F".to_string());
         self.output.push("  STA $4004".to_string());
-        self.output.push("  LDA $02".to_string());
+        self.output.push("  LDA $F2".to_string());
         self.output.push("  STA $4006".to_string());
-        self.output.push("  LDA $03".to_string());
+        self.output.push("  LDA $F3".to_string());
         self.output.push("  STA $4007".to_string());
         self.output.push("  JMP SndAdvance".to_string());
 
@@ -499,22 +500,22 @@ impl CodeGenerator {
         self.output
             .push("  LDA #$FF     ; Linear Counter On".to_string());
         self.output.push("  STA $4008".to_string());
-        self.output.push("  LDA $02".to_string());
+        self.output.push("  LDA $F2".to_string());
         self.output.push("  STA $400A".to_string());
-        self.output.push("  LDA $03".to_string());
+        self.output.push("  LDA $F3".to_string());
         self.output.push("  STA $400B".to_string());
 
         self.output.push("SndAdvance:".to_string());
         // Advance Ptr past Pitch
-        self.output.push("  INC $00".to_string());
+        self.output.push("  INC $F0".to_string());
         self.output.push("  BNE SndPtrInc3".to_string());
-        self.output.push("  INC $01".to_string());
+        self.output.push("  INC $F1".to_string());
         self.output.push("SndPtrInc3:".to_string());
 
         // Update Stored Pointer
-        self.output.push("  LDA $00".to_string());
+        self.output.push("  LDA $F0".to_string());
         self.output.push("  STA $02E2, X".to_string());
-        self.output.push("  LDA $01".to_string());
+        self.output.push("  LDA $F1".to_string());
         self.output.push("  STA $02E3, X".to_string());
 
         self.output.push("SndChEnd:".to_string());

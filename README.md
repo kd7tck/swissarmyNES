@@ -31,9 +31,10 @@
 - **SwissBASIC**: A hybrid language combining BASIC syntax with inline 6502 Assembly.
   - **Variables**: `DIM` (BYTE, WORD), `LET` assignments.
   - **Control Flow**: `IF`, `WHILE`, `FOR...NEXT`, `DO...LOOP`.
+    - **Note**: `FOR` loops support both positive and negative `STEP` values (constants).
   - **Hardware Access**:
     - `POKE(addr, val)`: Supports constant addresses (16-bit) and dynamic addresses (16-bit via WORD variables).
-    - `PEEK(addr)`: Supports constant addresses.
+    - `PEEK(addr)`: Supports constant addresses and dynamic addresses (via WORD variables).
     - Inline `ASM` blocks.
   - **Audio**:
     - `PLAY_SFX(id)`: Play a sound effect. `1` = Jump, `2` = Shoot.
@@ -49,7 +50,7 @@
 
 ## Limitations
 - **8-Bit Math**: Mathematical expressions are currently evaluated using 8-bit arithmetic (Accumulator). Complex 16-bit math is not yet fully supported (assignments to WORD variables are supported).
-- **Dynamic Addressing**: Use `WORD` variables for `POKE` to access dynamic addresses. Use `CONST` for hardware registers (e.g. `$2006`).
+- **Dynamic Addressing**: Use `WORD` variables for `POKE` and `PEEK` to access dynamic addresses. Use `CONST` for hardware registers (e.g. `$2006`).
 
 ## Getting Started
 

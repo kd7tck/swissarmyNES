@@ -761,7 +761,8 @@ impl CodeGenerator {
                 // FOR loop logic:
                 // var = start
                 // Loop:
-                //   if var > end (assuming positive step) goto Exit
+                //   Positive Step: if var > end goto Exit
+                //   Negative Step: if var < end goto Exit
                 //   Body
                 //   var = var + step
                 //   Goto Loop
@@ -769,6 +770,13 @@ impl CodeGenerator {
 
                 let loop_label = self.new_label();
                 let exit_label = self.new_label();
+
+                // Determine if step is negative constant
+                let is_negative_step = if let Some(Expression::Integer(val)) = step_expr {
+                    *val < 0
+                } else {
+                    false
+                };
 
                 // 1. Initialize Variable
                 // Let(var, start)
@@ -780,8 +788,6 @@ impl CodeGenerator {
                 // We need to compare var with end_expr.
                 // Load var -> A
                 // Compare with end_expr
-                // For simplicity, we assume Step is Positive.
-                // If var > end, exit.
 
                 // Eval var (Identifier)
                 self.generate_expression(&Expression::Identifier(var_name.clone()))?;
@@ -794,38 +800,22 @@ impl CodeGenerator {
                 self.output.push("  PLA".to_string()); // Restore Var
                 self.output.push("  CMP $00".to_string());
 
-                // If Var > End (Unsigned), Exit
-                // BCS = Branch if Carry Set (A >= M). Wait.
-                // CMP M: A - M.
-                // If A < M: Carry Clear.
-                // If A == M: Carry Set, Zero Set.
-                // If A > M: Carry Set, Zero Clear.
-                // So if A > M, BCS will branch. But BCS also branches on Equal.
-                // We want to loop if A <= M.
-                // So if A > M, we exit.
-                // BEQ is Equal.
-                // If A <= M, we continue.
-                // So we want to branch to Exit if A > M.
-                // Logic:
-                // CMP M
-                // BEQ Continue (Equal is fine)
-                // BCC Continue (Less is fine)
-                // BCS Exit (Greater) - but Equal is also BCS.
-                // So:
-                // CMP M
-                // BEQ IsLessOrEq
-                // BCS IsGreater -> Exit
-                // IsLessOrEq: ...
-                // OR:
-                // CMP M
-                // BEQ LoopBody
-                // BCC LoopBody
-                // JMP ExitLabel
-
                 let body_label = self.new_label();
-                self.output.push(format!("  BEQ {}", body_label));
-                self.output.push(format!("  BCC {}", body_label));
-                self.output.push(format!("  JMP {}", exit_label));
+
+                if is_negative_step {
+                    // Negative Step: Loop while Var >= End
+                    // If Var < End, Exit.
+                    // CMP M: A < M -> Carry Clear (BCC).
+                    self.output.push(format!("  BCC {}", exit_label)); // If A < End, Exit
+                                                                       // Else (A >= End), continue to body
+                } else {
+                    // Positive Step (Default): Loop while Var <= End
+                    // If Var > End, Exit.
+                    // CMP M: A > M -> Carry Set (BCS) AND Not Equal.
+                    self.output.push(format!("  BEQ {}", body_label)); // Equal -> Body
+                    self.output.push(format!("  BCC {}", body_label)); // Less -> Body
+                    self.output.push(format!("  JMP {}", exit_label)); // Greater -> Exit
+                }
 
                 self.output.push(format!("{}:", body_label));
 
@@ -854,6 +844,16 @@ impl CodeGenerator {
                     if let Some(addr) = sym.address {
                         self.output.push(format!("  STA ${:04X}", addr));
                     }
+                }
+
+                if is_negative_step {
+                    // Check for underflow (if Carry Set after ADDing negative number, it's NOT an underflow in 2's complement?)
+                    // Wait, 6502 ADC with negative number:
+                    // 5 + (-1 = 255). 5 + 255 = 260. Result 4. Carry Set (Wrap).
+                    // 0 + (-1 = 255). 0 + 255 = 255. Result 255. Carry Clear (No Wrap).
+                    // So if Carry Clear, we wrapped from 0 to 255.
+                    // Therefore, if BCC, we should exit.
+                    self.output.push(format!("  BCC {}", exit_label));
                 }
 
                 self.output.push(format!("  JMP {}", loop_label));
@@ -1145,7 +1145,11 @@ impl CodeGenerator {
                 if let Some(addr) = const_addr {
                     self.output.push(format!("  LDA ${:04X}", addr));
                 } else {
-                    return Err("PEEK currently only supports constant addresses".to_string());
+                    // Dynamic PEEK using indirect Y addressing
+                    // We use Zero Page locations $02-$03 as a temporary pointer.
+                    self.generate_address_expression(addr_expr)?;
+                    self.output.push("  LDY #$00".to_string());
+                    self.output.push("  LDA ($02),y".to_string());
                 }
             }
             Expression::UnaryOp(op, operand) => {

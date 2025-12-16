@@ -1,7 +1,8 @@
 use crate::compiler::ast::{
-    BinaryOperator, Expression, Program, Statement, TopLevel, UnaryOperator,
+    BinaryOperator, DataType, Expression, Program, Statement, TopLevel, UnaryOperator,
 };
 use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
+use std::collections::HashMap;
 
 pub const NAMETABLE_ADDR: u16 = 0xD500;
 
@@ -10,6 +11,8 @@ pub struct CodeGenerator {
     output: Vec<String>,
     ram_pointer: u16,
     label_counter: usize,
+    data_table_offsets: HashMap<String, u16>,
+    sub_signatures: HashMap<String, Vec<(u16, DataType)>>,
 }
 
 impl CodeGenerator {
@@ -19,6 +22,8 @@ impl CodeGenerator {
             output: Vec::new(),
             ram_pointer: 0x0000, // Zero Page start (or wherever we want to start)
             label_counter: 0,
+            data_table_offsets: HashMap::new(),
+            sub_signatures: HashMap::new(),
         }
     }
 
@@ -41,23 +46,25 @@ impl CodeGenerator {
         self.allocate_memory(program)?;
 
         // Pass 2: Generate code
-        self.generate_startup_routine()?;
+        self.generate_startup_routine(program)?;
 
         for decl in &program.declarations {
             self.generate_top_level(decl)?;
         }
 
-        // Pass 3: Generate Sound Engine Code (append to end of PRG before vectors?)
-        // Or anywhere in PRG space.
+        // Pass 3: Generate Sound Engine Code
         self.generate_sound_engine();
 
-        // Pass 4: Generate Vectors
+        // Pass 4: Generate Data Tables (at $FF00)
+        self.generate_data_tables(program)?;
+
+        // Pass 5: Generate Vectors
         self.generate_vectors(program)?;
 
         Ok(self.output.clone())
     }
 
-    fn generate_startup_routine(&mut self) -> Result<(), String> {
+    fn generate_startup_routine(&mut self, program: &Program) -> Result<(), String> {
         self.output.push("Startup:".to_string());
         self.output
             .push("  SEI          ; Disable IRQs".to_string());
@@ -165,12 +172,110 @@ impl CodeGenerator {
         // Initialize Sound Engine
         self.output.push("  JSR Sound_Init".to_string());
 
-        // Call Main if it exists
-        self.output.push("  JSR Main".to_string());
+        // Initialize Interrupt Vectors in RAM
+        // NMI @ $03FA, IRQ @ $03FC
+        // Default to RTI (which we will define as a label DefaultRTI)
+
+        // Generate DefaultRTI
+        // We will output it later in the stream or just jump to an RTS if we want, but RTI is needed.
+        // Let's generate a DefaultRTI label at the end of Startup or elsewhere.
+        // Actually, we can just put it here.
+        // But we need to initialize RAM.
+
+        // Find NMI Handler in program
+        let nmi_label = program.declarations.iter().find_map(|d| {
+            if let TopLevel::Interrupt(name, _) = d {
+                if name.to_uppercase() == "NMI" {
+                    return Some(name.clone());
+                }
+            }
+            None
+        });
+
+        // Find IRQ Handler
+        let irq_label = program.declarations.iter().find_map(|d| {
+            if let TopLevel::Interrupt(name, _) = d {
+                if name.to_uppercase() == "IRQ" {
+                    return Some(name.clone());
+                }
+            }
+            None
+        });
+
+        // We need to mirror the logic in generate_data_tables to find addresses.
+        // Start address: $FF00
+        let mut current_addr = 0xFF00;
+
+        let addr_default_rti = current_addr;
+        current_addr += 2;
+
+        // Helper map to store addresses of Init variables
+        let mut init_nmi_addr: Option<u16> = None;
+        let mut init_irq_addr: Option<u16> = None;
+
+        // We must iterate in the exact same order as generate_data_tables
+        for decl in &program.declarations {
+            if let TopLevel::Interrupt(name, _) = decl {
+                let upper = name.to_uppercase();
+                if upper == "NMI" {
+                    init_nmi_addr = Some(current_addr);
+                    current_addr += 2;
+                } else if upper == "IRQ" {
+                    init_irq_addr = Some(current_addr);
+                    current_addr += 2;
+                }
+                current_addr += 2; // Ptr_{}
+            }
+            if let TopLevel::Sub(_, _, _) = decl {
+                 current_addr += 2; // Ptr_{}
+            }
+        }
+
+        // Initialize NMI Vector ($03FA)
+        if let Some(_) = &nmi_label {
+            if let Some(addr) = init_nmi_addr {
+                self.output.push(format!("  LDA ${:04X}", addr));
+                self.output.push("  STA $03FA".to_string());
+                self.output.push(format!("  LDA ${:04X}", addr + 1));
+                self.output.push("  STA $03FB".to_string());
+            }
+        } else {
+            // Default RTI
+            self.output.push(format!("  LDA ${:04X}", addr_default_rti));
+            self.output.push("  STA $03FA".to_string());
+            self.output.push(format!("  LDA ${:04X}", addr_default_rti + 1));
+            self.output.push("  STA $03FB".to_string());
+        }
+
+        // Initialize IRQ Vector ($03FC)
+        if let Some(_) = &irq_label {
+             if let Some(addr) = init_irq_addr {
+                self.output.push(format!("  LDA ${:04X}", addr));
+                self.output.push("  STA $03FC".to_string());
+                self.output.push(format!("  LDA ${:04X}", addr + 1));
+                self.output.push("  STA $03FD".to_string());
+             }
+        } else {
+             self.output.push(format!("  LDA ${:04X}", addr_default_rti));
+             self.output.push("  STA $03FC".to_string());
+             self.output.push(format!("  LDA ${:04X}", addr_default_rti + 1));
+             self.output.push("  STA $03FD".to_string());
+        }
 
         // Infinite loop after Main returns
         self.output.push("forever:".to_string());
         self.output.push("  JMP forever".to_string());
+        self.output.push("".to_string());
+
+        self.output.push("DefaultRTI:".to_string());
+        self.output.push("  RTI".to_string());
+        self.output.push("".to_string());
+
+        // Trampolines
+        self.output.push("TrampolineNMI:".to_string());
+        self.output.push("  JMP ($03FA)".to_string());
+        self.output.push("TrampolineIRQ:".to_string());
+        self.output.push("  JMP ($03FC)".to_string());
         self.output.push("".to_string());
 
         Ok(())
@@ -244,47 +349,54 @@ impl CodeGenerator {
         self.output.push("  RTS".to_string());
     }
 
-    fn generate_vectors(&mut self, program: &Program) -> Result<(), String> {
+    fn generate_data_tables(&mut self, program: &Program) -> Result<(), String> {
+        self.output.push("".to_string());
+        self.output.push("; --- Data Tables ---".to_string());
+        self.output.push(".ORG $FF00".to_string());
+
+        let mut current_addr = 0xFF00;
+
+        // InitDefaultRTI
+        self.output.push("InitDefaultRTI: WORD DefaultRTI".to_string()); // $FF00
+        current_addr += 2;
+
+        for decl in &program.declarations {
+            if let TopLevel::Interrupt(name, _) = decl {
+                let upper = name.to_uppercase();
+                if upper == "NMI" {
+                    self.output.push(format!("InitNMI_{}: WORD {}", name, name));
+                    current_addr += 2;
+                } else if upper == "IRQ" {
+                    self.output.push(format!("InitIRQ_{}: WORD {}", name, name));
+                    current_addr += 2;
+                }
+                // For ON statement
+                self.output.push(format!("Ptr_{}: WORD {}", name, name));
+                self.data_table_offsets.insert(name.clone(), current_addr);
+                current_addr += 2;
+            }
+            if let TopLevel::Sub(name, _, _) = decl {
+                 self.output.push(format!("Ptr_{}: WORD {}", name, name));
+                 self.data_table_offsets.insert(name.clone(), current_addr);
+                 current_addr += 2;
+            }
+        }
+        self.output.push("".to_string());
+        Ok(())
+    }
+
+    fn generate_vectors(&mut self, _program: &Program) -> Result<(), String> {
         self.output.push("".to_string());
         self.output.push(".ORG $FFFA".to_string());
 
-        // Find NMI Handler
-        let nmi_label = program.declarations.iter().find_map(|d| {
-            if let TopLevel::Interrupt(name, _) = d {
-                if name.to_uppercase() == "NMI" {
-                    return Some(name.clone());
-                }
-            }
-            None
-        });
+        // NMI -> TrampolineNMI
+        self.output.push("VecNMI: WORD TrampolineNMI".to_string());
 
-        // Find IRQ Handler
-        let irq_label = program.declarations.iter().find_map(|d| {
-            if let TopLevel::Interrupt(name, _) = d {
-                if name.to_uppercase() == "IRQ" {
-                    return Some(name.clone());
-                }
-            }
-            None
-        });
-
-        // Emit Vectors
-        // NMI
-        if let Some(lbl) = &nmi_label {
-            self.output.push(format!("VecNMI: WORD {}", lbl));
-        } else {
-            self.output.push("VecNMI: WORD $0000".to_string());
-        }
-
-        // RESET
+        // RESET -> Startup (Fixed)
         self.output.push("VecReset: WORD Startup".to_string());
 
-        // IRQ
-        if let Some(lbl) = &irq_label {
-            self.output.push(format!("VecIRQ: WORD {}", lbl));
-        } else {
-            self.output.push("VecIRQ: WORD $0000".to_string());
-        }
+        // IRQ -> TrampolineIRQ
+        self.output.push("VecIRQ: WORD TrampolineIRQ".to_string());
 
         self.output.push("".to_string()); // Ensure trailing newline
 
@@ -300,26 +412,85 @@ impl CodeGenerator {
         // Let's start at 0x0300 for global variables.
         self.ram_pointer = 0x0300;
 
-        for decl in &program.declarations {
-            if let TopLevel::Dim(name, dtype) = decl {
-                // Assign address
-                // Update symbol table
-                // We need to resolve the symbol first
-                // The symbol table passed in `new` should already have these defined from Semantic Analysis
-                // We just need to set the address.
-                self.symbol_table.assign_address(name, self.ram_pointer)?;
-                self.output
-                    .push(format!("; {} @ ${:04X}", name, self.ram_pointer));
+        // Also prepare Data Table layout (ROM) starting at $FF00
+        let mut data_table_addr = 0xFF00;
+        // Reserve space for InitDefaultRTI
+        data_table_addr += 2;
 
-                // Increment pointer
-                match dtype {
-                    crate::compiler::ast::DataType::Byte | crate::compiler::ast::DataType::Bool => {
-                        self.ram_pointer += 1;
-                    }
-                    crate::compiler::ast::DataType::Word => {
-                        self.ram_pointer += 2;
+        for decl in &program.declarations {
+            match decl {
+                TopLevel::Dim(name, dtype) => {
+                    // Assign address
+                    self.symbol_table.assign_address(name, self.ram_pointer)?;
+                    self.output
+                        .push(format!("; {} @ ${:04X}", name, self.ram_pointer));
+
+                    match dtype {
+                        crate::compiler::ast::DataType::Byte | crate::compiler::ast::DataType::Bool => {
+                            self.ram_pointer += 1;
+                        }
+                        crate::compiler::ast::DataType::Word => {
+                            self.ram_pointer += 2;
+                        }
                     }
                 }
+                TopLevel::Sub(sub_name, params, _) => {
+                    self.symbol_table.enter_scope(); // Enter Sub Scope
+
+                    let mut sig_params = Vec::new();
+
+                    for (param_name, param_type) in params {
+                        // We need to define the parameter in the symbol table temporarily to assign address?
+                        // `SemanticAnalyzer` defined it. But `CodeGenerator` receives `symbol_table`.
+                        // `allocate_memory` creates a scope.
+                        // We must DEFINE it here so `assign_address` works.
+                        if let Err(e) = self.symbol_table.define(
+                            param_name.clone(),
+                            param_type.clone(),
+                            SymbolKind::Param,
+                        ) {
+                            return Err(e);
+                        }
+
+                        self.symbol_table.assign_address(param_name, self.ram_pointer)?;
+                        self.output
+                            .push(format!("; {}.{} @ ${:04X}", sub_name, param_name, self.ram_pointer));
+
+                        sig_params.push((self.ram_pointer, param_type.clone()));
+
+                        match param_type {
+                            crate::compiler::ast::DataType::Byte | crate::compiler::ast::DataType::Bool => {
+                                self.ram_pointer += 1;
+                            }
+                            crate::compiler::ast::DataType::Word => {
+                                self.ram_pointer += 2;
+                            }
+                        }
+                    }
+                    // Store signature
+                    self.sub_signatures.insert(sub_name.clone(), sig_params);
+
+                    // Also allocate Data Table entry for Ptr_{SubName}
+                    self.data_table_offsets.insert(sub_name.clone(), data_table_addr);
+                    data_table_addr += 2;
+
+                    self.symbol_table.exit_scope();
+                }
+                TopLevel::Interrupt(name, _) => {
+                    // Interrupts need Data Table entries
+                    let upper = name.to_uppercase();
+                    if upper == "NMI" {
+                        // InitNMI_{name}
+                        data_table_addr += 2;
+                    } else if upper == "IRQ" {
+                        // InitIRQ_{name}
+                        data_table_addr += 2;
+                    }
+                    // Ptr_{name}
+                    self.data_table_offsets.insert(name.clone(), data_table_addr);
+                    data_table_addr += 2;
+                }
+                _ => {}
             }
         }
         Ok(())
@@ -329,13 +500,18 @@ impl CodeGenerator {
         match decl {
             TopLevel::Sub(name, _params, body) => {
                 self.output.push(format!("{}:", name));
+                // Enter scope for parameters/locals
+                self.symbol_table.enter_scope();
                 self.generate_block(body)?;
+                self.symbol_table.exit_scope();
                 self.output.push("  RTS".to_string());
                 self.output.push("".to_string()); // Newline for readability
             }
             TopLevel::Interrupt(name, body) => {
                 self.output.push(format!("{}:", name));
+                self.symbol_table.enter_scope();
                 self.generate_block(body)?;
+                self.symbol_table.exit_scope();
                 self.output.push("  RTI".to_string());
                 self.output.push("".to_string());
             }
@@ -681,12 +857,119 @@ impl CodeGenerator {
                 }
                 self.output.push("  RTS".to_string());
             }
-            Statement::Call(name, _args) => {
-                // Ignore args for now as per minimal implementation (Sub has no args in first phase usually, or fixed)
-                // But TopLevel::Sub takes params.
-                // If params are passed, we need to handle them.
-                // Phase 7/8 doesn't explicitly detail parameter passing convention (Stack vs Registers).
-                // We will assume parameterless for basic control flow test, or just JSR.
+            Statement::Call(name, args) => {
+                // Handle arguments if any.
+                // We need to look up the parameters of the called function.
+                // This requires access to the Symbol Table's function definitions.
+                // SymbolTable::resolve(name) should return SymbolKind::Sub.
+                // But SymbolTable currently doesn't store parameter list in `Symbol`.
+                // It only stores address/value.
+
+                // We must traverse the AST to find the Sub definition? Or extend SymbolTable.
+                // The SymbolTable struct has `kind: SymbolKind`.
+                // SymbolKind::Sub doesn't carry params.
+
+                // We can't change SymbolTable definition easily here without refactoring Phase 6.
+                // So we will rely on AST traversal or we assume arguments match the order of allocation if we knew it.
+                // BUT we don't know the order of params here just from name.
+
+                // However, we are inside `generate_statement`. We have access to `self.symbol_table`.
+                // If we can't find the params, we can't generate assignment code.
+
+                // Wait! We can resolve the parameter symbols if we knew their names.
+                // But we don't know their names from the Call statement `Call MyFunc(10)`.
+
+                // Limitation: Without extended Symbol info, we can't support parameters easily.
+                // UNLESS `SymbolTable` has a way to inspect child scopes? No.
+
+                // Temporary Solution:
+                // Assume the user provides arguments matching the declaration.
+                // But we need the ADDRESSES of the parameters to store the values into.
+                // Those addresses are in the SymbolTable under the parameter names.
+                // But we don't know the parameter names.
+
+                // Refactor Requirement: SymbolTable MUST store parameter names/types for Subs.
+                // OR we pass `program` context to `generate_statement` so we can look up the Sub.
+
+                // I will assume `program` is NOT available here (it isn't).
+                // I will add `sub_signatures: HashMap<String, Vec<(String, DataType)>>` to CodeGenerator.
+                // I will populate this in `allocate_memory` or `new`.
+
+                // Get parameter info. Clone to avoid borrowing self during generation.
+                let params = if let Some(p) = self.sub_signatures.get(name) {
+                    p.clone()
+                } else {
+                    return Err(format!("Undefined sub '{}'", name));
+                };
+
+                if args.len() != params.len() {
+                    return Err(format!("Call to '{}' has {} args, expected {}", name, args.len(), params.len()));
+                }
+
+                // Assign args to params
+                for (i, expr) in args.iter().enumerate() {
+                    let (addr, dtype) = params[i].clone();
+
+                        // Generate code to evaluate expr and store to addr
+                        match dtype {
+                            crate::compiler::ast::DataType::Word => {
+                                // Eval 16-bit
+                                // Same logic as Statement::Let assignment
+                                // ... (Simplified: assume expr evaluation works)
+                                // But `generate_expression` assumes 8-bit result in A?
+                                // No, `Statement::Let` handles Word assignment by checking expr type or casting.
+                                // But `generate_expression` returns `Result<(), String>` and puts result in A.
+                                // It handles 8-bit.
+                                // If Word, we need logic similar to Let.
+
+                                // To keep it simple: We only support Byte/Bool params for now?
+                                // No, Design says WORD supported.
+                                // `Statement::Let` logic:
+                                // if Identifier -> Copy
+                                // if Integer -> Load immediate
+                                // else -> Eval (8-bit) -> Store low, 0 high.
+
+                                match expr {
+                                    Expression::Integer(val) => {
+                                        let low = (val & 0xFF) as u8;
+                                        let high = ((val >> 8) & 0xFF) as u8;
+                                        self.output.push(format!("  LDA #${:02X}", low));
+                                        self.output.push(format!("  STA ${:04X}", addr));
+                                        self.output.push(format!("  LDA #${:02X}", high));
+                                        self.output.push(format!("  STA ${:04X}", addr + 1));
+                                    }
+                                    Expression::Identifier(src) => {
+                                        // Copy
+                                        if let Some(sym) = self.symbol_table.resolve(src) {
+                                            if let Some(src_addr) = sym.address {
+                                                // Check type... assume Word copy
+                                                self.output.push(format!("  LDA ${:04X}", src_addr));
+                                                self.output.push(format!("  STA ${:04X}", addr));
+                                                self.output.push(format!("  LDA ${:04X}", src_addr+1));
+                                                self.output.push(format!("  STA ${:04X}", addr+1));
+                                            } else {
+                                                // Constant?
+                                                return Err("Param pass: Const/NoAddr not impl".to_string());
+                                            }
+                                        } else {
+                                             return Err(format!("Undefined var {}", src));
+                                        }
+                                    }
+                                    _ => {
+                                        self.generate_expression(expr)?;
+                                        self.output.push(format!("  STA ${:04X}", addr));
+                                        self.output.push("  LDA #0".to_string());
+                                        self.output.push(format!("  STA ${:04X}", addr + 1));
+                                    }
+                                }
+                            }
+                            _ => {
+                                self.generate_expression(expr)?;
+                                self.output.push(format!("  STA ${:04X}", addr));
+                            }
+                        }
+                    }
+
                 self.output.push(format!("  JSR {}", name));
             }
             Statement::Print(_) => {
@@ -697,28 +980,36 @@ impl CodeGenerator {
                 self.output.push(format!("  ; {}", c));
             }
             Statement::On(vector, routine) => {
-                // This is for dynamic interrupt vector assignment or ON ... GOTO?
-                // The AST says: ON NMI DO RoutineName
-                // This is likely a configuration directive rather than a runtime statement in BASIC sometimes.
-                // But if it is inside SUB, it means changing the vector at runtime?
-                // The NES vectors are in ROM ($FFFA). They cannot be changed at runtime unless they point to RAM (trampoline).
-                // Phase 8 design doesn't specify dynamic vectors.
-                // Phase 4 says "Interrupt Handlers: Special function decorators".
-                // `ON NMI DO VblankRoutine`
-                // If it's a TopLevel declaration, it's handled in `generate_vectors`.
-                // But AST has Statement::On.
-                // If the parser parses `ON NMI ...` as a statement inside a block, then we have an issue.
-                // Looking at parser, `TopLevel::Interrupt` handles `INTERRUPT NMI() ... END INTERRUPT`.
-                // Does `ON ...` exist in Parser?
-                // Lexer has `Token::On`. Parser doesn't seem to implement `parse_statement` for `On`.
-                // Ah, check parser.rs again.
-                // Parser does NOT handle `ON` in `parse_statement`.
-                // So `Statement::On` might be vestigial or for future use.
-                // I will just add a comment in output.
-                self.output.push(format!(
-                    "  ; ON {} DO {} (Not implemented)",
-                    vector, routine
-                ));
+                // ON <Vector> DO <Routine>
+                // vector: String (NMI, IRQ)
+                // routine: String (Sub name)
+
+                let target_addr_low;
+                let target_addr_high;
+
+                let v_upper = vector.to_uppercase();
+                if v_upper == "NMI" {
+                    target_addr_low = "$03FA";
+                    target_addr_high = "$03FB";
+                } else if v_upper == "IRQ" {
+                    target_addr_low = "$03FC";
+                    target_addr_high = "$03FD";
+                } else {
+                    return Err(format!("Unknown interrupt vector '{}'", vector));
+                }
+
+                // Note: The routine should be a Sub name (which is a label).
+                // We assume the routine exists (Validation should have happened).
+                // CodeGen: Store Routine Address into RAM Vector.
+
+                if let Some(addr) = self.data_table_offsets.get(routine) {
+                    self.output.push(format!("  LDA ${:04X}", addr));
+                    self.output.push(format!("  STA {}", target_addr_low));
+                    self.output.push(format!("  LDA ${:04X}", addr + 1));
+                    self.output.push(format!("  STA {}", target_addr_high));
+                } else {
+                     return Err(format!("Could not find data table entry for routine '{}'", routine));
+                }
             }
             Statement::PlaySfx(id_expr) => {
                 // PlaySfx(id)

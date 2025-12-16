@@ -37,6 +37,7 @@ mod tests {
 
         // Join lines with newlines
         let asm_source = asm_lines.join("\n");
+        println!("Generated Assembly:\n{}", asm_source);
 
         // 5. Assembler
         let assembler = Assembler::new();

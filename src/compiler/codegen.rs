@@ -54,6 +54,7 @@ impl CodeGenerator {
 
         // Pass 3: Generate Sound Engine Code
         self.generate_sound_engine();
+        self.generate_math_helpers();
 
         // Pass 4: Generate Data Tables (at $FF00)
         self.generate_data_tables(program)?;
@@ -522,6 +523,11 @@ impl CodeGenerator {
         self.output.push("  RTS".to_string());
     }
 
+    fn generate_math_helpers(&mut self) {
+        self.output.push("; --- Math Helpers ---".to_string());
+        // Empty for now to verify build
+    }
+
     fn generate_data_tables(&mut self, program: &Program) -> Result<(), String> {
         self.output.push("".to_string());
         self.output.push("; --- Data Tables ---".to_string());
@@ -946,10 +952,21 @@ impl CodeGenerator {
                 let exit_label = self.new_label();
 
                 // Determine if step is negative constant
-                let is_negative_step = if let Some(Expression::Integer(val)) = step_expr {
-                    *val < 0
-                } else {
-                    false
+                let is_negative_step = match step_expr {
+                    Some(Expression::Integer(val)) => *val < 0,
+                    Some(Expression::Identifier(name)) => {
+                        // Resolve constant
+                        if let Some(sym) = self.symbol_table.resolve(name) {
+                            if let Some(val) = sym.value {
+                                val < 0
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    _ => false,
                 };
 
                 // 1. Initialize Variable
@@ -1065,57 +1082,7 @@ impl CodeGenerator {
                     ));
                 }
 
-                // Assign args to params
-                for (i, expr) in args.iter().enumerate() {
-                    let (addr, dtype) = params[i].clone();
-
-                    // Generate code to evaluate expr and store to addr
-                    match dtype {
-                        crate::compiler::ast::DataType::Word => {
-                            match expr {
-                                Expression::Integer(val) => {
-                                    let low = (val & 0xFF) as u8;
-                                    let high = ((val >> 8) & 0xFF) as u8;
-                                    self.output.push(format!("  LDA #${:02X}", low));
-                                    self.output.push(format!("  STA ${:04X}", addr));
-                                    self.output.push(format!("  LDA #${:02X}", high));
-                                    self.output.push(format!("  STA ${:04X}", addr + 1));
-                                }
-                                Expression::Identifier(src) => {
-                                    // Copy
-                                    if let Some(sym) = self.symbol_table.resolve(src) {
-                                        if let Some(src_addr) = sym.address {
-                                            // Check type... assume Word copy
-                                            self.output.push(format!("  LDA ${:04X}", src_addr));
-                                            self.output.push(format!("  STA ${:04X}", addr));
-                                            self.output
-                                                .push(format!("  LDA ${:04X}", src_addr + 1));
-                                            self.output.push(format!("  STA ${:04X}", addr + 1));
-                                        } else {
-                                            // Constant?
-                                            return Err(
-                                                "Param pass: Const/NoAddr not impl".to_string()
-                                            );
-                                        }
-                                    } else {
-                                        return Err(format!("Undefined var {}", src));
-                                    }
-                                }
-                                _ => {
-                                    self.generate_expression(expr)?;
-                                    self.output.push(format!("  STA ${:04X}", addr));
-                                    self.output.push("  LDA #0".to_string());
-                                    self.output.push(format!("  STA ${:04X}", addr + 1));
-                                }
-                            }
-                        }
-                        _ => {
-                            self.generate_expression(expr)?;
-                            self.output.push(format!("  STA ${:04X}", addr));
-                        }
-                    }
-                }
-
+                self.generate_args(&params, args)?;
                 self.output.push(format!("  JSR {}", name));
             }
             Statement::Print(_) => {
@@ -1164,6 +1131,74 @@ impl CodeGenerator {
                 // PlaySfx(id)
                 self.generate_expression(id_expr)?;
                 self.output.push("  JSR Sound_Play".to_string());
+            }
+        }
+        Ok(())
+    }
+
+    fn generate_args(
+        &mut self,
+        params: &[(u16, DataType)],
+        args: &[Expression],
+    ) -> Result<(), String> {
+        // Assign args to params
+        for (i, expr) in args.iter().enumerate() {
+            let (addr, dtype) = params[i].clone();
+
+            // Generate code to evaluate expr and store to addr
+            match dtype {
+                crate::compiler::ast::DataType::Word => {
+                    match expr {
+                        Expression::Integer(val) => {
+                            let low = (val & 0xFF) as u8;
+                            let high = ((val >> 8) & 0xFF) as u8;
+                            self.output.push(format!("  LDA #${:02X}", low));
+                            self.output.push(format!("  STA ${:04X}", addr));
+                            self.output.push(format!("  LDA #${:02X}", high));
+                            self.output.push(format!("  STA ${:04X}", addr + 1));
+                        }
+                        Expression::Identifier(src) => {
+                            // Copy
+                            if let Some(sym) = self.symbol_table.resolve(src) {
+                                if let Some(src_addr) = sym.address {
+                                    // Check type... assume Word copy
+                                    self.output.push(format!("  LDA ${:04X}", src_addr));
+                                    self.output.push(format!("  STA ${:04X}", addr));
+                                    self.output.push(format!("  LDA ${:04X}", src_addr + 1));
+                                    self.output.push(format!("  STA ${:04X}", addr + 1));
+                                } else if sym.kind == SymbolKind::Constant {
+                                    if let Some(val) = sym.value {
+                                        let low = (val & 0xFF) as u8;
+                                        let high = ((val >> 8) & 0xFF) as u8;
+                                        self.output.push(format!("  LDA #${:02X}", low));
+                                        self.output.push(format!("  STA ${:04X}", addr));
+                                        self.output.push(format!("  LDA #${:02X}", high));
+                                        self.output.push(format!("  STA ${:04X}", addr + 1));
+                                    } else {
+                                        return Err(format!(
+                                            "Constant '{}' has no value assigned",
+                                            src
+                                        ));
+                                    }
+                                } else {
+                                    return Err(format!("Variable '{}' has no address", src));
+                                }
+                            } else {
+                                return Err(format!("Undefined var {}", src));
+                            }
+                        }
+                        _ => {
+                            self.generate_expression(expr)?;
+                            self.output.push(format!("  STA ${:04X}", addr));
+                            self.output.push("  LDA #0".to_string());
+                            self.output.push(format!("  STA ${:04X}", addr + 1));
+                        }
+                    }
+                }
+                _ => {
+                    self.generate_expression(expr)?;
+                    self.output.push(format!("  STA ${:04X}", addr));
+                }
             }
         }
         Ok(())
@@ -1241,6 +1276,10 @@ impl CodeGenerator {
                 let byte_val = (val & 0xFF) as u8;
                 self.output.push(format!("  LDA #${:02X}", byte_val));
             }
+            Expression::StringLiteral(_) => {
+                // String literals are not supported in general expressions yet (only in Print/Data?)
+                return Err("String literals not supported in expressions".to_string());
+            }
             Expression::Identifier(name) => {
                 if let Some(sym) = self.symbol_table.resolve(name) {
                     if let Some(addr) = sym.address {
@@ -1282,6 +1321,27 @@ impl CodeGenerator {
                     self.output.push("  LDA ($02),y".to_string());
                 }
             }
+            Expression::FunctionCall(name, args) => {
+                // Implementation for Function Calls (Same as Call but used in expression)
+                let params = if let Some(p) = self.sub_signatures.get(name) {
+                    p.clone()
+                } else {
+                    return Err(format!("Undefined sub '{}'", name));
+                };
+
+                if args.len() != params.len() {
+                    return Err(format!(
+                        "Call to '{}' has {} args, expected {}",
+                        name,
+                        args.len(),
+                        params.len()
+                    ));
+                }
+
+                self.generate_args(&params, args)?;
+                self.output.push(format!("  JSR {}", name));
+                // Result is expected in A. If SUB doesn't return anything explicit, it's A.
+            }
             Expression::UnaryOp(op, operand) => {
                 self.generate_expression(operand)?;
                 match op {
@@ -1320,6 +1380,14 @@ impl CodeGenerator {
                     BinaryOperator::Subtract => {
                         self.output.push("  SEC".to_string());
                         self.output.push("  SBC $00".to_string());
+                    }
+                    BinaryOperator::Multiply => {
+                        self.output.push("  JSR __Mul8".to_string());
+                    }
+                    BinaryOperator::Divide => {
+                        // Divisor is in $00. Dividend in A.
+                        // Check div by zero?
+                        self.output.push("  JSR __Div8".to_string());
                     }
                     BinaryOperator::And => {
                         self.output.push("  AND $00".to_string());
@@ -1428,15 +1496,7 @@ impl CodeGenerator {
                         self.output.push("  LDA #1".to_string());
                         self.output.push(format!("{}:", end_lbl));
                     }
-                    _ => {
-                        self.output
-                            .push(format!("; Unimplemented binary op: {:?}", op));
-                    }
                 }
-            }
-            _ => {
-                self.output
-                    .push(format!("; Unimplemented expression: {:?}", expr));
             }
         }
         Ok(())

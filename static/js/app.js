@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const navItems = document.querySelectorAll('.nav-item');
     const views = document.querySelectorAll('.view');
     const btnCompile = document.getElementById('btn-compile');
+    const btnRun = document.getElementById('btn-run');
     const codeEditor = document.getElementById('code-editor');
 
     function navigateTo(targetId) {
@@ -99,6 +100,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error(err);
                 alert('Network Error: ' + err.message);
             }
+        });
+    }
+
+    // Handle Run (Emulator)
+    if (btnRun) {
+        btnRun.addEventListener('click', () => {
+            // In the future, this will launch the WASM emulator.
+            // For now, we alert the user.
+            alert('Emulator integration is coming in Phase 25. Please compile and run the downloaded ROM in your preferred NES emulator.');
         });
     }
 });

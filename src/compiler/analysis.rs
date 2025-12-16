@@ -257,8 +257,23 @@ impl SemanticAnalyzer {
                 self.analyze_expression(operand);
             }
             Expression::FunctionCall(name, args) => {
-                if self.symbol_table.resolve(name).is_none() {
-                    self.errors.push(format!("Undefined function '{}'", name));
+                match self.symbol_table.resolve(name) {
+                    Some(sym) => {
+                        // Check parameter count
+                        if let Some(params) = &sym.params {
+                            if params.len() != args.len() {
+                                self.errors.push(format!(
+                                    "Function '{}' expects {} arguments, got {}",
+                                    name,
+                                    params.len(),
+                                    args.len()
+                                ));
+                            }
+                        }
+                    }
+                    None => {
+                        self.errors.push(format!("Undefined function '{}'", name));
+                    }
                 }
                 for arg in args {
                     self.analyze_expression(arg);

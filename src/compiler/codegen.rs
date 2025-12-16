@@ -807,7 +807,7 @@ impl CodeGenerator {
                     // If Var < End, Exit.
                     // CMP M: A < M -> Carry Clear (BCC).
                     self.output.push(format!("  BCC {}", exit_label)); // If A < End, Exit
-                    // Else (A >= End), continue to body
+                                                                       // Else (A >= End), continue to body
                 } else {
                     // Positive Step (Default): Loop while Var <= End
                     // If Var > End, Exit.
@@ -847,13 +847,13 @@ impl CodeGenerator {
                 }
 
                 if is_negative_step {
-                     // Check for underflow (if Carry Set after ADDing negative number, it's NOT an underflow in 2's complement?)
-                     // Wait, 6502 ADC with negative number:
-                     // 5 + (-1 = 255). 5 + 255 = 260. Result 4. Carry Set (Wrap).
-                     // 0 + (-1 = 255). 0 + 255 = 255. Result 255. Carry Clear (No Wrap).
-                     // So if Carry Clear, we wrapped from 0 to 255.
-                     // Therefore, if BCC, we should exit.
-                     self.output.push(format!("  BCC {}", exit_label));
+                    // Check for underflow (if Carry Set after ADDing negative number, it's NOT an underflow in 2's complement?)
+                    // Wait, 6502 ADC with negative number:
+                    // 5 + (-1 = 255). 5 + 255 = 260. Result 4. Carry Set (Wrap).
+                    // 0 + (-1 = 255). 0 + 255 = 255. Result 255. Carry Clear (No Wrap).
+                    // So if Carry Clear, we wrapped from 0 to 255.
+                    // Therefore, if BCC, we should exit.
+                    self.output.push(format!("  BCC {}", exit_label));
                 }
 
                 self.output.push(format!("  JMP {}", loop_label));

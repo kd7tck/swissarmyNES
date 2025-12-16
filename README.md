@@ -42,18 +42,22 @@
   - **Audio**:
     - `PLAY_SFX(id)`: Play a sound effect. `1` = Jump, `2` = Shoot.
     - **Tracker**: Built-in audio tracker for composing sequences (Pulse 1, Pulse 2, Triangle).
-  - **Structure**: `SUB`, `INTERRUPT` definitions.
+  - **Structure**:
+    - `SUB`: Define subroutines.
+    - `INTERRUPT`: Define interrupt handlers (e.g., `INTERRUPT NMI() ... END INTERRUPT`).
+    - `ON <Vector> DO <Routine>`: Map interrupts to routines at runtime (e.g., `ON NMI DO MyVBlank`).
 - **Web IDE**:
   - **Code Editor**: Syntax highlighting, line numbers, and basic auto-indentation.
   - **Instant Compilation**: Click "Compile" to generate and download a `.nes` ROM file immediately.
 - **Visual Editors**:
   - **Palette Editor**: Manage system colors and sub-palettes.
   - **Tile Editor**: Edit 8x8 CHR tiles with real-time feedback.
-  - **Map Editor**: Paint 8x8 tiles onto a 32x30 nametable grid (screen).
+  - **Map Editor**: Paint 8x8 tiles onto a 32x30 nametable grid (screen) and assign color attributes (palettes).
 
 ## Limitations
 - **8-Bit Math**: Mathematical expressions are evaluated using 8-bit arithmetic (0-255). Overflow wraps around. 16-bit math is limited to simple assignments/copies to `WORD` variables.
 - **Dynamic Addressing**: Use `WORD` variables for `POKE` and `PEEK` to access dynamic addresses. Use `CONST` for hardware registers (e.g. `$2006`).
+- **Emulator**: Phase 25 (Emulator Integration) is currently pending. Users must download the ROM and run it in an external emulator (e.g. FCEUX, Mesen).
 
 ## Getting Started
 

@@ -710,6 +710,11 @@ impl CodeGenerator {
                             }
                         }
                     }
+
+                    if self.ram_pointer > 0x07FF {
+                        return Err("Variable allocation exceeds available RAM ($07FF)".to_string());
+                    }
+
                     // Store signature
                     self.sub_signatures.insert(sub_name.clone(), sig_params);
 
@@ -738,6 +743,11 @@ impl CodeGenerator {
                 _ => {}
             }
         }
+
+        if self.ram_pointer > 0x07FF {
+            return Err("Variable allocation exceeds available RAM ($07FF)".to_string());
+        }
+
         Ok(())
     }
 

@@ -89,13 +89,41 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
             current_offset += 1;
 
             // 2. Notes
-            // IMPORTANT: Duration 0 is the terminator. We must filter out any notes
-            // with duration 0 (which shouldn't happen usually) to avoid early termination.
-            for note in &track.notes {
-                if note.duration > 0 {
+            // We need to sort notes by `col` and insert silence/rests for gaps.
+            // Pitch 255 ($FF) is reserved for Silence.
+
+            // Clone and sort notes by column
+            let mut notes = track.notes.clone();
+            notes.sort_by_key(|n| n.col);
+
+            let mut current_time: u16 = 0;
+
+            for note in notes {
+                if note.duration == 0 {
+                    continue;
+                }
+
+                // Note col is u8, so it won't exceed 255, but current_time might accumulate if we were tracking absolute time.
+                // However, in this tracker, col is absolute position in the pattern (0-31 usually).
+                // If we support multiple patterns chained, we'd need absolute time.
+                // For now, let's treat col as u16 to avoid overflow in comparisons if we extend logic.
+                let note_col = note.col as u16;
+
+                // Check for gap
+                if note_col > current_time {
+                    let gap_duration = (note_col - current_time) as u8;
+                    // Insert Silence
+                    blob.push(gap_duration);
+                    blob.push(0xFF); // Silence
+                    current_offset += 2;
+                }
+
+                // If note starts before current_time, it's an overlap.
+                if note_col >= current_time {
                     blob.push(note.duration);
                     blob.push(note.pitch);
                     current_offset += 2;
+                    current_time = note_col + (note.duration as u16);
                 }
             }
 

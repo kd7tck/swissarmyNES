@@ -436,6 +436,17 @@ impl CodeGenerator {
         self.output.push("  BEQ SilenceTri".to_string());
         self.output.push("  JMP SndChEnd".to_string());
 
+        // Labels must be unique or reusable. Since they are inside a big string list,
+        // we can reuse them if we jump to them. But if we define them multiple times, the assembler will fail.
+        // Wait, the assembler will receive the output list concatenated.
+        // If we define "SilenceP1:" here, and jump to it from below, it's fine.
+        // BUT, if I define "SilenceP1:" AGAIN below (as I might have assumed in previous patch check), that is an error.
+        // In the previous patch, I did NOT redefine them, I just jumped to them.
+        // However, the reviewer said "destinations do not exist".
+        // Let's ensure they exist exactly once here.
+        // They are defined right here in this block.
+        // So jumping to them from subsequent blocks is fine (Forward/Backward jumps work in ASM).
+
         self.output.push("SilenceP1:".to_string());
         self.output.push("  LDA #$30".to_string());
         self.output.push("  STA $4000".to_string());
@@ -461,6 +472,10 @@ impl CodeGenerator {
         // Read Pitch Index
         self.output.push("  LDA ($F4), Y".to_string());
 
+        // Check for Silence (Index $FF)
+        self.output.push("  CMP #$FF".to_string());
+        self.output.push("  BEQ SndPlaySilence".to_string());
+
         // Lookup Period from Table at $D000
         // Table is 16-bit (2 bytes) per index
         self.output.push("  ASL          ; Index * 2".to_string());
@@ -477,6 +492,16 @@ impl CodeGenerator {
         self.output.push("  BEQ PlayP2".to_string());
         self.output.push("  CPX #$08".to_string());
         self.output.push("  BEQ PlayTri".to_string());
+        self.output.push("  JMP SndAdvance".to_string());
+
+        self.output.push("SndPlaySilence:".to_string());
+        // Silence means volume 0 (or equivalent off state)
+        self.output.push("  CPX #$00".to_string());
+        self.output.push("  BEQ SilenceP1".to_string());
+        self.output.push("  CPX #$04".to_string());
+        self.output.push("  BEQ SilenceP2".to_string());
+        self.output.push("  CPX #$08".to_string());
+        self.output.push("  BEQ SilenceTri".to_string());
         self.output.push("  JMP SndAdvance".to_string());
 
         self.output.push("PlayP1:".to_string());

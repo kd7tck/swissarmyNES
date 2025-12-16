@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use swissarmynes::compiler::audio;
-    use swissarmynes::server::project::{ProjectAssets, AudioTrack, AudioNote};
+    use swissarmynes::server::project::{AudioNote, AudioTrack, ProjectAssets};
 
     #[test]
     fn test_period_table_size() {
@@ -21,9 +21,21 @@ mod tests {
             name: "Test".to_string(),
             envelope: 0,
             notes: vec![
-                AudioNote { pitch: 10, row: 0, duration: 4 },
-                AudioNote { pitch: 20, row: 1, duration: 0 }, // Should be filtered out
-                AudioNote { pitch: 30, row: 2, duration: 8 },
+                AudioNote {
+                    pitch: 10,
+                    row: 0,
+                    duration: 4,
+                },
+                AudioNote {
+                    pitch: 20,
+                    row: 1,
+                    duration: 0,
+                }, // Should be filtered out
+                AudioNote {
+                    pitch: 30,
+                    row: 2,
+                    duration: 8,
+                },
             ],
         };
         let assets = ProjectAssets {

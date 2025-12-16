@@ -19,6 +19,7 @@ pub struct Symbol {
     pub value: Option<i32>, // Added for Constants
 }
 
+#[derive(Debug)]
 pub struct SymbolTable {
     scopes: Vec<HashMap<String, Symbol>>,
 }

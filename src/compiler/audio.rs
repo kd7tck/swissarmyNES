@@ -69,9 +69,7 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
         let data_start_offset = 1 + pointer_table_size;
 
         // Pointers will be filled later, we insert placeholders
-        for _ in 0..pointer_table_size {
-            blob.push(0);
-        }
+        blob.extend(std::iter::repeat_n(0, pointer_table_size));
 
         let mut current_offset = data_start_offset;
 

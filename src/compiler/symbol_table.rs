@@ -16,7 +16,8 @@ pub struct Symbol {
     pub data_type: DataType,
     pub kind: SymbolKind,
     pub address: Option<u16>,
-    pub value: Option<i32>, // Added for Constants
+    pub value: Option<i32>,            // Added for Constants
+    pub params: Option<Vec<DataType>>, // Added for Subroutines
 }
 
 #[derive(Debug)]
@@ -53,6 +54,16 @@ impl SymbolTable {
         data_type: DataType,
         kind: SymbolKind,
     ) -> Result<(), String> {
+        self.define_with_params(name, data_type, kind, None)
+    }
+
+    pub fn define_with_params(
+        &mut self,
+        name: String,
+        data_type: DataType,
+        kind: SymbolKind,
+        params: Option<Vec<DataType>>,
+    ) -> Result<(), String> {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(&name) {
                 return Err(format!(
@@ -66,6 +77,7 @@ impl SymbolTable {
                 kind,
                 address: None,
                 value: None,
+                params,
             };
             scope.insert(name, symbol);
             Ok(())

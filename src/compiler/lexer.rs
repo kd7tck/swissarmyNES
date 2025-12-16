@@ -58,6 +58,7 @@ pub enum Token {
     RParen,       // )
     Comma,        // ,
     Colon,        // :
+    SemiColon,    // ;
     Hash,         // #
 
     // Delimiters
@@ -145,6 +146,10 @@ impl<'a> Lexer<'a> {
                     ':' => {
                         self.input.next();
                         Token::Colon
+                    }
+                    ';' => {
+                        self.input.next();
+                        Token::SemiColon
                     }
                     '#' => {
                         self.input.next();
@@ -370,7 +375,7 @@ mod tests {
 
     #[test]
     fn test_operators_delimiters() {
-        let input = "+ - * / = < > <= >= <> ( ) , : #";
+        let input = "+ - * / = < > <= >= <> ( ) , : ; #";
         let tokens = tokenize(input);
 
         let expected = vec![
@@ -388,6 +393,7 @@ mod tests {
             Token::RParen,
             Token::Comma,
             Token::Colon,
+            Token::SemiColon,
             Token::Hash,
             Token::EOF,
         ];

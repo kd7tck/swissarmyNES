@@ -39,8 +39,8 @@ fn test_codegen_if_statement() {
 
     // Check for branching instructions
     assert!(code_str.contains("CMP #0"));
-    assert!(code_str.contains("BEQ __L")); // Should jump to Else or End
-    assert!(code_str.contains("JMP __L")); // Jump to End
+    assert!(code_str.contains("BEQ GEN_L")); // Should jump to Else or End
+    assert!(code_str.contains("JMP GEN_L")); // Jump to End
 }
 
 #[test]
@@ -79,10 +79,10 @@ fn test_codegen_while_statement() {
     let code = cg.generate(&program).expect("Codegen failed");
     let code_str = code.join("\n");
 
-    assert!(code_str.contains("__L1:")); // Start label (assuming 1 is first)
+    assert!(code_str.contains("GEN_L1:")); // Start label (assuming 1 is first)
     assert!(code_str.contains("CMP #0"));
-    assert!(code_str.contains("BEQ __L")); // Exit loop
-    assert!(code_str.contains("JMP __L")); // Loop back
+    assert!(code_str.contains("BEQ GEN_L")); // Exit loop
+    assert!(code_str.contains("JMP GEN_L")); // Loop back
 }
 
 #[test]

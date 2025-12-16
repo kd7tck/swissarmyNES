@@ -21,14 +21,16 @@ impl Assembler {
         injections: Vec<(u16, Vec<u8>)>,
     ) -> Result<Vec<u8>, String> {
         let mut assembler = Rs6502Assembler::new();
-        // 0 as offset means no global offset override, respect .ORG
+        // 0 as offset means no global offset override, respect .ORG in source
         let segments = assembler
             .assemble_string(source, 0)
             .map_err(|e| format!("Assembler error: {:?}", e))?;
 
-        // NROM-256 (32KB PRG) mapped at $8000-$FFFF.
+        // Initialize NROM-256 (32KB PRG) buffer.
+        // NROM-256 is mapped at $8000-$FFFF.
         let mut prg_rom = vec![0u8; 32768];
 
+        // Process Assembler Output Segments
         for segment in segments {
             let start = segment.address;
             let code = segment.code;
@@ -37,7 +39,7 @@ impl Assembler {
                 continue;
             }
 
-            // Check bounds
+            // Check bounds to ensure code resides within PRG-ROM ($8000-$FFFF)
             if start < 0x8000 {
                 return Err(format!(
                     "Code segment starts at ${:04X}, which is outside PRG-ROM space ($8000+). Code: {:?}",
@@ -59,7 +61,9 @@ impl Assembler {
             }
         }
 
-        // Apply Injections
+        // Apply Binary Injections
+        // This is used for data tables, assets (Nametables, Music), and any other fixed-address blobs
+        // that are better handled as binary than as huge ASM source files.
         for (addr, data) in injections {
             if addr < 0x8000 {
                 return Err(format!(
@@ -83,6 +87,7 @@ impl Assembler {
         }
 
         // Construct iNES Header (16 bytes)
+        // Format Spec: https://www.nesdev.org/wiki/INES
         // Mapper 0 (NROM), 32KB PRG, 8KB CHR
         let header = vec![
             0x4E, 0x45, 0x53, 0x1A, // 'N', 'E', 'S', EOF
@@ -97,6 +102,8 @@ impl Assembler {
         final_rom.extend_from_slice(&prg_rom);
 
         // Append 8KB CHR-ROM
+        // If user provided CHR data, use it (padded to 8KB).
+        // Otherwise, use 8KB of zeros.
         let mut final_chr = vec![0u8; 8192];
         if let Some(data) = chr_data {
             let len = data.len().min(8192);

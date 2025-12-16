@@ -89,10 +89,14 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
             current_offset += 1;
 
             // 2. Notes
+            // IMPORTANT: Duration 0 is the terminator. We must filter out any notes
+            // with duration 0 (which shouldn't happen usually) to avoid early termination.
             for note in &track.notes {
-                blob.push(note.duration);
-                blob.push(note.pitch);
-                current_offset += 2;
+                if note.duration > 0 {
+                    blob.push(note.duration);
+                    blob.push(note.pitch);
+                    current_offset += 2;
+                }
             }
 
             // 3. Terminator

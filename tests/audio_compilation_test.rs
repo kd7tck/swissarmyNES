@@ -24,16 +24,19 @@ mod tests {
                 AudioNote {
                     pitch: 10,
                     row: 0,
+                    col: 0,
                     duration: 4,
                 },
                 AudioNote {
                     pitch: 20,
                     row: 1,
+                    col: 0, // Same col (overlap) - logic should take one?
                     duration: 0,
                 }, // Should be filtered out
                 AudioNote {
                     pitch: 30,
                     row: 2,
+                    col: 4, // Starts after first note ends (0+4=4)
                     duration: 8,
                 },
             ],
@@ -74,5 +77,60 @@ mod tests {
         assert_eq!(data[7], 30); // Pitch 2
         assert_eq!(data[8], 0); // Terminator
         assert_eq!(data.len(), 9);
+    }
+
+    #[test]
+    fn test_audio_compilation_with_gaps() {
+        let track = AudioTrack {
+            name: "GapTest".to_string(),
+            envelope: 0,
+            notes: vec![
+                AudioNote {
+                    pitch: 10,
+                    row: 0,
+                    col: 0,
+                    duration: 2,
+                },
+                // Gap from 2 to 4 (Duration 2)
+                AudioNote {
+                    pitch: 20,
+                    row: 0,
+                    col: 4,
+                    duration: 2,
+                },
+            ],
+        };
+        let assets = ProjectAssets {
+            chr_bank: vec![],
+            palettes: vec![],
+            nametables: vec![],
+            audio_tracks: vec![track],
+        };
+
+        let data = audio::compile_audio_data(&Some(assets));
+
+        // Expected Data (starting at index 3):
+        // Envelope (0)
+        // Note 1: Dur 2, Pitch 10
+        // Rest: Dur 2 (4-2), Pitch 255 ($FF)
+        // Note 2: Dur 2, Pitch 20
+        // Terminator
+
+        assert_eq!(data[3], 0); // Envelope
+
+        // Note 1
+        assert_eq!(data[4], 2);
+        assert_eq!(data[5], 10);
+
+        // Rest
+        assert_eq!(data[6], 2); // Gap duration
+        assert_eq!(data[7], 0xFF); // Silence Pitch
+
+        // Note 2
+        assert_eq!(data[8], 2);
+        assert_eq!(data[9], 20);
+
+        // Terminator
+        assert_eq!(data[10], 0);
     }
 }

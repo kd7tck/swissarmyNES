@@ -28,6 +28,7 @@ pub struct Nametable {
 pub struct AudioNote {
     pub pitch: u8,
     pub row: u8,
+    pub col: u8,
     pub duration: u8,
 }
 

@@ -48,15 +48,15 @@ impl SemanticAnalyzer {
                         self.errors.push(e);
                     }
                 }
-                TopLevel::Sub(name, _params, _body) => {
-                    // Register Sub name
-                    // Sub return type? Procedures usually void/no return val in BASIC unless function.
-                    // We'll treat SUB as "void" effectively, but maybe just store it.
-                    // Using DataType::Byte as placeholder or maybe we need DataType::Void?
-                    if let Err(e) =
-                        self.symbol_table
-                            .define(name.clone(), DataType::Byte, SymbolKind::Sub)
-                    {
+                TopLevel::Sub(name, params, _body) => {
+                    // Register Sub name with parameters
+                    let param_types = params.iter().map(|(_, t)| t.clone()).collect();
+                    if let Err(e) = self.symbol_table.define_with_params(
+                        name.clone(),
+                        DataType::Byte, // Placeholder for return type
+                        SymbolKind::Sub,
+                        Some(param_types),
+                    ) {
                         self.errors.push(e);
                     }
                 }
@@ -193,9 +193,24 @@ impl SemanticAnalyzer {
             }
             Statement::Call(name, args) => {
                 // Check if SUB exists
-                if self.symbol_table.resolve(name).is_none() {
-                    self.errors
-                        .push(format!("Undefined function/sub '{}'", name));
+                match self.symbol_table.resolve(name) {
+                    Some(sym) => {
+                        // Check parameter count
+                        if let Some(params) = &sym.params {
+                            if params.len() != args.len() {
+                                self.errors.push(format!(
+                                    "Function/Sub '{}' expects {} arguments, got {}",
+                                    name,
+                                    params.len(),
+                                    args.len()
+                                ));
+                            }
+                        }
+                    }
+                    None => {
+                        self.errors
+                            .push(format!("Undefined function/sub '{}'", name));
+                    }
                 }
                 for arg in args {
                     self.analyze_expression(arg);
@@ -346,5 +361,22 @@ mod tests {
         let result = analyzer.analyze(&program);
         assert!(result.is_err());
         assert!(result.unwrap_err()[0].contains("Undefined variable 'p'"));
+    }
+
+    #[test]
+    fn test_argument_count_mismatch() {
+        let input = r#"
+        SUB Test(p AS BYTE, q AS BYTE)
+        END SUB
+
+        SUB Main()
+            Call Test(1)
+        END SUB
+        "#;
+        let program = parse_code(input);
+        let mut analyzer = SemanticAnalyzer::new();
+        let result = analyzer.analyze(&program);
+        assert!(result.is_err());
+        assert!(result.unwrap_err()[0].contains("expects 2 arguments, got 1"));
     }
 }

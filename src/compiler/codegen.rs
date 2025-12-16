@@ -227,7 +227,7 @@ impl CodeGenerator {
                 current_addr += 2; // Ptr_{}
             }
             if let TopLevel::Sub(_, _, _) = decl {
-                 current_addr += 2; // Ptr_{}
+                current_addr += 2; // Ptr_{}
             }
         }
 
@@ -243,23 +243,25 @@ impl CodeGenerator {
             // Default RTI
             self.output.push(format!("  LDA ${:04X}", addr_default_rti));
             self.output.push("  STA $03FA".to_string());
-            self.output.push(format!("  LDA ${:04X}", addr_default_rti + 1));
+            self.output
+                .push(format!("  LDA ${:04X}", addr_default_rti + 1));
             self.output.push("  STA $03FB".to_string());
         }
 
         // Initialize IRQ Vector ($03FC)
         if irq_label.is_some() {
-             if let Some(addr) = init_irq_addr {
+            if let Some(addr) = init_irq_addr {
                 self.output.push(format!("  LDA ${:04X}", addr));
                 self.output.push("  STA $03FC".to_string());
                 self.output.push(format!("  LDA ${:04X}", addr + 1));
                 self.output.push("  STA $03FD".to_string());
-             }
+            }
         } else {
-             self.output.push(format!("  LDA ${:04X}", addr_default_rti));
-             self.output.push("  STA $03FC".to_string());
-             self.output.push(format!("  LDA ${:04X}", addr_default_rti + 1));
-             self.output.push("  STA $03FD".to_string());
+            self.output.push(format!("  LDA ${:04X}", addr_default_rti));
+            self.output.push("  STA $03FC".to_string());
+            self.output
+                .push(format!("  LDA ${:04X}", addr_default_rti + 1));
+            self.output.push("  STA $03FD".to_string());
         }
 
         // Infinite loop after Main returns
@@ -357,7 +359,8 @@ impl CodeGenerator {
         let mut current_addr = 0xFF00;
 
         // InitDefaultRTI
-        self.output.push("InitDefaultRTI: WORD DefaultRTI".to_string()); // $FF00
+        self.output
+            .push("InitDefaultRTI: WORD DefaultRTI".to_string()); // $FF00
         current_addr += 2;
 
         for decl in &program.declarations {
@@ -376,9 +379,9 @@ impl CodeGenerator {
                 current_addr += 2;
             }
             if let TopLevel::Sub(name, _, _) = decl {
-                 self.output.push(format!("Ptr_{}: WORD {}", name, name));
-                 self.data_table_offsets.insert(name.clone(), current_addr);
-                 current_addr += 2;
+                self.output.push(format!("Ptr_{}: WORD {}", name, name));
+                self.data_table_offsets.insert(name.clone(), current_addr);
+                current_addr += 2;
             }
         }
         self.output.push("".to_string());
@@ -426,7 +429,8 @@ impl CodeGenerator {
                         .push(format!("; {} @ ${:04X}", name, self.ram_pointer));
 
                     match dtype {
-                        crate::compiler::ast::DataType::Byte | crate::compiler::ast::DataType::Bool => {
+                        crate::compiler::ast::DataType::Byte
+                        | crate::compiler::ast::DataType::Bool => {
                             self.ram_pointer += 1;
                         }
                         crate::compiler::ast::DataType::Word => {
@@ -450,14 +454,18 @@ impl CodeGenerator {
                             SymbolKind::Param,
                         )?;
 
-                        self.symbol_table.assign_address(param_name, self.ram_pointer)?;
-                        self.output
-                            .push(format!("; {}.{} @ ${:04X}", sub_name, param_name, self.ram_pointer));
+                        self.symbol_table
+                            .assign_address(param_name, self.ram_pointer)?;
+                        self.output.push(format!(
+                            "; {}.{} @ ${:04X}",
+                            sub_name, param_name, self.ram_pointer
+                        ));
 
                         sig_params.push((self.ram_pointer, param_type.clone()));
 
                         match param_type {
-                            crate::compiler::ast::DataType::Byte | crate::compiler::ast::DataType::Bool => {
+                            crate::compiler::ast::DataType::Byte
+                            | crate::compiler::ast::DataType::Bool => {
                                 self.ram_pointer += 1;
                             }
                             crate::compiler::ast::DataType::Word => {
@@ -469,7 +477,8 @@ impl CodeGenerator {
                     self.sub_signatures.insert(sub_name.clone(), sig_params);
 
                     // Also allocate Data Table entry for Ptr_{SubName}
-                    self.data_table_offsets.insert(sub_name.clone(), data_table_addr);
+                    self.data_table_offsets
+                        .insert(sub_name.clone(), data_table_addr);
                     data_table_addr += 2;
 
                     self.symbol_table.exit_scope();
@@ -485,7 +494,8 @@ impl CodeGenerator {
                         data_table_addr += 2;
                     }
                     // Ptr_{name}
-                    self.data_table_offsets.insert(name.clone(), data_table_addr);
+                    self.data_table_offsets
+                        .insert(name.clone(), data_table_addr);
                     data_table_addr += 2;
                 }
                 _ => {}
@@ -901,72 +911,80 @@ impl CodeGenerator {
                 };
 
                 if args.len() != params.len() {
-                    return Err(format!("Call to '{}' has {} args, expected {}", name, args.len(), params.len()));
+                    return Err(format!(
+                        "Call to '{}' has {} args, expected {}",
+                        name,
+                        args.len(),
+                        params.len()
+                    ));
                 }
 
                 // Assign args to params
                 for (i, expr) in args.iter().enumerate() {
                     let (addr, dtype) = params[i].clone();
 
-                        // Generate code to evaluate expr and store to addr
-                        match dtype {
-                            crate::compiler::ast::DataType::Word => {
-                                // Eval 16-bit
-                                // Same logic as Statement::Let assignment
-                                // ... (Simplified: assume expr evaluation works)
-                                // But `generate_expression` assumes 8-bit result in A?
-                                // No, `Statement::Let` handles Word assignment by checking expr type or casting.
-                                // But `generate_expression` returns `Result<(), String>` and puts result in A.
-                                // It handles 8-bit.
-                                // If Word, we need logic similar to Let.
+                    // Generate code to evaluate expr and store to addr
+                    match dtype {
+                        crate::compiler::ast::DataType::Word => {
+                            // Eval 16-bit
+                            // Same logic as Statement::Let assignment
+                            // ... (Simplified: assume expr evaluation works)
+                            // But `generate_expression` assumes 8-bit result in A?
+                            // No, `Statement::Let` handles Word assignment by checking expr type or casting.
+                            // But `generate_expression` returns `Result<(), String>` and puts result in A.
+                            // It handles 8-bit.
+                            // If Word, we need logic similar to Let.
 
-                                // To keep it simple: We only support Byte/Bool params for now?
-                                // No, Design says WORD supported.
-                                // `Statement::Let` logic:
-                                // if Identifier -> Copy
-                                // if Integer -> Load immediate
-                                // else -> Eval (8-bit) -> Store low, 0 high.
+                            // To keep it simple: We only support Byte/Bool params for now?
+                            // No, Design says WORD supported.
+                            // `Statement::Let` logic:
+                            // if Identifier -> Copy
+                            // if Integer -> Load immediate
+                            // else -> Eval (8-bit) -> Store low, 0 high.
 
-                                match expr {
-                                    Expression::Integer(val) => {
-                                        let low = (val & 0xFF) as u8;
-                                        let high = ((val >> 8) & 0xFF) as u8;
-                                        self.output.push(format!("  LDA #${:02X}", low));
-                                        self.output.push(format!("  STA ${:04X}", addr));
-                                        self.output.push(format!("  LDA #${:02X}", high));
-                                        self.output.push(format!("  STA ${:04X}", addr + 1));
-                                    }
-                                    Expression::Identifier(src) => {
-                                        // Copy
-                                        if let Some(sym) = self.symbol_table.resolve(src) {
-                                            if let Some(src_addr) = sym.address {
-                                                // Check type... assume Word copy
-                                                self.output.push(format!("  LDA ${:04X}", src_addr));
-                                                self.output.push(format!("  STA ${:04X}", addr));
-                                                self.output.push(format!("  LDA ${:04X}", src_addr+1));
-                                                self.output.push(format!("  STA ${:04X}", addr+1));
-                                            } else {
-                                                // Constant?
-                                                return Err("Param pass: Const/NoAddr not impl".to_string());
-                                            }
+                            match expr {
+                                Expression::Integer(val) => {
+                                    let low = (val & 0xFF) as u8;
+                                    let high = ((val >> 8) & 0xFF) as u8;
+                                    self.output.push(format!("  LDA #${:02X}", low));
+                                    self.output.push(format!("  STA ${:04X}", addr));
+                                    self.output.push(format!("  LDA #${:02X}", high));
+                                    self.output.push(format!("  STA ${:04X}", addr + 1));
+                                }
+                                Expression::Identifier(src) => {
+                                    // Copy
+                                    if let Some(sym) = self.symbol_table.resolve(src) {
+                                        if let Some(src_addr) = sym.address {
+                                            // Check type... assume Word copy
+                                            self.output.push(format!("  LDA ${:04X}", src_addr));
+                                            self.output.push(format!("  STA ${:04X}", addr));
+                                            self.output
+                                                .push(format!("  LDA ${:04X}", src_addr + 1));
+                                            self.output.push(format!("  STA ${:04X}", addr + 1));
                                         } else {
-                                             return Err(format!("Undefined var {}", src));
+                                            // Constant?
+                                            return Err(
+                                                "Param pass: Const/NoAddr not impl".to_string()
+                                            );
                                         }
-                                    }
-                                    _ => {
-                                        self.generate_expression(expr)?;
-                                        self.output.push(format!("  STA ${:04X}", addr));
-                                        self.output.push("  LDA #0".to_string());
-                                        self.output.push(format!("  STA ${:04X}", addr + 1));
+                                    } else {
+                                        return Err(format!("Undefined var {}", src));
                                     }
                                 }
-                            }
-                            _ => {
-                                self.generate_expression(expr)?;
-                                self.output.push(format!("  STA ${:04X}", addr));
+                                _ => {
+                                    self.generate_expression(expr)?;
+                                    self.output.push(format!("  STA ${:04X}", addr));
+                                    self.output.push("  LDA #0".to_string());
+                                    self.output.push(format!("  STA ${:04X}", addr + 1));
+                                }
                             }
                         }
+                        _ => {
+                            self.generate_expression(expr)?;
+                            self.output.push(format!("  STA ${:04X}", addr));
+                        }
                     }
+                }
 
                 self.output.push(format!("  JSR {}", name));
             }
@@ -1006,7 +1024,10 @@ impl CodeGenerator {
                     self.output.push(format!("  LDA ${:04X}", addr + 1));
                     self.output.push(format!("  STA {}", target_addr_high));
                 } else {
-                     return Err(format!("Could not find data table entry for routine '{}'", routine));
+                    return Err(format!(
+                        "Could not find data table entry for routine '{}'",
+                        routine
+                    ));
                 }
             }
             Statement::PlaySfx(id_expr) => {

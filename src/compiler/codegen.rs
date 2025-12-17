@@ -73,18 +73,21 @@ impl CodeGenerator {
             .push("  CLD          ; Disable Decimal Mode".to_string());
         self.output.push("  LDX #$40".to_string());
         self.output
-            .push("  STX $4017    ; Disable APU frame IRQ".to_string());
+            .push("  STX $4017    ; Disable APU frame IRQ (mode 0)".to_string());
         self.output.push("  LDX #$FF".to_string());
         self.output
-            .push("  TXS          ; Set Stack Pointer to $FF".to_string());
-        self.output.push("  INX          ; X = 0".to_string());
-        self.output.push("  STX $2000    ; Disable NMI".to_string());
+            .push("  TXS          ; Set Stack Pointer to $FF (Top of Stack)".to_string());
         self.output
-            .push("  STX $2001    ; Disable Rendering".to_string());
+            .push("  INX          ; X = 0 (Overflow from $FF)".to_string());
+        self.output
+            .push("  STX $2000    ; Disable NMI (PPUCTRL = 0)".to_string());
+        self.output
+            .push("  STX $2001    ; Disable Rendering (PPUMASK = 0)".to_string());
         self.output
             .push("  STX $4010    ; Disable DMC IRQs".to_string());
 
         // Wait for VBLANK (1)
+        // We wait for the PPU to signal it is ready (Vertical Blanking Interval)
         self.output.push("vblankwait1:".to_string());
         self.output.push("  BIT $2002".to_string());
         self.output.push("  BPL vblankwait1".to_string());
@@ -114,14 +117,14 @@ impl CodeGenerator {
         // We load from $E000 where the assembler injected the palette data.
         self.output.push("  ; Load Palettes".to_string());
         self.output.push("  LDA #$3F".to_string());
-        self.output.push("  STA $2006".to_string());
+        self.output.push("  STA $2006".to_string()); // PPUADDR High Byte
         self.output.push("  LDA #$00".to_string());
-        self.output.push("  STA $2006".to_string());
+        self.output.push("  STA $2006".to_string()); // PPUADDR Low Byte (Addr $3F00)
 
         self.output.push("  LDX #$00".to_string());
         self.output.push("LoadPalLoop:".to_string());
         self.output.push("  LDA $E000, X".to_string());
-        self.output.push("  STA $2007".to_string());
+        self.output.push("  STA $2007".to_string()); // PPUDATA
         self.output.push("  INX".to_string());
         self.output.push("  CPX #32".to_string());
         self.output.push("  BNE LoadPalLoop".to_string());

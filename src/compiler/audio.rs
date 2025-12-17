@@ -38,22 +38,39 @@ pub fn generate_period_table() -> Vec<u8> {
 use crate::server::project::ProjectAssets;
 
 /// Compiles audio tracks into a binary format injected at MUSIC_DATA_ADDR ($D100).
-/// Structure:
-/// Header:
-///   Count (1 byte): Number of tracks
-///   Pointers (2 * Count bytes): Absolute addresses of each track data
-/// Data:
-///   [Track 0 Data]
-///   [Track 1 Data]
-///   ...
 ///
-/// Track Data Format:
-///   Channel (1 byte): 0=Pulse1, 1=Pulse2, 2=Triangle
-///   Instrument (1 byte): Envelope/Duty/Linear Counter setting
-///   Sequence of Notes:
-///     [Duration, Pitch]
-///     ...
-///     [0] (Terminator)
+/// # Binary Format Specification
+///
+/// ## Header
+/// The audio data block starts with a header table that allows the engine to locate tracks by ID.
+/// - **Count** (1 byte): The total number of audio tracks available.
+/// - **Pointers** (2 * Count bytes): A table of 16-bit absolute addresses (Little Endian) pointing to the start of each track's data.
+///
+/// ## Track Data
+/// Each track is a self-contained sequence of bytes:
+/// - **Channel** (1 byte): The hardware channel index to use.
+///   - `0`: Pulse 1
+///   - `1`: Pulse 2
+///   - `2`: Triangle
+/// - **Instrument** (1 byte): The hardware envelope or duty cycle setting.
+///   - For Pulse: Bits 7-6 = Duty, Bits 3-0 = Volume/Envelope. (e.g., `$B0` = 50% duty, vol 0 (envelope ignored?))
+///   - For Triangle: Linear Counter Load value.
+/// - **Note Sequence**: A stream of `[Duration, Pitch]` pairs.
+///   - **Duration** (1 byte): How many frames (60Hz) to play the note.
+///     - A duration of `0` is the **Terminator**, marking the end of the track.
+///   - **Pitch** (1 byte): The index into the Period Table ($00-$5F).
+///     - Index `$FF` (255) represents **Silence** (Rest).
+///
+/// ## Example Structure
+/// ```text
+/// $D100: [02]                  ; 2 Tracks
+/// $D101: [20, D1]              ; Track 0 starts at $D120
+/// $D103: [40, D1]              ; Track 1 starts at $D140
+/// ...
+/// $D120: [00]                  ; Channel 0 (Pulse 1)
+/// $D121: [7F]                  ; Instrument (50% Duty, Max Vol)
+/// $D122: [08, 1A, 08, 1C, 00]  ; Note (Dur 8, Pitch 1A), Note (Dur 8, Pitch 1C), End
+/// ```
 pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
     let mut blob = Vec::new();
 

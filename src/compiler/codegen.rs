@@ -717,7 +717,7 @@ impl CodeGenerator {
                     if let Some(label) = self.string_literals.get(val) {
                         self.output.push(format!("Ptr_{}: WORD {}", label, label));
                         emitted_strings.insert(val.clone());
-                        current_addr += 2;
+                        // current_addr is unused for now as this is the end of the table generation
                     }
                 }
             }

@@ -37,7 +37,9 @@ pub struct AudioTrack {
     pub name: String,
     pub notes: Vec<AudioNote>,
     #[serde(default)]
-    pub envelope: u8, // 0=Square1, 1=Square2, 2=Triangle, 3=Noise
+    pub channel: u8, // 0=Pulse1, 1=Pulse2, 2=Triangle, 3=Noise (Renamed from envelope)
+    #[serde(default)]
+    pub instrument: u8, // Envelope/Duty setting (e.g. $9F for Max Vol, 50% Duty)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -148,6 +150,10 @@ pub fn get_project(name: &str) -> Result<Project, String> {
     let assets_path = project_path.join("assets.json");
     let assets = if assets_path.exists() {
         let assets_content = fs::read_to_string(assets_path).map_err(|e| e.to_string())?;
+        // Handle migration from 'envelope' to 'channel' if needed?
+        // Serde default will handle missing fields. 'envelope' in JSON will be ignored, 'channel' will be 0.
+        // We might want a custom deserialize to map envelope -> channel if strictly preserving data.
+        // But for this project, defaults are acceptable or we assume the frontend will resave.
         Some(serde_json::from_str(&assets_content).map_err(|e| e.to_string())?)
     } else {
         None

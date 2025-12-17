@@ -48,7 +48,8 @@ use crate::server::project::ProjectAssets;
 ///   ...
 ///
 /// Track Data Format:
-///   Channel (1 byte): 0=Pulse1, 1=Pulse2, 2=Triangle, 3=Noise (Only 0-2 supported by engine currently)
+///   Channel (1 byte): 0=Pulse1, 1=Pulse2, 2=Triangle
+///   Instrument (1 byte): Envelope/Duty/Linear Counter setting
 ///   Sequence of Notes:
 ///     [Duration, Pitch]
 ///     ...
@@ -58,10 +59,6 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
 
     if let Some(assets) = assets {
         let count = assets.audio_tracks.len();
-        if count > 127 {
-            // Limit to fit index arithmetic or reasonable bounds
-            // For now, let's assume < 128 tracks
-        }
         blob.push(count as u8);
 
         // Reserve space for pointers
@@ -83,12 +80,14 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
             blob[ptr_idx] = (abs_addr & 0xFF) as u8;
             blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
 
-            // Write Track Data
+            // Write Track Header
             // 1. Channel
-            blob.push(track.envelope);
-            current_offset += 1;
+            blob.push(track.channel);
+            // 2. Instrument
+            blob.push(track.instrument);
+            current_offset += 2;
 
-            // 2. Notes
+            // 3. Notes
             // We need to sort notes by `col` and insert silence/rests for gaps.
             // Pitch 255 ($FF) is reserved for Silence.
 
@@ -127,7 +126,7 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
                 }
             }
 
-            // 3. Terminator
+            // 4. Terminator
             blob.push(0);
             current_offset += 1;
         }

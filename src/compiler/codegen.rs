@@ -343,11 +343,60 @@ impl CodeGenerator {
         self.output.push("  LDY #$00".to_string());
         self.output.push("  LDA ($F0), Y".to_string());
         self.output.push("  AND #$03     ; Mask to 0-3".to_string());
+        self.output.push("  STA $F2      ; Temp store Channel ID".to_string());
+
+        // Advance Pointer by 1 (Channel)
+        self.output.push("  INC $F0".to_string());
+        self.output.push("  BNE SndPtrInc1".to_string());
+        self.output.push("  INC $F1".to_string());
+        self.output.push("SndPtrInc1:".to_string());
+
+        // Read Instrument Byte (Second byte)
+        self.output.push("  LDA ($F0), Y".to_string());
+        self.output.push("  STA $F3      ; Temp store Instrument".to_string());
+
+        // Advance Pointer by 1 (Instrument)
+        self.output.push("  INC $F0".to_string());
+        self.output.push("  BNE SndPtrInc2".to_string());
+        self.output.push("  INC $F1".to_string());
+        self.output.push("SndPtrInc2:".to_string());
 
         // Calculate Channel Offset (Channel * 4) -> X
+        self.output.push("  LDA $F2".to_string());
         self.output.push("  ASL".to_string());
         self.output.push("  ASL".to_string());
         self.output.push("  TAX".to_string());
+
+        // Store Instrument in RAM for usage during playback?
+        // Actually, we can just set the Volume/Duty registers NOW if they are constant.
+        // But we need to re-apply them if they were changed by other effects.
+        // For "Simple Envelopes", we can store it in RAM.
+        // Let's allocate a byte for Instrument at $02E0+X?
+        // Currently:
+        // +0: Active
+        // +1: Timer
+        // +2: Ptr Low
+        // +3: Ptr High
+        // We have no space in the 4-byte struct.
+        // But wait, the previous code hardcoded LDA #$9F in PlayP1/PlayP2.
+        // We should instead load this instrument byte.
+        // Where to store it?
+        // We can just set it once at Start? No, if we have Volume Envelopes (software), we need to update it.
+        // But the requirement is "Simple square/triangle wave envelopes".
+        // If it's just setting the Hardware Envelope (Duty/Constant Vol), we can just set it now?
+        // But `Sound_Update` might overwrite it? No, `Sound_Update` only writes frequency registers mostly.
+        // EXCEPT `PlayP1`/`PlayP2` labels DO write to $4000/$4004.
+        // So we need to store the Instrument byte somewhere.
+        // Let's expand the channel struct or use another RAM area.
+        // Or... since we only have 3 channels, we can allocate 3 bytes at $02F0?
+        // $02E0 - $02EF is used (16 bytes). $02F0 is free?
+        // Let's use $02F0 + (Channel ID) to store Instrument.
+        // Channel ID is 0, 1, 2.
+
+        // Store Instrument at $02F0 + ChannelID (using F2 as offset)
+        self.output.push("  LDY $F2".to_string());
+        self.output.push("  LDA $F3".to_string());
+        self.output.push("  STA $02F0, Y".to_string());
 
         // Setup Channel State at $02E0 + X
         self.output.push("  LDA #$01".to_string());
@@ -355,12 +404,6 @@ impl CodeGenerator {
         self.output.push("  LDA #$01".to_string());
         self.output
             .push("  STA $02E1, X ; Set Timer = 1 (Start immediately)".to_string());
-
-        // Advance Pointer by 1 (skip Channel byte)
-        self.output.push("  INC $F0".to_string());
-        self.output.push("  BNE SndPtrInc".to_string());
-        self.output.push("  INC $F1".to_string());
-        self.output.push("SndPtrInc:".to_string());
 
         // Store Pointer
         self.output.push("  LDA $F0".to_string());
@@ -465,9 +508,9 @@ impl CodeGenerator {
 
         // Advance Ptr
         self.output.push("  INC $F4".to_string());
-        self.output.push("  BNE SndPtrInc2".to_string());
+        self.output.push("  BNE SndPtrInc3".to_string());
         self.output.push("  INC $F5".to_string());
-        self.output.push("SndPtrInc2:".to_string());
+        self.output.push("SndPtrInc3:".to_string());
 
         // Read Pitch Index
         self.output.push("  LDA ($F4), Y".to_string());
@@ -505,8 +548,8 @@ impl CodeGenerator {
         self.output.push("  JMP SndAdvance".to_string());
 
         self.output.push("PlayP1:".to_string());
-        self.output
-            .push("  LDA #$9F     ; Duty 50%, Vol 15".to_string());
+        // Load Instrument from $02F0 (Channel 0)
+        self.output.push("  LDA $02F0".to_string());
         self.output.push("  STA $4000".to_string());
         self.output.push("  LDA $F6".to_string());
         self.output.push("  STA $4002".to_string());
@@ -515,7 +558,8 @@ impl CodeGenerator {
         self.output.push("  JMP SndAdvance".to_string());
 
         self.output.push("PlayP2:".to_string());
-        self.output.push("  LDA #$9F".to_string());
+        // Load Instrument from $02F1 (Channel 1)
+        self.output.push("  LDA $02F1".to_string());
         self.output.push("  STA $4004".to_string());
         self.output.push("  LDA $F6".to_string());
         self.output.push("  STA $4006".to_string());

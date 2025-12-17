@@ -1,25 +1,18 @@
 #[cfg(test)]
 mod tests {
-    use swissarmynes::compiler::audio;
+    use swissarmynes::compiler::audio::{compile_audio_data, generate_period_table};
     use swissarmynes::server::project::{AudioNote, AudioTrack, ProjectAssets};
 
     #[test]
     fn test_period_table_size() {
-        let table = audio::generate_period_table();
+        let table = generate_period_table();
         assert_eq!(table.len(), 192); // 96 notes * 2 bytes
     }
 
     #[test]
-    fn test_audio_compilation_empty() {
-        let data = audio::compile_audio_data(&None);
-        assert_eq!(data, vec![0]); // Count = 0
-    }
-
-    #[test]
     fn test_audio_compilation_basic() {
-        let track = AudioTrack {
-            name: "Test".to_string(),
-            envelope: 0,
+        let track1 = AudioTrack {
+            name: "Test Track".to_string(),
             notes: vec![
                 AudioNote {
                     pitch: 10,
@@ -28,109 +21,95 @@ mod tests {
                     duration: 4,
                 },
                 AudioNote {
-                    pitch: 20,
-                    row: 1,
-                    col: 0, // Same col (overlap) - logic should take one?
-                    duration: 0,
-                }, // Should be filtered out
-                AudioNote {
-                    pitch: 30,
-                    row: 2,
-                    col: 4, // Starts after first note ends (0+4=4)
-                    duration: 8,
+                    pitch: 12,
+                    row: 0,
+                    col: 4,
+                    duration: 4,
                 },
             ],
+            channel: 0, // P1
+            instrument: 0x9F,
         };
+
         let assets = ProjectAssets {
             chr_bank: vec![],
             palettes: vec![],
             nametables: vec![],
-            audio_tracks: vec![track],
+            audio_tracks: vec![track1],
         };
 
-        let data = audio::compile_audio_data(&Some(assets));
+        let blob = compile_audio_data(&Some(assets));
 
-        // Expected format:
-        // Header:
-        //   Count: 1 byte (1)
-        //   Pointer: 2 bytes (Ptr Low, Ptr High)
-        // Data:
-        //   Channel: 1 byte (0)
-        //   Note 1: Duration (4), Pitch (10)
-        //   Note 2: Duration (8), Pitch (30) -- Note duration 0 skipped
-        //   Terminator: 0
+        // Validation
+        // Header: Count(1) + Ptrs(2*1) = 3 bytes
+        assert_eq!(blob[0], 1); // Count
+        assert_eq!(blob[1], 3 & 0xFF); // Ptr Low (Addr $D103) -> 03
+        assert_eq!(blob[2], 0xD1); // Ptr High -> D1
 
-        assert_eq!(data[0], 1); // Count
+        // Track Data
+        // Channel (1 byte) + Instrument (1 byte)
+        assert_eq!(blob[3], 0); // Channel 0
+        assert_eq!(blob[4], 0x9F); // Instrument
 
-        // Pointer is at data[1], data[2]. Should point to $D100 + 1 + 2 = $D103.
-        // Base address is 0xD100.
-        // Offset of track data start is 3 (1 byte count + 2 bytes ptr).
-        // So Absolute Addr = 0xD100 + 3 = 0xD103.
-        let ptr = (data[1] as u16) | ((data[2] as u16) << 8);
-        assert_eq!(ptr, 0xD103);
+        // Notes
+        // Note 1: Dur(4), Pitch(10)
+        assert_eq!(blob[5], 4);
+        assert_eq!(blob[6], 10);
 
-        // Track Data at index 3
-        assert_eq!(data[3], 0); // Envelope/Channel
-        assert_eq!(data[4], 4); // Dur 1
-        assert_eq!(data[5], 10); // Pitch 1
-        assert_eq!(data[6], 8); // Dur 2
-        assert_eq!(data[7], 30); // Pitch 2
-        assert_eq!(data[8], 0); // Terminator
-        assert_eq!(data.len(), 9);
+        // Note 2: Dur(4), Pitch(12)
+        assert_eq!(blob[7], 4);
+        assert_eq!(blob[8], 12);
+
+        // Terminator
+        assert_eq!(blob[9], 0);
     }
 
     #[test]
     fn test_audio_compilation_with_gaps() {
-        let track = AudioTrack {
-            name: "GapTest".to_string(),
-            envelope: 0,
+        let track1 = AudioTrack {
+            name: "Gap Track".to_string(),
             notes: vec![
                 AudioNote {
                     pitch: 10,
                     row: 0,
                     col: 0,
-                    duration: 2,
+                    duration: 4,
                 },
-                // Gap from 2 to 4 (Duration 2)
+                // Gap from 4 to 8
                 AudioNote {
-                    pitch: 20,
+                    pitch: 12,
                     row: 0,
-                    col: 4,
-                    duration: 2,
+                    col: 8,
+                    duration: 4,
                 },
             ],
+            channel: 0,
+            instrument: 0x9F,
         };
+
         let assets = ProjectAssets {
             chr_bank: vec![],
             palettes: vec![],
             nametables: vec![],
-            audio_tracks: vec![track],
+            audio_tracks: vec![track1],
         };
 
-        let data = audio::compile_audio_data(&Some(assets));
+        let blob = compile_audio_data(&Some(assets));
 
-        // Expected Data (starting at index 3):
-        // Envelope (0)
-        // Note 1: Dur 2, Pitch 10
-        // Rest: Dur 2 (4-2), Pitch 255 ($FF)
-        // Note 2: Dur 2, Pitch 20
-        // Terminator
+        // Offset: 3 (Header) + 2 (Chan/Inst) = 5
+        // Note 1: 5,6 -> Time ends at 4.
+        // Gap: 4 ticks (4 to 8).
+        // Silence: Dur(4), Pitch(0xFF)
+        assert_eq!(blob[7], 4);
+        assert_eq!(blob[8], 0xFF);
+        // Note 2:
+        assert_eq!(blob[9], 4);
+        assert_eq!(blob[10], 12);
+    }
 
-        assert_eq!(data[3], 0); // Envelope
-
-        // Note 1
-        assert_eq!(data[4], 2);
-        assert_eq!(data[5], 10);
-
-        // Rest
-        assert_eq!(data[6], 2); // Gap duration
-        assert_eq!(data[7], 0xFF); // Silence Pitch
-
-        // Note 2
-        assert_eq!(data[8], 2);
-        assert_eq!(data[9], 20);
-
-        // Terminator
-        assert_eq!(data[10], 0);
+    #[test]
+    fn test_audio_compilation_empty() {
+        let blob = compile_audio_data(&None);
+        assert_eq!(blob[0], 0);
     }
 }

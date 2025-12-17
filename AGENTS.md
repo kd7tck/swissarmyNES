@@ -40,7 +40,7 @@ This document serves as the primary instruction manual for AI agents working on 
     - Run `cargo clippy` to ensure quality.
     - Run `cargo test` to verify functionality.
 5.  **Refine**: If tests fail, diagnose and fix. Do not guess. Use `read_file` to see the actual code.
-6.  **Store current state in Brain section of AGENTS.md**: Help the next AI agent out by telling them what has been doen and what should be done next, allong with pitfalls to look out for.
+6.  **Store current state in Brain section of AGENTS.md**: Help the next AI agent out by telling them what has been done and what should be done next, allong with pitfalls to look out for.
 7.  **Submit**: Only when all checks pass.
 
 ## Technical specifics

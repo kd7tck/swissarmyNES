@@ -7,7 +7,7 @@
 
 *   **Recent Milestones:**
     *   **Phase 24: Audio Compilation**: Implemented audio data compilation and injection into the ROM.
-    *   **Phase 23: Audio Tracker UI**: Added a piano-roll interface for composing music and sound effects.
+    *   **Phase 23: Audio Tracker UI**: Added a piano-roll interface for composing music and sound effects. Corrected Audio Tracker to support selecting Instruments (Duty Cycle / Envelopes) instead of mislabeling them as channels.
     *   **Phase 22: Audio Engine**: Implemented a basic 6502 sound engine supporting PlaySfx commands.
     *   **Phase 21: Asset Compilation**: Added support for compiling and injecting Nametables (Maps) into the ROM startup.
     *   **Phase 20: Map Attributes**: Added support for painting attribute tables (color palettes) on the Map Editor.
@@ -42,6 +42,7 @@
   - **Audio**:
     - `PLAY_SFX(id)`: Play a sound effect. `1` = Jump, `2` = Shoot.
     - **Tracker**: Built-in audio tracker for composing sequences (Pulse 1, Pulse 2, Triangle).
+    - **Instruments**: Select from various Duty Cycles (12.5%, 25%, 50%, 75%) and Envelopes (Constant, Decay).
   - **Structure**:
     - `SUB`: Define subroutines.
     - `INTERRUPT`: Define interrupt handlers (e.g., `INTERRUPT NMI() ... END INTERRUPT`).

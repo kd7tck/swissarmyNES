@@ -2,11 +2,11 @@ class AudioTracker {
     constructor(rootId) {
         this.root = document.getElementById(rootId);
         this.currentTrackIndex = 0;
-        this.currentEnvelope = 0;
+        this.currentInstrument = 0x9F; // Default instrument (Max Vol, 50% Duty)
         this.tracks = [
-            { name: "Track 1", notes: [], envelope: 0 },
-            { name: "Track 2", notes: [], envelope: 0 },
-            { name: "Track 3", notes: [], envelope: 0 }
+            { name: "Track 1", notes: [], channel: 0, instrument: 0x9F },
+            { name: "Track 2", notes: [], channel: 1, instrument: 0x9F },
+            { name: "Track 3", notes: [], channel: 2, instrument: 0xFF } // Triangle Linear On
         ];
 
         // Configuration
@@ -24,7 +24,7 @@ class AudioTracker {
 
     bindEvents() {
         const trackSelect = document.getElementById('audio-track-select');
-        const envSelect = document.getElementById('audio-envelope-select');
+        const instrumentSelect = document.getElementById('audio-instrument-select');
 
         if (trackSelect) {
             trackSelect.addEventListener('change', (e) => {
@@ -33,10 +33,19 @@ class AudioTracker {
             });
         }
 
-        if (envSelect) {
-            envSelect.addEventListener('change', (e) => {
-                this.currentEnvelope = parseInt(e.target.value);
-                this.tracks[this.currentTrackIndex].envelope = this.currentEnvelope;
+        if (instrumentSelect) {
+            instrumentSelect.addEventListener('change', (e) => {
+                // Parse hex or int from value
+                this.currentInstrument = parseInt(e.target.value);
+                this.tracks[this.currentTrackIndex].instrument = this.currentInstrument;
+            });
+        }
+
+        const btnPlay = document.getElementById('btn-play-track');
+        if (btnPlay) {
+            btnPlay.addEventListener('click', () => {
+                // Placeholder for local preview if we add it
+                console.log("Preview not implemented in JS yet. Compile to hear.");
             });
         }
     }
@@ -116,10 +125,18 @@ class AudioTracker {
         const cells = this.root.querySelectorAll('.tracker-cell');
         cells.forEach(c => c.classList.remove('active'));
 
-        // Update Envelope Select
-        const envSelect = document.getElementById('audio-envelope-select');
-        if (envSelect) {
-            envSelect.value = this.tracks[this.currentTrackIndex].envelope;
+        // Update Instrument Select
+        const instrumentSelect = document.getElementById('audio-instrument-select');
+        if (instrumentSelect) {
+            const trk = this.tracks[this.currentTrackIndex];
+            // If instrument not set, default it
+            if (trk.instrument === undefined) trk.instrument = 0x9F;
+            instrumentSelect.value = trk.instrument;
+
+            // Disable instrument select for Triangle? Or allow Linear Counter control?
+            // Channel is fixed per track index usually?
+            // 0: Pulse 1, 1: Pulse 2, 2: Triangle
+            // If Triangle, options might be limited.
         }
 
         // Apply notes from current track
@@ -151,19 +168,26 @@ class AudioTracker {
                     pitch: n.pitch,
                     duration: n.duration
                 })),
-                envelope: t.envelope
+                channel: (t.channel !== undefined) ? t.channel : i, // Default to index if missing
+                instrument: (t.instrument !== undefined) ? t.instrument : ((i===2)?0xFF:0x9F) // Default inst
             }));
 
             // Fill up to 3 if missing
             while (this.tracks.length < 3) {
-                this.tracks.push({ name: `Track ${this.tracks.length+1}`, notes: [], envelope: 0 });
+                let i = this.tracks.length;
+                this.tracks.push({
+                    name: `Track ${i+1}`,
+                    notes: [],
+                    channel: i,
+                    instrument: (i===2)?0xFF:0x9F
+                });
             }
         } else {
             // Reset
              this.tracks = [
-                { name: "Track 1", notes: [], envelope: 0 },
-                { name: "Track 2", notes: [], envelope: 0 },
-                { name: "Track 3", notes: [], envelope: 0 }
+                { name: "Track 1", notes: [], channel: 0, instrument: 0x9F },
+                { name: "Track 2", notes: [], channel: 1, instrument: 0x9F },
+                { name: "Track 3", notes: [], channel: 2, instrument: 0xFF }
             ];
         }
         this.loadTrackUI();

@@ -31,18 +31,23 @@ This document serves as the primary instruction manual for AI agents working on 
 
 ## Development Workflow
 
-1.  **Plan**: Read the requirements, verify the state of the code, and formulate a plan using `set_plan`.
-2.  **Edit**: Make changes.
-3.  **Verify**:
+1.   **Read Brain section in AGENTS.md**: Pick back up where the last AI agent left off.
+2.  **Plan**: Read the requirements, verify the state of the code, and formulate a plan using `set_plan`.
+3.  **Edit**: Make changes.
+4.  **Verify**:
     - Run `cargo check` to catch compilation errors early.
     - Run `cargo fmt` to fix style.
     - Run `cargo clippy` to ensure quality.
     - Run `cargo test` to verify functionality.
-4.  **Refine**: If tests fail, diagnose and fix. Do not guess. Use `read_file` to see the actual code.
-5.  **Submit**: Only when all checks pass.
+5.  **Refine**: If tests fail, diagnose and fix. Do not guess. Use `read_file` to see the actual code.
+6.  **Store current state in Brain section of AGENTS.md**: Help the next AI agent out by telling them what has been doen and what should be done next, allong with pitfalls to look out for.
+7.  **Submit**: Only when all checks pass.
 
 ## Technical specifics
 
 -   **Assembler**: The project uses `rs6502` for assembly generation. Be aware of its limitations (e.g., no `.BYTE` directive support, use `db` equivalent or injection).
 -   **Frontend**: Plain HTML/JS/CSS. No build step (Webpack/Vite) is currently used. Keep it simple.
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
+
+## Brain
+Store info here

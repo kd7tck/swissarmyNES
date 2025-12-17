@@ -18,13 +18,13 @@ mod tests {
                 AudioNote {
                     pitch: 10,
                     row: 0,
-                    col: 0, // Time 0
+                    col: 0,      // Time 0
                     duration: 8, // Ends at 8
                 },
                 AudioNote {
                     pitch: 12,
                     row: 0,
-                    col: 1, // Time 8
+                    col: 1,      // Time 8
                     duration: 8, // Ends at 16
                 },
             ],
@@ -74,7 +74,7 @@ mod tests {
                 AudioNote {
                     pitch: 10,
                     row: 0,
-                    col: 0, // Time 0
+                    col: 0,      // Time 0
                     duration: 8, // Ends 8
                 },
                 // Gap from 8 to 24 (Step 3 * 8 = 24)

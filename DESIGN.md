@@ -6,6 +6,7 @@ SwissArmyNES aims to be the definitive, all-in-one web-based development environ
 This document outlines the step-by-step path to achieving that vision, broken down into distinct, testable phases.
 
 ---
+Before starting Read AGENTS.MD and adhrere to it in a strict manner.
 
 ## Phase 1: Foundation & Roadmap (Completed)
 **Goal:** Establish the long-term vision and ensure the project structure is ready for expansion.

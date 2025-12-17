@@ -56,9 +56,7 @@
 
 ## Limitations
 - **8-Bit Math**: Mathematical expressions are evaluated using 8-bit arithmetic (0-255). Overflow wraps around. 16-bit math is limited to simple assignments/copies to `WORD` variables.
-- **FOR Loops**: Loop counters and steps are strictly 8-bit (0-255). Using a `WORD` variable as a counter will only check its low byte.
 - **Dynamic Addressing**: Use `WORD` variables for `POKE` and `PEEK` to access dynamic addresses. Use `CONST` for hardware registers (e.g. `$2006`).
-- **RAM Limit**: Global variables are allocated starting at `$0300`. The compiler will error if variable allocation exceeds the NES RAM limit ($07FF).
 - **Emulator**: Phase 25 (Emulator Integration) is currently pending. Users must download the ROM and run it in an external emulator (e.g. FCEUX, Mesen).
 
 ## Getting Started

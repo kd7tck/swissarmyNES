@@ -3,24 +3,7 @@
 **SwissArmyNES** is a comprehensive, web-based Integrated Development Environment (IDE) tailored for creating Nintendo Entertainment System (NES) games. It combines a Rust backend with a vector-based HTML/JS frontend to provide a modern workflow for retro game development.
 
 ## Current Status
-**Phase 24: Audio Compilation Complete** - The Audio pipeline is fully implemented, including a Tracker UI, data compilation, and binary injection into the ROM.
 
-*   **Recent Milestones:**
-    *   **Phase 24: Audio Compilation**: Implemented audio data compilation and injection into the ROM.
-    *   **Phase 23: Audio Tracker UI**: Added a piano-roll interface for composing music and sound effects. Corrected Audio Tracker to support selecting Instruments (Duty Cycle / Envelopes) instead of mislabeling them as channels.
-    *   **Phase 22: Audio Engine**: Implemented a basic 6502 sound engine supporting PlaySfx commands.
-    *   **Phase 21: Asset Compilation**: Added support for compiling and injecting Nametables (Maps) into the ROM startup.
-    *   **Phase 20: Map Attributes**: Added support for painting attribute tables (color palettes) on the Map Editor.
-    *   **Phase 19: Nametable (Map) Editor**: Implemented a visual editor to paint tiles onto a 32x30 grid.
-    *   **Phase 18: CHR Editor Tools**: Added Flood Fill, Shift, Flip tools, and Bank View to the Tile Editor.
-    *   **Phase 17: CHR (Tile) Editor**: Implemented a basic 8x8 Tile Editor with drawing capabilities and bank navigation.
-    *   **Phase 16: Palette Editor**: Implemented a UI for selecting NES system colors and assigning them to sub-palettes.
-    *   **Phase 15: Asset Management**: Defined JSON schemas for CHR banks, Palettes, and Nametables.
-    *   **Phase 14: Project Management**: Users can now create named projects, which are persisted to the local filesystem.
-    *   **Phase 13: Compiler API**: Implemented `/api/compile` endpoint and connected it to the "Compile" button in the frontend.
-    *   **Phase 12: Web Editor**: Implemented a lightweight, dependency-free syntax highlighter for SwissBASIC in the web interface.
-    *   **Phase 11: End-to-End "Hello World"**: Verified that the compiler generates valid NES ROMs capable of changing background colors (PPU writes).
-    *   **Phase 8-10: Compiler Core**: Implemented control flow (`IF`, `WHILE`, `FOR`), variables, expressions, and inline assembly support.
 
 ## Features
 - **Project Management**:

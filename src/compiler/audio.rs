@@ -103,14 +103,14 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
                 }
 
                 // Note col is u8, so it won't exceed 255, but current_time might accumulate if we were tracking absolute time.
-                // However, in this tracker, col is absolute position in the pattern (0-31 usually).
-                // If we support multiple patterns chained, we'd need absolute time.
-                // For now, let's treat col as u16 to avoid overflow in comparisons if we extend logic.
-                let note_col = note.col as u16;
+                // In the tracker UI, col is the grid column index (step).
+                // We assume each step is 8 frames (approx 130ms), matching the frontend default.
+                const FRAMES_PER_STEP: u16 = 8;
+                let note_start_time = (note.col as u16) * FRAMES_PER_STEP;
 
                 // Check for gap
-                if note_col > current_time {
-                    let gap_duration = (note_col - current_time) as u8;
+                if note_start_time > current_time {
+                    let gap_duration = (note_start_time - current_time) as u8;
                     // Insert Silence
                     blob.push(gap_duration);
                     blob.push(0xFF); // Silence
@@ -118,11 +118,11 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
                 }
 
                 // If note starts before current_time, it's an overlap.
-                if note_col >= current_time {
+                if note_start_time >= current_time {
                     blob.push(note.duration);
                     blob.push(note.pitch);
                     current_offset += 2;
-                    current_time = note_col + (note.duration as u16);
+                    current_time = note_start_time + (note.duration as u16);
                 }
             }
 

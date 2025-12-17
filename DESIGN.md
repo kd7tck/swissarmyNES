@@ -7,7 +7,7 @@ This document outlines the step-by-step path to achieving that vision, broken do
 
 ---
 
-## Phase 1: Foundation & Roadmap (Current)
+## Phase 1: Foundation & Roadmap (Completed)
 **Goal:** Establish the long-term vision and ensure the project structure is ready for expansion.
 - **Action Items:**
     - Create this `DESIGN.md` file.
@@ -15,7 +15,7 @@ This document outlines the step-by-step path to achieving that vision, broken do
     - Establish `AGENTS.md` to guide AI contributors.
 - **Completion Criteria:** `DESIGN.md` exists in root. Codebase passes `cargo clippy` and `cargo fmt`.
 
-## Phase 2: String Data Support
+## Phase 2: String Data Support (Current)
 **Goal:** Enable basic text handling in SwissBASIC.
 - **Action Items:**
     - Add `STRING` data type to AST and Symbol Table.

@@ -343,7 +343,8 @@ impl CodeGenerator {
         self.output.push("  LDY #$00".to_string());
         self.output.push("  LDA ($F0), Y".to_string());
         self.output.push("  AND #$03     ; Mask to 0-3".to_string());
-        self.output.push("  STA $F2      ; Temp store Channel ID".to_string());
+        self.output
+            .push("  STA $F2      ; Temp store Channel ID".to_string());
 
         // Advance Pointer by 1 (Channel)
         self.output.push("  INC $F0".to_string());
@@ -353,7 +354,8 @@ impl CodeGenerator {
 
         // Read Instrument Byte (Second byte)
         self.output.push("  LDA ($F0), Y".to_string());
-        self.output.push("  STA $F3      ; Temp store Instrument".to_string());
+        self.output
+            .push("  STA $F3      ; Temp store Instrument".to_string());
 
         // Advance Pointer by 1 (Instrument)
         self.output.push("  INC $F0".to_string());

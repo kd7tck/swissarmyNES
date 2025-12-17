@@ -50,4 +50,12 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Store info here
+Phase 2 (String Data Support) is largely complete.
+- **Implemented**: `DataType::String` in AST/SymbolTable, `DIM name AS STRING = "Literal"` parsing, and CodeGen support using a dedicated String Data segment (RO-DATA) containing `db` directives.
+- **Constraint**: `rs6502` assembler does not support `#<Label` for immediate loading of label addresses. To workaround this, we generate string data labels and store pointers to them in the Data Table at `$FF00`. Initialization code reads these pointers using `LDA $FFxx` and stores them in the variable's RAM address (2 bytes).
+- **Next Steps**:
+    - Phase 3: Data Tables (DATA/READ).
+    - Or expand String support for `PRINT` (Phase 12 uses Text Engine).
+- **Pitfalls**:
+    - `TopLevel::Dim` signature changed to include `Option<Expression>`. Any new tests creating AST nodes manually must account for this.
+    - String literals in expressions (e.g. `Call("Hello")`) are NOT yet supported in CodeGen (they parse, but CodeGen will fail or produce incorrect results because it doesn't allocate the string literal encountered in expressions). Currently only `DIM` initialization allocates string data.

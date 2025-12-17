@@ -13,6 +13,7 @@ pub struct CodeGenerator {
     label_counter: usize,
     data_table_offsets: HashMap<String, u16>,
     sub_signatures: HashMap<String, Vec<(u16, DataType)>>,
+    string_literals: HashMap<String, String>,
 }
 
 impl CodeGenerator {
@@ -24,6 +25,7 @@ impl CodeGenerator {
             label_counter: 0,
             data_table_offsets: HashMap::new(),
             sub_signatures: HashMap::new(),
+            string_literals: HashMap::new(),
         }
     }
 
@@ -56,10 +58,13 @@ impl CodeGenerator {
         self.generate_sound_engine();
         self.generate_math_helpers();
 
-        // Pass 4: Generate Data Tables (at $FF00)
+        // Pass 4: Generate String Data
+        self.generate_string_data();
+
+        // Pass 5: Generate Data Tables (at $FF00)
         self.generate_data_tables(program)?;
 
-        // Pass 5: Generate Vectors
+        // Pass 6: Generate Vectors
         self.generate_vectors(program)?;
 
         Ok(self.output.clone())
@@ -266,6 +271,27 @@ impl CodeGenerator {
             self.output
                 .push(format!("  LDA ${:04X}", addr_default_rti + 1));
             self.output.push("  STA $03FD".to_string());
+        }
+
+        // Initialize Global String Variables
+        for decl in &program.declarations {
+            if let TopLevel::Dim(name, DataType::String, Some(Expression::StringLiteral(val))) =
+                decl
+            {
+                if let Some(label) = self.string_literals.get(val) {
+                    if let Some(addr) = self.data_table_offsets.get(label) {
+                        if let Some(sym) = self.symbol_table.resolve(name) {
+                            if let Some(var_addr) = sym.address {
+                                self.output.push(format!("  ; Init String '{}'", name));
+                                self.output.push(format!("  LDA ${:04X}", addr));
+                                self.output.push(format!("  STA ${:04X}", var_addr));
+                                self.output.push(format!("  LDA ${:04X}", addr + 1));
+                                self.output.push(format!("  STA ${:04X}", var_addr + 1));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Infinite loop after Main returns
@@ -637,6 +663,18 @@ impl CodeGenerator {
         self.output.push("  RTS".to_string());
     }
 
+    fn generate_string_data(&mut self) {
+        self.output.push("".to_string());
+        self.output.push("; --- String Data ---".to_string());
+
+        for (content, label) in &self.string_literals {
+            self.output.push(format!("{}:", label));
+            let bytes: Vec<String> = content.bytes().map(|b| format!("${:02X}", b)).collect();
+            self.output.push(format!("  db {}, $00", bytes.join(", ")));
+        }
+        self.output.push("".to_string());
+    }
+
     fn generate_data_tables(&mut self, program: &Program) -> Result<(), String> {
         self.output.push("".to_string());
         self.output.push("; --- Data Tables ---".to_string());
@@ -670,6 +708,21 @@ impl CodeGenerator {
                 current_addr += 2;
             }
         }
+
+        // String Pointers
+        let mut emitted_strings = std::collections::HashSet::new();
+        for decl in &program.declarations {
+            if let TopLevel::Dim(_, DataType::String, Some(Expression::StringLiteral(val))) = decl {
+                if !emitted_strings.contains(val) {
+                    if let Some(label) = self.string_literals.get(val) {
+                        self.output.push(format!("Ptr_{}: WORD {}", label, label));
+                        emitted_strings.insert(val.clone());
+                        current_addr += 2;
+                    }
+                }
+            }
+        }
+
         self.output.push("".to_string());
         Ok(())
     }
@@ -708,7 +761,7 @@ impl CodeGenerator {
 
         for decl in &program.declarations {
             match decl {
-                TopLevel::Dim(name, dtype) => {
+                TopLevel::Dim(name, dtype, init_expr) => {
                     // Assign address
                     self.symbol_table.assign_address(name, self.ram_pointer)?;
                     self.output
@@ -721,6 +774,18 @@ impl CodeGenerator {
                         }
                         crate::compiler::ast::DataType::Word => {
                             self.ram_pointer += 2;
+                        }
+                        crate::compiler::ast::DataType::String => {
+                            self.ram_pointer += 2;
+                            if let Some(Expression::StringLiteral(val)) = init_expr {
+                                if !self.string_literals.contains_key(val) {
+                                    let label = self.new_label();
+                                    self.string_literals.insert(val.clone(), label.clone());
+                                    // Allocate Data Table Entry
+                                    self.data_table_offsets.insert(label, data_table_addr);
+                                    data_table_addr += 2;
+                                }
+                            }
                         }
                     }
                 }
@@ -754,7 +819,8 @@ impl CodeGenerator {
                             | crate::compiler::ast::DataType::Bool => {
                                 self.ram_pointer += 1;
                             }
-                            crate::compiler::ast::DataType::Word => {
+                            crate::compiler::ast::DataType::Word
+                            | crate::compiler::ast::DataType::String => {
                                 self.ram_pointer += 2;
                             }
                         }
@@ -813,7 +879,7 @@ impl CodeGenerator {
                 // Constants are inlined usually, or we could emit equates?
                 // For now, resolved at compile time if possible.
             }
-            TopLevel::Dim(_, _) => {
+            TopLevel::Dim(_, _, _) => {
                 // Handled in allocation pass
             }
             TopLevel::Asm(lines) => {
@@ -1256,7 +1322,8 @@ impl CodeGenerator {
 
             // Generate code to evaluate expr and store to addr
             match dtype {
-                crate::compiler::ast::DataType::Word => {
+                crate::compiler::ast::DataType::Word
+                | crate::compiler::ast::DataType::String => {
                     match expr {
                         Expression::Integer(val) => {
                             let low = (val & 0xFF) as u8;
@@ -1328,7 +1395,8 @@ impl CodeGenerator {
                 if let Some(sym) = self.symbol_table.resolve(name) {
                     if let Some(addr) = sym.address {
                         match sym.data_type {
-                            crate::compiler::ast::DataType::Word => {
+                            crate::compiler::ast::DataType::Word
+                            | crate::compiler::ast::DataType::String => {
                                 self.output.push(format!("  LDA ${:04X}", addr));
                                 self.output.push("  STA $02".to_string());
                                 self.output.push(format!("  LDA ${:04X}", addr + 1));
@@ -1629,8 +1697,8 @@ mod tests {
 
         let program = Program {
             declarations: vec![
-                TopLevel::Dim("x".to_string(), DataType::Byte),
-                TopLevel::Dim("y".to_string(), DataType::Byte),
+                TopLevel::Dim("x".to_string(), DataType::Byte, None),
+                TopLevel::Dim("y".to_string(), DataType::Byte, None),
                 TopLevel::Sub(
                     "Main".to_string(),
                     vec![],
@@ -1668,7 +1736,7 @@ mod tests {
 
         let program = Program {
             declarations: vec![
-                TopLevel::Dim("z".to_string(), DataType::Byte),
+                TopLevel::Dim("z".to_string(), DataType::Byte, None),
                 TopLevel::Sub(
                     "Main".to_string(),
                     vec![],

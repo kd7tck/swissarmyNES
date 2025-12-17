@@ -16,7 +16,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Establish `AGENTS.md` to guide AI contributors.
 - **Completion Criteria:** `DESIGN.md` exists in root. Codebase passes `cargo clippy` and `cargo fmt`.
 
-## Phase 2: String Data Support (Current)
+## Phase 2: String Data Support (Completed)
 **Goal:** Enable basic text handling in SwissBASIC.
 - **Action Items:**
     - Add `STRING` data type to AST and Symbol Table.
@@ -24,7 +24,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Update CodeGen to store string data in a dedicated RO-DATA segment.
 - **Completion Criteria:** Can declare `DIM name AS STRING = "Hello"` and compile without errors.
 
-## Phase 3: Data Tables (DATA/READ)
+## Phase 3: Data Tables (DATA/READ) (Current)
 **Goal:** Allow users to define and access large lookup tables (sine waves, enemy stats) easily.
 - **Action Items:**
     - Implement `DATA` statement (stores bytes/words in sequence).

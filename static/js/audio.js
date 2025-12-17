@@ -13,6 +13,7 @@ class AudioTracker {
         this.rows = 24; // 2 octaves
         this.cols = 32; // 32 steps
         this.noteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        this.defaultDuration = 8; // Default duration in frames (approx 130ms)
 
         this.initUI();
     }
@@ -114,7 +115,7 @@ class AudioTracker {
                 row: row,
                 col: col,
                 pitch: cellElement.dataset.pitch, // Stored as string or int
-                duration: 1
+                duration: this.defaultDuration
             });
             cellElement.classList.add('active');
         }

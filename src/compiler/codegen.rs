@@ -77,8 +77,10 @@ impl CodeGenerator {
         self.output.push("  LDX #$FF".to_string());
         self.output
             .push("  TXS          ; Set Stack Pointer to $FF (Top of Stack)".to_string());
-        self.output.push("  INX          ; X = 0 (Overflow from $FF)".to_string());
-        self.output.push("  STX $2000    ; Disable NMI (PPUCTRL = 0)".to_string());
+        self.output
+            .push("  INX          ; X = 0 (Overflow from $FF)".to_string());
+        self.output
+            .push("  STX $2000    ; Disable NMI (PPUCTRL = 0)".to_string());
         self.output
             .push("  STX $2001    ; Disable Rendering (PPUMASK = 0)".to_string());
         self.output

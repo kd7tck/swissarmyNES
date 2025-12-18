@@ -697,11 +697,13 @@ impl CodeGenerator {
         self.output.push("Runtime_ReadString_Loop:".to_string());
         self.output.push("  LDA ($04), Y".to_string());
         self.output.push("  INC $04".to_string());
-        self.output.push("  BNE Runtime_ReadString_NoWrap".to_string());
+        self.output
+            .push("  BNE Runtime_ReadString_NoWrap".to_string());
         self.output.push("  INC $05".to_string());
         self.output.push("Runtime_ReadString_NoWrap:".to_string());
         self.output.push("  CMP #0".to_string());
-        self.output.push("  BNE Runtime_ReadString_Loop".to_string());
+        self.output
+            .push("  BNE Runtime_ReadString_Loop".to_string());
 
         // Restore Return Value
         self.output.push("  PLA".to_string());
@@ -1442,7 +1444,8 @@ impl CodeGenerator {
                                 DataType::String => {
                                     self.output.push("  JSR Runtime_ReadString".to_string());
                                     self.output.push(format!("  STA ${:04X}", addr)); // Low
-                                    self.output.push(format!("  STX ${:04X}", addr + 1)); // High
+                                    self.output.push(format!("  STX ${:04X}", addr + 1));
+                                    // High
                                 }
                             }
                         } else {

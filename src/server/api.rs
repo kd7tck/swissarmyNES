@@ -15,12 +15,10 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
-use std::fs;
-use std::path::Path as StdPath;
 
 #[derive(Deserialize)]
 pub struct CompileRequest {
-    source: String,
+    source: Option<String>,
     project_name: Option<String>,
     assets: Option<ProjectAssets>,
 }
@@ -28,7 +26,7 @@ pub struct CompileRequest {
 pub async fn compile(Json(payload): Json<CompileRequest>) -> impl IntoResponse {
     // Spawn a blocking task for the CPU-intensive compilation process
     let result = tokio::task::spawn_blocking(move || {
-        compile_source(&payload.source, payload.project_name, payload.assets)
+        compile_source(payload.source, payload.project_name, payload.assets)
     })
     .await;
 
@@ -60,12 +58,37 @@ pub async fn compile(Json(payload): Json<CompileRequest>) -> impl IntoResponse {
 }
 
 fn compile_source(
-    source: &str,
+    source: Option<String>,
     project_name: Option<String>,
     assets: Option<ProjectAssets>,
 ) -> Result<Vec<u8>, String> {
+    // Resolve source
+    let source_code = if let Some(s) = source {
+        s
+    } else if let Some(ref name) = project_name {
+        // Read main.swiss from project
+        match project::read_file(name, "main.swiss") {
+            Ok(s) => s,
+            Err(e) => return Err(format!("Failed to read main.swiss: {}", e)),
+        }
+    } else {
+        return Err("No source provided and no project context".to_string());
+    };
+
+    // Resolve assets
+    let resolved_assets = if let Some(a) = assets {
+        Some(a)
+    } else if let Some(ref name) = project_name {
+        match project::get_project(name) {
+            Ok(p) => p.assets,
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
     // 1. Lexing
-    let mut lexer = Lexer::new(source);
+    let mut lexer = Lexer::new(&source_code);
     let tokens = lexer
         .tokenize()
         .map_err(|e| format!("Lexer Error: {:?}", e))?;
@@ -77,32 +100,10 @@ fn compile_source(
         .map_err(|e| format!("Parser Error: {:?}", e))?;
 
     // 2b. Preprocessing (Includes)
-    let provider = |filename: &str| -> Result<String, String> {
-        // Security Check: Disallow paths to prevent traversal and enforce flat structure
-        if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
-            return Err(format!(
-                "Invalid filename '{}': Subdirectories and paths are not allowed.",
-                filename
-            ));
-        }
-
-        if let Some(name) = &project_name {
-            // Security Check: Validate project name
-            if !name
-                .chars()
-                .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-            {
-                return Err("Invalid project name".to_string());
-            }
-
-            let path = StdPath::new(project::PROJECTS_DIR)
-                .join(name)
-                .join(filename);
-            if path.exists() {
-                fs::read_to_string(path).map_err(|e| e.to_string())
-            } else {
-                Err(format!("File not found: {}", filename))
-            }
+    let p_name = project_name.clone();
+    let provider = move |filename: &str| -> Result<String, String> {
+        if let Some(name) = &p_name {
+            project::read_file(name, filename)
         } else {
             Err("Includes are only supported within a named project context".to_string())
         }
@@ -130,13 +131,13 @@ fn compile_source(
     // 5. Assembler
     let assembler = Assembler::new();
 
-    let chr_data = assets.as_ref().map(|a| a.chr_bank.as_slice());
+    let chr_data = resolved_assets.as_ref().map(|a| a.chr_bank.as_slice());
 
     // Prepare Injections
     let mut injections: Vec<(u16, Vec<u8>)> = Vec::new();
 
     // 1. Palette Data at $E000
-    let palette_data = if let Some(a) = &assets {
+    let palette_data = if let Some(a) = &resolved_assets {
         let mut data = vec![0x0F; 32];
         for (i, pal) in a.palettes.iter().take(8).enumerate() {
             let start_idx = i * 4;
@@ -157,12 +158,12 @@ fn compile_source(
     injections.push((audio::PERIOD_TABLE_ADDR, period_table));
 
     // 3. Music Data at $D100
-    let music_data = audio::compile_audio_data(&assets);
+    let music_data = audio::compile_audio_data(&resolved_assets);
     injections.push((audio::MUSIC_DATA_ADDR, music_data));
 
     // 4. Nametable Data at $D500 (NAMETABLE_ADDR)
     // We only support one nametable for now (Nametable 0)
-    if let Some(a) = &assets {
+    if let Some(a) = &resolved_assets {
         if let Some(nt) = a.nametables.first() {
             // Nametable data is 960 bytes + 64 bytes attr = 1024 bytes
             // Check if data is valid length
@@ -195,6 +196,60 @@ fn compile_source(
 pub async fn list_projects() -> impl IntoResponse {
     match project::list_projects() {
         Ok(projects) => Json(projects).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
+}
+
+// File Management APIs
+
+pub async fn list_files(Path(name): Path<String>) -> impl IntoResponse {
+    match project::list_files(&name) {
+        Ok(files) => Json(files).into_response(),
+        Err(e) => (StatusCode::NOT_FOUND, e).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct FileContent {
+    content: String,
+}
+
+pub async fn get_file(Path((name, filename)): Path<(String, String)>) -> impl IntoResponse {
+    match project::read_file(&name, &filename) {
+        Ok(content) => (StatusCode::OK, content).into_response(),
+        Err(e) => (StatusCode::NOT_FOUND, e).into_response(),
+    }
+}
+
+pub async fn save_file(
+    Path((name, filename)): Path<(String, String)>,
+    Json(payload): Json<FileContent>,
+) -> impl IntoResponse {
+    match project::write_file(&name, &filename, &payload.content) {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct CreateFileRequest {
+    filename: String,
+    content: String,
+}
+
+pub async fn create_file(
+    Path(name): Path<String>,
+    Json(payload): Json<CreateFileRequest>,
+) -> impl IntoResponse {
+    match project::write_file(&name, &payload.filename, &payload.content) {
+        Ok(_) => StatusCode::CREATED.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
+}
+
+pub async fn delete_file(Path((name, filename)): Path<(String, String)>) -> impl IntoResponse {
+    match project::delete_file(&name, &filename) {
+        Ok(_) => StatusCode::OK.into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
     }
 }

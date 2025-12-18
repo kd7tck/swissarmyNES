@@ -3,7 +3,9 @@
 class ProjectManager {
     constructor() {
         this.projectList = document.getElementById('project-list');
+        this.fileList = document.getElementById('file-list');
         this.currentProject = null;
+        this.currentFile = null;
         this.assets = null; // Store project assets here
 
         this.init();
@@ -15,6 +17,7 @@ class ProjectManager {
         // Bind buttons
         document.getElementById('btn-new-project').addEventListener('click', () => this.createNewProject());
         document.getElementById('btn-save-project').addEventListener('click', () => this.saveCurrentProject());
+        document.getElementById('btn-new-file').addEventListener('click', () => this.createNewFile());
     }
 
     async refreshProjects() {
@@ -75,13 +78,14 @@ class ProjectManager {
             this.currentProject = name;
             this.assets = project.assets || { chr_bank: [], palettes: [], nametables: [] };
 
-            // Update Editor
-            const editor = document.getElementById('code-editor');
-            if (editor) {
-                editor.value = project.source;
-                // Trigger update event to refresh syntax highlighting
-                editor.dispatchEvent(new Event('input'));
-            }
+            // Show file explorer
+            const explorer = document.getElementById('file-explorer');
+            if (explorer) explorer.style.display = 'block';
+
+            await this.refreshFiles();
+
+            // Load main.swiss by default
+            await this.loadFile('main.swiss');
 
             // Update UI title or status
             document.getElementById('current-project-name').textContent = name;
@@ -102,42 +106,131 @@ class ProjectManager {
         }
     }
 
-    async saveCurrentProject() {
+    async refreshFiles() {
+        if (!this.currentProject) return;
+        try {
+            const response = await fetch(`/api/projects/${this.currentProject}/files`);
+            if (!response.ok) throw new Error('Failed to list files');
+            const files = await response.json();
+            this.renderFileList(files);
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    renderFileList(files) {
+        this.fileList.innerHTML = '';
+        files.forEach(filename => {
+            const li = document.createElement('li');
+            li.textContent = filename;
+            if (filename === this.currentFile) {
+                li.classList.add('active');
+            }
+            li.onclick = () => {
+                this.loadFile(filename);
+            };
+            this.fileList.appendChild(li);
+        });
+    }
+
+    async loadFile(filename) {
+        if (!this.currentProject) return;
+        try {
+            const response = await fetch(`/api/projects/${this.currentProject}/files/${filename}`);
+            if (!response.ok) throw new Error('Failed to load file');
+            const content = await response.text();
+
+            const editor = document.getElementById('code-editor');
+            if (editor) {
+                editor.value = content;
+                editor.dispatchEvent(new Event('input'));
+            }
+
+            this.currentFile = filename;
+
+            // Re-render list to update active class
+            Array.from(this.fileList.children).forEach(li => {
+                if (li.textContent === filename) li.classList.add('active');
+                else li.classList.remove('active');
+            });
+
+        } catch (err) {
+            alert('Error loading file: ' + err.message);
+        }
+    }
+
+    async createNewFile() {
+        if (!this.currentProject) return;
+        const filename = prompt("Enter file name (e.g., lib.swiss):");
+        if (!filename) return;
+
+        try {
+            const response = await fetch(`/api/projects/${this.currentProject}/files`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: filename, content: "" })
+            });
+
+            if (!response.ok) {
+                 const txt = await response.text();
+                 throw new Error(txt);
+            }
+
+            await this.refreshFiles();
+            await this.loadFile(filename);
+        } catch (err) {
+            alert('Error creating file: ' + err.message);
+        }
+    }
+
+    async saveCurrentProject(silent = false) {
         if (!this.currentProject) {
-            alert("No project loaded!");
+            if (!silent) alert("No project loaded!");
             return;
         }
 
         const editor = document.getElementById('code-editor');
         const source = editor.value;
 
+        // 1. Save Current File
+        if (this.currentFile) {
+            try {
+                const response = await fetch(`/api/projects/${this.currentProject}/files/${this.currentFile}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: source })
+                });
+                if (!response.ok) throw new Error('Failed to save file');
+            } catch (err) {
+                alert('Error saving file: ' + err.message);
+                return;
+            }
+        }
+
+        // 2. Save Assets
         // Collect Audio Data
         if (window.audioTracker) {
              const audioData = window.audioTracker.getData();
              this.assets.audio_tracks = audioData.tracks;
         }
 
-        // Dispatch event to gather asset data from editors if needed
-        // But we rely on the shared `this.assets` object being mutually updated.
-        // Other editors should update window.projectManager.assets directly or listen for changes.
-
         const payload = {
-            source: source,
             assets: this.assets
         };
 
         try {
+            // We use save_project just for assets now
             const response = await fetch(`/api/projects/${this.currentProject}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
-            if (!response.ok) throw new Error('Failed to save project');
+            if (!response.ok) throw new Error('Failed to save assets');
 
-            alert('Project saved!');
+            if (!silent) alert('Project saved!');
         } catch (err) {
-            alert('Error saving project: ' + err.message);
+            alert('Error saving project assets: ' + err.message);
         }
     }
 }

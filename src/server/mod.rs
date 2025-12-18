@@ -18,5 +18,15 @@ pub fn app() -> Router {
             "/api/projects/:name",
             get(api::get_project).post(api::save_project),
         )
+        .route(
+            "/api/projects/:name/files",
+            get(api::list_files).post(api::create_file),
+        )
+        .route(
+            "/api/projects/:name/files/:filename",
+            get(api::get_file)
+                .post(api::save_file)
+                .delete(api::delete_file),
+        )
         .nest_service("/", ServeDir::new("static"))
 }

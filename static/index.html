@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/css/chr.css">
     <link rel="stylesheet" href="/css/map.css">
     <link rel="stylesheet" href="/css/audio.css">
+    <link rel="stylesheet" href="/css/file_explorer.css">
 </head>
 <body>
     <div id="app">
@@ -33,6 +34,16 @@
                 <ul id="project-list" class="project-list">
                     <!-- Projects injected here -->
                 </ul>
+
+                <div id="file-explorer" class="file-explorer" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3>Files</h3>
+                        <button id="btn-new-file" title="New File" style="padding: 2px 6px; font-size: 12px;">+</button>
+                    </div>
+                    <ul id="file-list" class="file-list">
+                        <!-- Files injected here -->
+                    </ul>
+                </div>
             </div>
 
             <ul class="nav-links">

@@ -32,7 +32,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Implement `RESTORE` statement (resets read pointer).
 - **Completion Criteria:** A program can iterate through a `DATA` block and print values to memory.
 
-## Phase 4: Multi-File Projects (Current)
+## Phase 4: Multi-File Projects (Completed)
 **Goal:** Support larger codebases by splitting code across multiple files.
 - **Action Items:**
     - Implement `INCLUDE "filename.swiss"` directive.

@@ -82,13 +82,7 @@ pub fn list_projects() -> Result<Vec<String>, String> {
 }
 
 pub fn create_project(name: &str) -> Result<(), String> {
-    // Validate name (simple alphanumeric check)
-    if !name
-        .chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-    {
-        return Err("Invalid project name".to_string());
-    }
+    validate_project_name(name)?;
 
     let project_path = Path::new(PROJECTS_DIR).join(name);
     if project_path.exists() {
@@ -128,13 +122,7 @@ pub fn create_project(name: &str) -> Result<(), String> {
 }
 
 pub fn get_project(name: &str) -> Result<Project, String> {
-    // Validate name
-    if !name
-        .chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-    {
-        return Err("Invalid project name".to_string());
-    }
+    validate_project_name(name)?;
 
     let project_path = Path::new(PROJECTS_DIR).join(name);
     if !project_path.exists() {
@@ -172,13 +160,7 @@ pub fn save_project(
     source: Option<&str>,
     assets: Option<&ProjectAssets>,
 ) -> Result<(), String> {
-    // Validate name
-    if !name
-        .chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-    {
-        return Err("Invalid project name".to_string());
-    }
+    validate_project_name(name)?;
 
     let project_path = Path::new(PROJECTS_DIR).join(name);
     if !project_path.exists() {
@@ -207,5 +189,100 @@ pub fn save_project(
         }
     }
 
+    Ok(())
+}
+
+pub fn list_files(project_name: &str) -> Result<Vec<String>, String> {
+    validate_project_name(project_name)?;
+
+    let project_path = Path::new(PROJECTS_DIR).join(project_name);
+    if !project_path.exists() {
+        return Err("Project not found".to_string());
+    }
+
+    let mut files = Vec::new();
+    for entry in fs::read_dir(project_path).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if entry.path().is_file() {
+            if let Some(name) = entry.file_name().to_str() {
+                // Filter out system files if desired, or include all
+                // For now, let's exclude the JSON metadata files from the code list
+                // logic: include everything that is not a directory.
+                // But specifically for the editor, we mostly care about .swiss files.
+                // But the user might want to delete assets.json? No, that's dangerous.
+                if name != "project.json" && name != "assets.json" {
+                    files.push(name.to_string());
+                }
+            }
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+pub fn read_file(project_name: &str, file_name: &str) -> Result<String, String> {
+    validate_project_name(project_name)?;
+    validate_filename(file_name)?;
+
+    let path = Path::new(PROJECTS_DIR).join(project_name).join(file_name);
+    if !path.exists() {
+        return Err("File not found".to_string());
+    }
+    fs::read_to_string(path).map_err(|e| e.to_string())
+}
+
+pub fn write_file(project_name: &str, file_name: &str, content: &str) -> Result<(), String> {
+    validate_project_name(project_name)?;
+    validate_filename(file_name)?;
+
+    // Prevent overwriting system files via this API
+    if file_name == "project.json" || file_name == "assets.json" {
+        return Err("Cannot modify system files via this API".to_string());
+    }
+
+    let project_path = Path::new(PROJECTS_DIR).join(project_name);
+    if !project_path.exists() {
+        return Err("Project not found".to_string());
+    }
+
+    let path = project_path.join(file_name);
+    fs::write(path, content).map_err(|e| e.to_string())
+}
+
+pub fn delete_file(project_name: &str, file_name: &str) -> Result<(), String> {
+    validate_project_name(project_name)?;
+    validate_filename(file_name)?;
+
+    if file_name == "main.swiss" {
+        return Err("Cannot delete main entry point".to_string());
+    }
+    if file_name == "project.json" || file_name == "assets.json" {
+        return Err("Cannot delete system files".to_string());
+    }
+
+    let path = Path::new(PROJECTS_DIR).join(project_name).join(file_name);
+    if !path.exists() {
+        return Err("File not found".to_string());
+    }
+    fs::remove_file(path).map_err(|e| e.to_string())
+}
+
+fn validate_project_name(name: &str) -> Result<(), String> {
+    if !name
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err("Invalid project name".to_string());
+    }
+    Ok(())
+}
+
+fn validate_filename(name: &str) -> Result<(), String> {
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return Err("Invalid filename: Paths not allowed".to_string());
+    }
+    if !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+        return Err("Invalid filename: Invalid characters".to_string());
+    }
     Ok(())
 }

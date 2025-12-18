@@ -50,17 +50,17 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 3 (Data Tables) is complete (including String support).
-- **Implemented**: `DATA`, `READ`, `RESTORE` keywords and support.
+Phase 4 (Multi-File Projects) is complete.
+- **Implemented**: `INCLUDE` directive, recursive parsing, file management API, and Frontend Project Explorer.
 - **Details**:
-    - `DATA` statements emit bytes to a `USER_DATA_START` segment. Values -128..255 are 1 byte, others are 2 bytes (Little Endian). String literals are emitted with a null terminator.
-    - `READ` statement uses a runtime helper `Runtime_ReadByte` and `Runtime_ReadString` (advances past null terminator).
-    - `RESTORE` resets the pointer to `USER_DATA_START`.
-- **Constraint**: `rs6502` limitation on `#<Label` applies to `USER_DATA_START` too. We solved this by adding `InitUserData` to the Data Table (Pass 5) and reading it during Startup (Pass 2).
+    - Backend: `src/server/project.rs` now supports `list_files`, `read_file`, `write_file`, `delete_file`.
+    - API: `GET /api/projects/:name/files`, `POST /files`, etc. `compile` endpoint updated to support project-based compilation (reading files from disk).
+    - Frontend: Project Explorer now lists files. Users can create, switch, and save files.
+    - Compilation: "Run" now saves the current file (and assets) and requests compilation of the project (using `main.swiss` as entry point by default).
 - **Next Steps**:
-    - Phase 4: Frontend support for Multi-File Projects. (Backend is complete: `INCLUDE` works, API accepts `project_name` to resolve files).
+    - Phase 5: 16-bit Math Expansion (Update CodeGen for 16-bit operations).
 - **Pitfalls**:
     - `TopLevel::Dim` signature changed to include `Option<Expression>`. Any new tests creating AST nodes manually must account for this.
     - `TopLevel::Include` added. `preprocessor::process_includes` MUST be called before Analysis/Codegen.
-    - `CompileRequest` API now includes `project_name`.
-    - `TopLevel::Data` is currently ignored in `analyze` (no type checking) and `allocate_memory` (no RAM used).
+    - The compiler relies on `main.swiss` being the entry point when compiling a project. `INCLUDE`s are resolved relative to the project root.
+    - `save_project` API (legacy) is still used for assets but `source` field in it updates `main.swiss` specifically. New file APIs should be used for source code.

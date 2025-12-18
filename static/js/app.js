@@ -62,12 +62,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // Handle Compile
     if (btnCompile && codeEditor) {
         btnCompile.addEventListener('click', async () => {
+            // Save project first to ensure files on disk are up to date
+            if (window.projectManager) {
+                try {
+                    await window.projectManager.saveCurrentProject(true);
+                } catch (e) {
+                    console.error("Auto-save failed:", e);
+                }
+            }
+
             const source = codeEditor.value;
             // Get assets from the ProjectManager
             const assets = window.projectManager ? window.projectManager.assets : null;
+            const projectName = window.projectManager ? window.projectManager.currentProject : null;
 
             const payload = {
-                source: source,
+                source: projectName ? null : source, // Use editor content only if no project
+                project_name: projectName,
                 assets: assets
             };
 

@@ -13,7 +13,7 @@ fn test_codegen_if_statement() {
     // IF x = 10 THEN x = 20 ELSE x = 30
     let program = Program {
         declarations: vec![
-            TopLevel::Dim("x".to_string(), DataType::Byte),
+            TopLevel::Dim("x".to_string(), DataType::Byte, None),
             TopLevel::Sub(
                 "Main".to_string(),
                 vec![],
@@ -52,7 +52,7 @@ fn test_codegen_while_statement() {
     // WHILE x < 10 ...
     let program = Program {
         declarations: vec![
-            TopLevel::Dim("x".to_string(), DataType::Byte),
+            TopLevel::Dim("x".to_string(), DataType::Byte, None),
             TopLevel::Sub(
                 "Main".to_string(),
                 vec![],
@@ -94,7 +94,7 @@ fn test_codegen_for_statement() {
     // FOR i = 0 TO 10 ...
     let program = Program {
         declarations: vec![
-            TopLevel::Dim("i".to_string(), DataType::Byte),
+            TopLevel::Dim("i".to_string(), DataType::Byte, None),
             TopLevel::Sub(
                 "Main".to_string(),
                 vec![],

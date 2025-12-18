@@ -40,12 +40,29 @@ impl SemanticAnalyzer {
                         }
                     }
                 }
-                TopLevel::Dim(name, dtype) => {
+                TopLevel::Dim(name, dtype, init_expr) => {
                     if let Err(e) =
                         self.symbol_table
                             .define(name.clone(), dtype.clone(), SymbolKind::Variable)
                     {
                         self.errors.push(e);
+                    }
+                    if let Some(init) = init_expr {
+                        // Validate initialization if possible (e.g. string init)
+                        match dtype {
+                            DataType::String => {
+                                if let Expression::StringLiteral(_) = init {
+                                    // OK
+                                } else {
+                                    self.errors.push(format!("Variable '{}' of type STRING must be initialized with a string literal", name));
+                                }
+                            }
+                            _ => {
+                                // For other types, allow any expression for now?
+                                // Usually constant expression is preferred for globals.
+                                // But Expression resolution is weak here.
+                            }
+                        }
                     }
                 }
                 TopLevel::Sub(name, params, _body) => {

@@ -59,7 +59,7 @@ pub enum TopLevel {
     Sub(String, Vec<(String, DataType)>, Vec<Statement>), // Name, Params, Body
     Interrupt(String, Vec<Statement>),                    // Interrupt Name (NMI/IRQ), Body
     Const(String, Expression),                            // Global Const
-    Dim(String, DataType),                                // Global Dim
+    Dim(String, DataType, Option<Expression>),            // Global Dim with optional initialization
     Asm(Vec<String>),                                     // Top-level ASM block
                                                           // We could allow generic statements at top level if we want a "script" mode,
                                                           // but strict separation is safer for a compiled language targeting NES.
@@ -70,6 +70,7 @@ pub enum DataType {
     Byte,
     Word,
     Bool,
+    String,
 }
 
 #[derive(Debug, PartialEq, Clone)]

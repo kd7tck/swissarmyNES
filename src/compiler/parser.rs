@@ -68,7 +68,7 @@ impl Parser {
         }
 
         if self.match_token(Token::Dim) {
-            // DIM Name AS Type
+            // DIM Name AS Type [= Expr]
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
@@ -78,9 +78,14 @@ impl Parser {
             self.consume(Token::As, "Expected AS after DIM name")?;
             let data_type = self.parse_type()?;
 
+            let mut init_expr = None;
+            if self.match_token(Token::Equal) {
+                init_expr = Some(self.parse_expression()?);
+            }
+
             // Optional newline
             self.match_token(Token::Newline);
-            return Ok(TopLevel::Dim(name, data_type));
+            return Ok(TopLevel::Dim(name, data_type, init_expr));
         }
 
         if self.match_token(Token::Sub) {
@@ -186,8 +191,11 @@ impl Parser {
         if self.match_token(Token::Bool) {
             return Ok(DataType::Bool);
         }
+        if self.match_token(Token::String) {
+            return Ok(DataType::String);
+        }
         Err(format!(
-            "Expected type (BYTE, WORD, BOOL), found {:?}",
+            "Expected type (BYTE, WORD, BOOL, STRING), found {:?}",
             self.peek()
         ))
     }
@@ -861,9 +869,30 @@ END SUB
         let mut parser = Parser::new(tokens);
         let program = parser.parse_program().expect("Failed to parse program");
 
-        if let TopLevel::Dim(name, dtype) = &program.declarations[0] {
+        if let TopLevel::Dim(name, dtype, init) = &program.declarations[0] {
             assert_eq!(name, "x");
             assert_eq!(*dtype, DataType::Byte);
+            assert!(init.is_none());
+        } else {
+            panic!("Expected Dim");
+        }
+    }
+
+    #[test]
+    fn test_parse_dim_string_init() {
+        let input = "DIM s AS STRING = \"Hello\"";
+        let tokens = tokenize(input);
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse_program().expect("Failed to parse program");
+
+        if let TopLevel::Dim(name, dtype, init) = &program.declarations[0] {
+            assert_eq!(name, "s");
+            assert_eq!(*dtype, DataType::String);
+            if let Some(Expression::StringLiteral(val)) = init {
+                assert_eq!(val, "Hello");
+            } else {
+                panic!("Expected StringLiteral initialization");
+            }
         } else {
             panic!("Expected Dim");
         }

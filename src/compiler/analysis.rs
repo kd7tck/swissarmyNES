@@ -88,6 +88,7 @@ impl SemanticAnalyzer {
                     }
                 }
                 TopLevel::Asm(_) => {} // No symbols in ASM block visible to BASIC usually
+                TopLevel::Data(_) => {} // Data declarations
             }
         }
 
@@ -256,6 +257,28 @@ impl SemanticAnalyzer {
             Statement::PlaySfx(id_expr) => {
                 self.analyze_expression(id_expr);
             }
+            Statement::Read(vars) => {
+                for var_name in vars {
+                    // Check existence and mutability
+                    if let Some(sym) = self.symbol_table.resolve(var_name) {
+                        if sym.kind == SymbolKind::Constant {
+                            self.errors
+                                .push(format!("Cannot READ into constant '{}'", var_name));
+                        }
+                    } else {
+                        // Implicit local definition?
+                        // BASIC usually allows `READ x` to define x if not already defined.
+                        if let Err(e) = self.symbol_table.define(
+                            var_name.clone(),
+                            DataType::Byte,
+                            SymbolKind::Local,
+                        ) {
+                            self.errors.push(e);
+                        }
+                    }
+                }
+            }
+            Statement::Restore => {}
         }
     }
 

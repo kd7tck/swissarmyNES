@@ -36,6 +36,9 @@ pub enum Token {
     Not,
     Let,
     PlaySfx,
+    Data,
+    Read,
+    Restore,
 
     // Identifiers
     Identifier(String),
@@ -262,6 +265,9 @@ impl<'a> Lexer<'a> {
             "NOT" => Token::Not,
             "LET" => Token::Let,
             "PLAY_SFX" => Token::PlaySfx,
+            "DATA" => Token::Data,
+            "READ" => Token::Read,
+            "RESTORE" => Token::Restore,
             _ => Token::Identifier(ident),
         }
     }

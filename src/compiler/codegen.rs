@@ -1322,8 +1322,7 @@ impl CodeGenerator {
 
             // Generate code to evaluate expr and store to addr
             match dtype {
-                crate::compiler::ast::DataType::Word
-                | crate::compiler::ast::DataType::String => {
+                crate::compiler::ast::DataType::Word | crate::compiler::ast::DataType::String => {
                     match expr {
                         Expression::Integer(val) => {
                             let low = (val & 0xFF) as u8;

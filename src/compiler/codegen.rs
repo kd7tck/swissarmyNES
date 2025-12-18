@@ -682,6 +682,34 @@ impl CodeGenerator {
         self.output.push("  INC $05".to_string());
         self.output.push("Runtime_ReadByte_Done:".to_string());
         self.output.push("  RTS".to_string());
+
+        // Runtime_ReadString: Returns current DATA_PTR in A (Low), X (High), advances PTR past null
+        self.output.push("Runtime_ReadString:".to_string());
+        self.output.push("  LDA $04".to_string());
+        self.output.push("  LDX $05".to_string());
+        // Save Return Value
+        self.output.push("  PHA".to_string()); // Low
+        self.output.push("  TXA".to_string());
+        self.output.push("  PHA".to_string()); // High
+
+        // Advance PTR
+        self.output.push("  LDY #0".to_string());
+        self.output.push("Runtime_ReadString_Loop:".to_string());
+        self.output.push("  LDA ($04), Y".to_string());
+        self.output.push("  INC $04".to_string());
+        self.output
+            .push("  BNE Runtime_ReadString_NoWrap".to_string());
+        self.output.push("  INC $05".to_string());
+        self.output.push("Runtime_ReadString_NoWrap:".to_string());
+        self.output.push("  CMP #0".to_string());
+        self.output
+            .push("  BNE Runtime_ReadString_Loop".to_string());
+
+        // Restore Return Value
+        self.output.push("  PLA".to_string());
+        self.output.push("  TAX".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  RTS".to_string());
     }
 
     fn generate_string_data(&mut self) {
@@ -720,7 +748,7 @@ impl CodeGenerator {
                         Expression::StringLiteral(s) => {
                             let bytes: Vec<String> =
                                 s.bytes().map(|b| format!("${:02X}", b)).collect();
-                            self.output.push(format!("  db {}", bytes.join(", ")));
+                            self.output.push(format!("  db {}, $00", bytes.join(", ")));
                         }
                         Expression::UnaryOp(UnaryOperator::Negate, operand) => {
                             if let Expression::Integer(val) = **operand {
@@ -1413,11 +1441,11 @@ impl CodeGenerator {
                                     self.output.push(format!("  STA ${:04X}", addr + 1));
                                     // High
                                 }
-                                _ => {
-                                    return Err(format!(
-                                        "READ not supported for type {:?}",
-                                        sym.data_type
-                                    ))
+                                DataType::String => {
+                                    self.output.push("  JSR Runtime_ReadString".to_string());
+                                    self.output.push(format!("  STA ${:04X}", addr)); // Low
+                                    self.output.push(format!("  STX ${:04X}", addr + 1));
+                                    // High
                                 }
                             }
                         } else {

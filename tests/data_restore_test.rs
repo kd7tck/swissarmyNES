@@ -5,7 +5,8 @@ use swissarmynes::compiler::symbol_table::{SymbolKind, SymbolTable};
 #[test]
 fn test_data_restore_label() {
     let mut st = SymbolTable::new();
-    st.define("x".to_string(), DataType::Byte, SymbolKind::Variable).unwrap();
+    st.define("x".to_string(), DataType::Byte, SymbolKind::Variable)
+        .unwrap();
 
     let program = Program {
         declarations: vec![
@@ -13,7 +14,10 @@ fn test_data_restore_label() {
             // DATA 10, 20
             TopLevel::Data(None, vec![Expression::Integer(10), Expression::Integer(20)]),
             // MyData: DATA 30, 40
-            TopLevel::Data(Some("MyData".to_string()), vec![Expression::Integer(30), Expression::Integer(40)]),
+            TopLevel::Data(
+                Some("MyData".to_string()),
+                vec![Expression::Integer(30), Expression::Integer(40)],
+            ),
             TopLevel::Sub(
                 "Main".to_string(),
                 vec![],

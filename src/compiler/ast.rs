@@ -51,8 +51,8 @@ pub enum Statement {
     Print(Vec<Expression>),
     Asm(Vec<String>), // Raw assembly lines (if inside a SUB, though usually ASM is top-level too, but can be inline)
     Comment(String),
-    On(String, String),    // ON NMI DO RoutineName
-    Read(Vec<String>),     // READ var1, var2
+    On(String, String),      // ON NMI DO RoutineName
+    Read(Vec<String>),       // READ var1, var2
     Restore(Option<String>), // RESTORE [Label] (reset data pointer)
 }
 

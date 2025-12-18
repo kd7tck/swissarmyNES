@@ -155,18 +155,18 @@ impl Parser {
             // Look ahead: Identifier Colon DATA
             // We can't peek 2 tokens easily with `peek()`. We can use `tokens` directly or add `peek_next`.
             // But we can check if it's an Identifier, then if the NEXT is Colon.
-            if self.position + 1 < self.tokens.len() {
-                if self.tokens[self.position + 1] == Token::Colon {
-                    // It's a label candidate.
-                    // Check if token after Colon is DATA
-                    if self.position + 2 < self.tokens.len()
-                        && self.tokens[self.position + 2] == Token::Data
-                    {
-                        // Match! Identifier: DATA ...
-                        self.advance(); // consume Identifier
-                        self.advance(); // consume Colon
-                        data_label = Some(name);
-                    }
+            if self.position + 1 < self.tokens.len()
+                && self.tokens[self.position + 1] == Token::Colon
+            {
+                // It's a label candidate.
+                // Check if token after Colon is DATA
+                if self.position + 2 < self.tokens.len()
+                    && self.tokens[self.position + 2] == Token::Data
+                {
+                    // Match! Identifier: DATA ...
+                    self.advance(); // consume Identifier
+                    self.advance(); // consume Colon
+                    data_label = Some(name);
                 }
             }
         }

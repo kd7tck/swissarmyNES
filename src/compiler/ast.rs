@@ -51,9 +51,9 @@ pub enum Statement {
     Print(Vec<Expression>),
     Asm(Vec<String>), // Raw assembly lines (if inside a SUB, though usually ASM is top-level too, but can be inline)
     Comment(String),
-    On(String, String), // ON NMI DO RoutineName
-    Read(Vec<String>),  // READ var1, var2
-    Restore,            // RESTORE (reset data pointer)
+    On(String, String),      // ON NMI DO RoutineName
+    Read(Vec<String>),       // READ var1, var2
+    Restore(Option<String>), // RESTORE [Label] (reset data pointer)
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -63,7 +63,7 @@ pub enum TopLevel {
     Const(String, Expression),                            // Global Const
     Dim(String, DataType, Option<Expression>),            // Global Dim with optional initialization
     Asm(Vec<String>),                                     // Top-level ASM block
-    Data(Vec<Expression>),                                // DATA 1, 2, 3
+    Data(Option<String>, Vec<Expression>),                // [Label:] DATA 1, 2, 3
                                                           // We could allow generic statements at top level if we want a "script" mode,
                                                           // but strict separation is safer for a compiled language targeting NES.
 }

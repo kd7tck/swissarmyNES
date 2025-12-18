@@ -61,6 +61,8 @@ impl CodeGenerator {
         // Pass 4: Generate String Data
         self.generate_string_data();
 
+        self.generate_user_data(program)?;
+
         // Pass 5: Generate Data Tables (at $FF00)
         self.generate_data_tables(program)?;
 
@@ -180,6 +182,14 @@ impl CodeGenerator {
 
         // Initialize Sound Engine
         self.output.push("  JSR Sound_Init".to_string());
+
+        // Initialize Data Pointer ($04/$05) using Data Table
+        if let Some(addr) = self.data_table_offsets.get("USER_DATA_START") {
+            self.output.push(format!("  LDA ${:04X}", addr)); // Read Low byte from ROM table
+            self.output.push("  STA $04".to_string());
+            self.output.push(format!("  LDA ${:04X}", addr + 1)); // Read High byte from ROM table
+            self.output.push("  STA $05".to_string());
+        }
 
         // Initialize Interrupt Vectors in RAM
         // NMI @ $03FA, IRQ @ $03FC
@@ -661,6 +671,17 @@ impl CodeGenerator {
         self.output.push("  BNE Math_DivLoop".to_string());
         self.output.push("  LDA $02".to_string());
         self.output.push("  RTS".to_string());
+
+        // Runtime_ReadByte: Read byte from (DATA_PTR) -> A, increment PTR
+        // DATA_PTR is at $04/$05
+        self.output.push("Runtime_ReadByte:".to_string());
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($04), Y".to_string());
+        self.output.push("  INC $04".to_string());
+        self.output.push("  BNE Runtime_ReadByte_Done".to_string());
+        self.output.push("  INC $05".to_string());
+        self.output.push("Runtime_ReadByte_Done:".to_string());
+        self.output.push("  RTS".to_string());
     }
 
     fn generate_string_data(&mut self) {
@@ -675,6 +696,62 @@ impl CodeGenerator {
         self.output.push("".to_string());
     }
 
+    fn generate_user_data(&mut self, program: &Program) -> Result<(), String> {
+        self.output.push("".to_string());
+        self.output.push("; --- User Data ---".to_string());
+        self.output.push("USER_DATA_START:".to_string());
+
+        for decl in &program.declarations {
+            if let TopLevel::Data(exprs) = decl {
+                for expr in exprs {
+                    match expr {
+                        Expression::Integer(val) => {
+                            if (-128..=255).contains(val) {
+                                self.output
+                                    .push(format!("  db ${:02X}", (val & 0xFF) as u8));
+                            } else {
+                                // Word (Little Endian)
+                                let low = (val & 0xFF) as u8;
+                                let high = ((val >> 8) & 0xFF) as u8;
+                                self.output
+                                    .push(format!("  db ${:02X}, ${:02X}", low, high));
+                            }
+                        }
+                        Expression::StringLiteral(s) => {
+                            let bytes: Vec<String> =
+                                s.bytes().map(|b| format!("${:02X}", b)).collect();
+                            self.output.push(format!("  db {}", bytes.join(", ")));
+                        }
+                        Expression::UnaryOp(UnaryOperator::Negate, operand) => {
+                            if let Expression::Integer(val) = **operand {
+                                let neg_val = -val;
+                                if (-128..=255).contains(&neg_val) {
+                                    self.output
+                                        .push(format!("  db ${:02X}", (neg_val & 0xFF) as u8));
+                                } else {
+                                    let low = (neg_val & 0xFF) as u8;
+                                    let high = ((neg_val >> 8) & 0xFF) as u8;
+                                    self.output
+                                        .push(format!("  db ${:02X}, ${:02X}", low, high));
+                                }
+                            } else {
+                                return Err("DATA statement only supports integer/string literals"
+                                    .to_string());
+                            }
+                        }
+                        _ => {
+                            return Err(
+                                "DATA statement only supports integer/string literals".to_string()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        self.output.push("".to_string());
+        Ok(())
+    }
+
     fn generate_data_tables(&mut self, program: &Program) -> Result<(), String> {
         self.output.push("".to_string());
         self.output.push("; --- Data Tables ---".to_string());
@@ -685,6 +762,11 @@ impl CodeGenerator {
         // InitDefaultRTI
         self.output
             .push("InitDefaultRTI: WORD DefaultRTI".to_string()); // $FF00
+        current_addr += 2;
+
+        // InitUserData
+        self.output
+            .push("InitUserData: WORD USER_DATA_START".to_string());
         current_addr += 2;
 
         for decl in &program.declarations {
@@ -757,6 +839,11 @@ impl CodeGenerator {
         // Also prepare Data Table layout (ROM) starting at $FF00
         let mut data_table_addr = 0xFF00;
         // Reserve space for InitDefaultRTI
+        data_table_addr += 2;
+
+        // Reserve space for InitUserData
+        self.data_table_offsets
+            .insert("USER_DATA_START".to_string(), data_table_addr);
         data_table_addr += 2;
 
         for decl in &program.declarations {
@@ -886,6 +973,9 @@ impl CodeGenerator {
                 for line in lines {
                     self.output.push(format!("  {}", line));
                 }
+            }
+            TopLevel::Data(_) => {
+                // Handled in generate_user_data
             }
         }
         Ok(())
@@ -1306,6 +1396,45 @@ impl CodeGenerator {
                 // PlaySfx(id)
                 self.generate_expression(id_expr)?;
                 self.output.push("  JSR Sound_Play".to_string());
+            }
+            Statement::Read(vars) => {
+                for name in vars {
+                    if let Some(sym) = self.symbol_table.resolve(name) {
+                        if let Some(addr) = sym.address {
+                            match sym.data_type {
+                                DataType::Byte | DataType::Bool => {
+                                    self.output.push("  JSR Runtime_ReadByte".to_string());
+                                    self.output.push(format!("  STA ${:04X}", addr));
+                                }
+                                DataType::Word => {
+                                    self.output.push("  JSR Runtime_ReadByte".to_string());
+                                    self.output.push(format!("  STA ${:04X}", addr)); // Low
+                                    self.output.push("  JSR Runtime_ReadByte".to_string());
+                                    self.output.push(format!("  STA ${:04X}", addr + 1));
+                                    // High
+                                }
+                                _ => {
+                                    return Err(format!(
+                                        "READ not supported for type {:?}",
+                                        sym.data_type
+                                    ))
+                                }
+                            }
+                        } else {
+                            return Err(format!("Variable '{}' has no address", name));
+                        }
+                    } else {
+                        return Err(format!("Undefined variable '{}'", name));
+                    }
+                }
+            }
+            Statement::Restore => {
+                if let Some(addr) = self.data_table_offsets.get("USER_DATA_START") {
+                    self.output.push(format!("  LDA ${:04X}", addr));
+                    self.output.push("  STA $04".to_string());
+                    self.output.push(format!("  LDA ${:04X}", addr + 1));
+                    self.output.push("  STA $05".to_string());
+                }
             }
         }
         Ok(())

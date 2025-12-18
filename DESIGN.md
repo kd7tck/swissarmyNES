@@ -24,7 +24,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Update CodeGen to store string data in a dedicated RO-DATA segment.
 - **Completion Criteria:** Can declare `DIM name AS STRING = "Hello"` and compile without errors.
 
-## Phase 3: Data Tables (DATA/READ) (Current)
+## Phase 3: Data Tables (DATA/READ) (Completed)
 **Goal:** Allow users to define and access large lookup tables (sine waves, enemy stats) easily.
 - **Action Items:**
     - Implement `DATA` statement (stores bytes/words in sequence).
@@ -32,7 +32,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Implement `RESTORE` statement (resets read pointer).
 - **Completion Criteria:** A program can iterate through a `DATA` block and print values to memory.
 
-## Phase 4: Multi-File Projects
+## Phase 4: Multi-File Projects (Current)
 **Goal:** Support larger codebases by splitting code across multiple files.
 - **Action Items:**
     - Implement `INCLUDE "filename.swiss"` directive.

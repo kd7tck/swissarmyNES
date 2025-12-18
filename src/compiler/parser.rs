@@ -148,6 +148,22 @@ impl Parser {
             return Ok(TopLevel::Interrupt(name, body));
         }
 
+        if self.match_token(Token::Data) {
+            // DATA expr, expr, ...
+            let mut exprs = Vec::new();
+            loop {
+                // We allow expressions, but normally DATA contains constants (Integer/String)
+                // parse_expression will handle 1, -1, "String", etc.
+                exprs.push(self.parse_expression()?);
+                if !self.match_token(Token::Comma) {
+                    break;
+                }
+            }
+            // Optional newline
+            self.match_token(Token::Newline);
+            return Ok(TopLevel::Data(exprs));
+        }
+
         if self.match_token(Token::Asm) {
             // Top level ASM
             // Same logic as Statement::Asm essentially, but returns TopLevel::Asm
@@ -263,6 +279,25 @@ impl Parser {
                 }
             }
             return Ok(Statement::Print(args));
+        }
+        if self.match_token(Token::Read) {
+            // READ var, var, ...
+            let mut vars = Vec::new();
+            loop {
+                if let Token::Identifier(name) = self.advance().clone() {
+                    vars.push(name);
+                } else {
+                    return Err("Expected variable name after READ".to_string());
+                }
+                if !self.match_token(Token::Comma) {
+                    break;
+                }
+            }
+            return Ok(Statement::Read(vars));
+        }
+        if self.match_token(Token::Restore) {
+            // RESTORE [Label] - Optional label not supported yet
+            return Ok(Statement::Restore);
         }
         if self.match_token(Token::Asm) {
             let mut lines = Vec::new();

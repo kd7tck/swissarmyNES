@@ -50,11 +50,11 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 3 (Data Tables) is complete.
+Phase 3 (Data Tables) is complete (including String support).
 - **Implemented**: `DATA`, `READ`, `RESTORE` keywords and support.
 - **Details**:
-    - `DATA` statements emit bytes to a `USER_DATA_START` segment. Values -128..255 are 1 byte, others are 2 bytes (Little Endian).
-    - `READ` statement uses a runtime helper `Runtime_ReadByte` and a pointer stored at `$04`/`$05` (RAM).
+    - `DATA` statements emit bytes to a `USER_DATA_START` segment. Values -128..255 are 1 byte, others are 2 bytes (Little Endian). String literals are emitted with a null terminator.
+    - `READ` statement uses a runtime helper `Runtime_ReadByte` and `Runtime_ReadString` (advances past null terminator).
     - `RESTORE` resets the pointer to `USER_DATA_START`.
 - **Constraint**: `rs6502` limitation on `#<Label` applies to `USER_DATA_START` too. We solved this by adding `InitUserData` to the Data Table (Pass 5) and reading it during Startup (Pass 2).
 - **Next Steps**:
@@ -62,4 +62,3 @@ Phase 3 (Data Tables) is complete.
 - **Pitfalls**:
     - `TopLevel::Dim` signature changed to include `Option<Expression>`. Any new tests creating AST nodes manually must account for this.
     - `TopLevel::Data` is currently ignored in `analyze` (no type checking) and `allocate_memory` (no RAM used).
-    - `READ` into `String` variables is NOT supported yet (only Byte/Bool/Word).

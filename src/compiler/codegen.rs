@@ -408,32 +408,6 @@ impl CodeGenerator {
         self.output.push("  ASL".to_string());
         self.output.push("  TAX".to_string());
 
-        // Store Instrument in RAM for usage during playback?
-        // Actually, we can just set the Volume/Duty registers NOW if they are constant.
-        // But we need to re-apply them if they were changed by other effects.
-        // For "Simple Envelopes", we can store it in RAM.
-        // Let's allocate a byte for Instrument at $02E0+X?
-        // Currently:
-        // +0: Active
-        // +1: Timer
-        // +2: Ptr Low
-        // +3: Ptr High
-        // We have no space in the 4-byte struct.
-        // But wait, the previous code hardcoded LDA #$9F in PlayP1/PlayP2.
-        // We should instead load this instrument byte.
-        // Where to store it?
-        // We can just set it once at Start? No, if we have Volume Envelopes (software), we need to update it.
-        // But the requirement is "Simple square/triangle wave envelopes".
-        // If it's just setting the Hardware Envelope (Duty/Constant Vol), we can just set it now?
-        // But `Sound_Update` might overwrite it? No, `Sound_Update` only writes frequency registers mostly.
-        // EXCEPT `PlayP1`/`PlayP2` labels DO write to $4000/$4004.
-        // So we need to store the Instrument byte somewhere.
-        // Let's expand the channel struct or use another RAM area.
-        // Or... since we only have 3 channels, we can allocate 3 bytes at $02F0?
-        // $02E0 - $02EF is used (16 bytes). $02F0 is free?
-        // Let's use $02F0 + (Channel ID) to store Instrument.
-        // Channel ID is 0, 1, 2.
-
         // Store Instrument at $02F0 + ChannelID (using F2 as offset)
         self.output.push("  LDY $F2".to_string());
         self.output.push("  LDA $F3".to_string());
@@ -519,17 +493,6 @@ impl CodeGenerator {
         self.output.push("  CPX #$08".to_string());
         self.output.push("  BEQ SilenceTri".to_string());
         self.output.push("  JMP SndChEnd".to_string());
-
-        // Labels must be unique or reusable. Since they are inside a big string list,
-        // we can reuse them if we jump to them. But if we define them multiple times, the assembler will fail.
-        // Wait, the assembler will receive the output list concatenated.
-        // If we define "SilenceP1:" here, and jump to it from below, it's fine.
-        // BUT, if I define "SilenceP1:" AGAIN below (as I might have assumed in previous patch check), that is an error.
-        // In the previous patch, I did NOT redefine them, I just jumped to them.
-        // However, the reviewer said "destinations do not exist".
-        // Let's ensure they exist exactly once here.
-        // They are defined right here in this block.
-        // So jumping to them from subsequent blocks is fine (Forward/Backward jumps work in ASM).
 
         self.output.push("SilenceP1:".to_string());
         self.output.push("  LDA #$30".to_string());
@@ -730,7 +693,10 @@ impl CodeGenerator {
         self.output.push("USER_DATA_START:".to_string());
 
         for decl in &program.declarations {
-            if let TopLevel::Data(exprs) = decl {
+            if let TopLevel::Data(label, exprs) = decl {
+                if let Some(l) = label {
+                    self.output.push(format!("{}:", l));
+                }
                 for expr in exprs {
                     match expr {
                         Expression::Integer(val) => {
@@ -815,6 +781,12 @@ impl CodeGenerator {
             if let TopLevel::Sub(name, _, _) = decl {
                 self.output.push(format!("Ptr_{}: WORD {}", name, name));
                 self.data_table_offsets.insert(name.clone(), current_addr);
+                current_addr += 2;
+            }
+            // DATA Labels
+            if let TopLevel::Data(Some(label), _) = decl {
+                self.output.push(format!("Ptr_{}: WORD {}", label, label));
+                self.data_table_offsets.insert(label.clone(), current_addr);
                 current_addr += 2;
             }
         }
@@ -965,6 +937,12 @@ impl CodeGenerator {
                         .insert(name.clone(), data_table_addr);
                     data_table_addr += 2;
                 }
+                TopLevel::Data(Some(label), _) => {
+                    // Ptr_{label}
+                    self.data_table_offsets
+                        .insert(label.clone(), data_table_addr);
+                    data_table_addr += 2;
+                }
                 _ => {}
             }
         }
@@ -1002,7 +980,7 @@ impl CodeGenerator {
                     self.output.push(format!("  {}", line));
                 }
             }
-            TopLevel::Data(_) => {
+            TopLevel::Data(_, _) => {
                 // Handled in generate_user_data
             }
         }
@@ -1456,12 +1434,15 @@ impl CodeGenerator {
                     }
                 }
             }
-            Statement::Restore => {
-                if let Some(addr) = self.data_table_offsets.get("USER_DATA_START") {
+            Statement::Restore(label) => {
+                let target = label.as_deref().unwrap_or("USER_DATA_START");
+                if let Some(addr) = self.data_table_offsets.get(target) {
                     self.output.push(format!("  LDA ${:04X}", addr));
                     self.output.push("  STA $04".to_string());
                     self.output.push(format!("  LDA ${:04X}", addr + 1));
                     self.output.push("  STA $05".to_string());
+                } else {
+                    return Err(format!("Could not find data label '{}'", target));
                 }
             }
         }

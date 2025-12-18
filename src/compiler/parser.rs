@@ -148,7 +148,36 @@ impl Parser {
             return Ok(TopLevel::Interrupt(name, body));
         }
 
-        if self.match_token(Token::Data) {
+        // DATA can now be preceded by an optional label: Identifier: DATA ...
+        // Check for Label first
+        let mut data_label = None;
+        if let Token::Identifier(name) = self.peek().clone() {
+            // Look ahead: Identifier Colon DATA
+            // We can't peek 2 tokens easily with `peek()`. We can use `tokens` directly or add `peek_next`.
+            // But we can check if it's an Identifier, then if the NEXT is Colon.
+            if self.position + 1 < self.tokens.len() {
+                if self.tokens[self.position + 1] == Token::Colon {
+                    // It's a label candidate.
+                    // Check if token after Colon is DATA
+                    if self.position + 2 < self.tokens.len()
+                        && self.tokens[self.position + 2] == Token::Data
+                    {
+                        // Match! Identifier: DATA ...
+                        self.advance(); // consume Identifier
+                        self.advance(); // consume Colon
+                        data_label = Some(name);
+                    }
+                }
+            }
+        }
+
+        if data_label.is_some() || self.check(Token::Data) {
+            if data_label.is_some() {
+                // We already consumed identifier and colon
+            }
+            // Now we must match DATA
+            self.consume(Token::Data, "Expected DATA keyword")?;
+
             // DATA expr, expr, ...
             let mut exprs = Vec::new();
             loop {
@@ -161,7 +190,7 @@ impl Parser {
             }
             // Optional newline
             self.match_token(Token::Newline);
-            return Ok(TopLevel::Data(exprs));
+            return Ok(TopLevel::Data(data_label, exprs));
         }
 
         if self.match_token(Token::Asm) {
@@ -296,8 +325,13 @@ impl Parser {
             return Ok(Statement::Read(vars));
         }
         if self.match_token(Token::Restore) {
-            // RESTORE [Label] - Optional label not supported yet
-            return Ok(Statement::Restore);
+            // RESTORE [Label]
+            let mut label = None;
+            if let Token::Identifier(name) = self.peek().clone() {
+                self.advance();
+                label = Some(name);
+            }
+            return Ok(Statement::Restore(label));
         }
         if self.match_token(Token::Asm) {
             let mut lines = Vec::new();
@@ -953,6 +987,37 @@ END SUB
             assert_eq!(params[1].1, DataType::Word);
         } else {
             panic!("Expected Sub");
+        }
+    }
+
+    #[test]
+    fn test_parse_data_with_label() {
+        let input = "MyData: DATA 1, 2, 3";
+        let tokens = tokenize(input);
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse_program().expect("Failed to parse program");
+
+        if let TopLevel::Data(label, exprs) = &program.declarations[0] {
+            assert_eq!(*label, Some("MyData".to_string()));
+            assert_eq!(exprs.len(), 3);
+        } else {
+            panic!("Expected Data");
+        }
+    }
+
+    #[test]
+    fn test_parse_restore_label() {
+        let input = "RESTORE MyData";
+        let tokens = tokenize(input);
+        let mut parser = Parser::new(tokens);
+        let stmt = parser
+            .parse_statement()
+            .expect("Failed to parse RESTORE statement");
+
+        if let Statement::Restore(label) = stmt {
+            assert_eq!(label, Some("MyData".to_string()));
+        } else {
+            panic!("Expected Restore");
         }
     }
 }

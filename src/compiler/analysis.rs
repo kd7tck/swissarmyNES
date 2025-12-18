@@ -88,7 +88,7 @@ impl SemanticAnalyzer {
                     }
                 }
                 TopLevel::Asm(_) => {} // No symbols in ASM block visible to BASIC usually
-                TopLevel::Data(_) => {} // Data declarations
+                TopLevel::Data(_, _) => {} // Data declarations
             }
         }
 
@@ -278,7 +278,7 @@ impl SemanticAnalyzer {
                     }
                 }
             }
-            Statement::Restore => {}
+            Statement::Restore(_) => {}
         }
     }
 

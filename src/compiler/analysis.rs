@@ -89,6 +89,12 @@ impl SemanticAnalyzer {
                 }
                 TopLevel::Asm(_) => {} // No symbols in ASM block visible to BASIC usually
                 TopLevel::Data(_, _) => {} // Data declarations
+                TopLevel::Include(_) => {
+                    self.errors.push(
+                        "Unexpected INCLUDE directive during analysis (should have been resolved)"
+                            .to_string(),
+                    );
+                }
             }
         }
 

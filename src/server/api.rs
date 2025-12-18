@@ -5,6 +5,7 @@ use crate::compiler::{
     codegen::{CodeGenerator, NAMETABLE_ADDR},
     lexer::Lexer,
     parser::Parser,
+    preprocessor,
 };
 use crate::server::project::{self, ProjectAssets};
 use axum::{
@@ -14,17 +15,22 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use std::fs;
+use std::path::Path as StdPath;
 
 #[derive(Deserialize)]
 pub struct CompileRequest {
     source: String,
+    project_name: Option<String>,
     assets: Option<ProjectAssets>,
 }
 
 pub async fn compile(Json(payload): Json<CompileRequest>) -> impl IntoResponse {
     // Spawn a blocking task for the CPU-intensive compilation process
-    let result =
-        tokio::task::spawn_blocking(move || compile_source(&payload.source, payload.assets)).await;
+    let result = tokio::task::spawn_blocking(move || {
+        compile_source(&payload.source, payload.project_name, payload.assets)
+    })
+    .await;
 
     match result {
         Ok(compile_result) => match compile_result {
@@ -53,7 +59,11 @@ pub async fn compile(Json(payload): Json<CompileRequest>) -> impl IntoResponse {
     }
 }
 
-fn compile_source(source: &str, assets: Option<ProjectAssets>) -> Result<Vec<u8>, String> {
+fn compile_source(
+    source: &str,
+    project_name: Option<String>,
+    assets: Option<ProjectAssets>,
+) -> Result<Vec<u8>, String> {
     // 1. Lexing
     let mut lexer = Lexer::new(source);
     let tokens = lexer
@@ -65,6 +75,41 @@ fn compile_source(source: &str, assets: Option<ProjectAssets>) -> Result<Vec<u8>
     let program = parser
         .parse()
         .map_err(|e| format!("Parser Error: {:?}", e))?;
+
+    // 2b. Preprocessing (Includes)
+    let provider = |filename: &str| -> Result<String, String> {
+        // Security Check: Disallow paths to prevent traversal and enforce flat structure
+        if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
+            return Err(format!(
+                "Invalid filename '{}': Subdirectories and paths are not allowed.",
+                filename
+            ));
+        }
+
+        if let Some(name) = &project_name {
+            // Security Check: Validate project name
+            if !name
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+            {
+                return Err("Invalid project name".to_string());
+            }
+
+            let path = StdPath::new(project::PROJECTS_DIR)
+                .join(name)
+                .join(filename);
+            if path.exists() {
+                fs::read_to_string(path).map_err(|e| e.to_string())
+            } else {
+                Err(format!("File not found: {}", filename))
+            }
+        } else {
+            Err("Includes are only supported within a named project context".to_string())
+        }
+    };
+
+    let program = preprocessor::process_includes(program, &provider)
+        .map_err(|e| format!("Preprocessor Error: {}", e))?;
 
     // 3. Analysis
     let mut analyzer = SemanticAnalyzer::new();

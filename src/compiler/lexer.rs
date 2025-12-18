@@ -39,6 +39,7 @@ pub enum Token {
     Data,
     Read,
     Restore,
+    Include,
 
     // Identifiers
     Identifier(String),
@@ -268,6 +269,7 @@ impl<'a> Lexer<'a> {
             "DATA" => Token::Data,
             "READ" => Token::Read,
             "RESTORE" => Token::Restore,
+            "INCLUDE" => Token::Include,
             _ => Token::Identifier(ident),
         }
     }
@@ -411,7 +413,7 @@ mod tests {
 
     #[test]
     fn test_keywords() {
-        let input = "IF THEN ELSE END SUB WHILE WEND DO CONST DIM AS BYTE WORD BOOL PEEK POKE PRINT RETURN CALL AND OR NOT";
+        let input = "IF THEN ELSE END SUB WHILE WEND DO CONST DIM AS BYTE WORD BOOL PEEK POKE PRINT RETURN CALL AND OR NOT INCLUDE";
         let tokens = tokenize(input);
 
         let expected = vec![
@@ -437,6 +439,7 @@ mod tests {
             Token::And,
             Token::Or,
             Token::Not,
+            Token::Include,
             Token::EOF,
         ];
 

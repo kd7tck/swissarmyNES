@@ -5,4 +5,5 @@ pub mod audio;
 pub mod codegen;
 pub mod lexer;
 pub mod parser;
+pub mod preprocessor;
 pub mod symbol_table;

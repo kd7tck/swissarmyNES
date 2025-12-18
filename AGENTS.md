@@ -58,7 +58,9 @@ Phase 3 (Data Tables) is complete (including String support).
     - `RESTORE` resets the pointer to `USER_DATA_START`.
 - **Constraint**: `rs6502` limitation on `#<Label` applies to `USER_DATA_START` too. We solved this by adding `InitUserData` to the Data Table (Pass 5) and reading it during Startup (Pass 2).
 - **Next Steps**:
-    - Phase 4: Multi-File Projects (`INCLUDE` directive).
+    - Phase 4: Frontend support for Multi-File Projects. (Backend is complete: `INCLUDE` works, API accepts `project_name` to resolve files).
 - **Pitfalls**:
     - `TopLevel::Dim` signature changed to include `Option<Expression>`. Any new tests creating AST nodes manually must account for this.
+    - `TopLevel::Include` added. `preprocessor::process_includes` MUST be called before Analysis/Codegen.
+    - `CompileRequest` API now includes `project_name`.
     - `TopLevel::Data` is currently ignored in `analyze` (no type checking) and `allocate_memory` (no RAM used).

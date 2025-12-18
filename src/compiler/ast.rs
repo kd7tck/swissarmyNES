@@ -64,6 +64,7 @@ pub enum TopLevel {
     Dim(String, DataType, Option<Expression>),            // Global Dim with optional initialization
     Asm(Vec<String>),                                     // Top-level ASM block
     Data(Option<String>, Vec<Expression>),                // [Label:] DATA 1, 2, 3
+    Include(String),                                      // INCLUDE "filename"
                                                           // We could allow generic statements at top level if we want a "script" mode,
                                                           // but strict separation is safer for a compiled language targeting NES.
 }

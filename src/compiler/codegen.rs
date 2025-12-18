@@ -943,6 +943,9 @@ impl CodeGenerator {
                         .insert(label.clone(), data_table_addr);
                     data_table_addr += 2;
                 }
+                TopLevel::Include(_) => {
+                    return Err("Unexpected INCLUDE directive during allocation".to_string());
+                }
                 _ => {}
             }
         }
@@ -951,6 +954,9 @@ impl CodeGenerator {
 
     fn generate_top_level(&mut self, decl: &TopLevel) -> Result<(), String> {
         match decl {
+            TopLevel::Include(_) => {
+                return Err("Unexpected INCLUDE directive during generation".to_string());
+            }
             TopLevel::Sub(name, _params, body) => {
                 self.output.push(format!("{}:", name));
                 // Enter scope for parameters/locals

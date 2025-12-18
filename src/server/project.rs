@@ -59,7 +59,7 @@ pub struct Project {
     pub assets: Option<ProjectAssets>,
 }
 
-const PROJECTS_DIR: &str = "projects";
+pub const PROJECTS_DIR: &str = "projects";
 
 pub fn list_projects() -> Result<Vec<String>, String> {
     let path = Path::new(PROJECTS_DIR);

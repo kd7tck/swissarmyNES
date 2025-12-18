@@ -53,6 +53,18 @@ impl Parser {
     }
 
     fn parse_top_level(&mut self) -> Result<TopLevel, String> {
+        if self.match_token(Token::Include) {
+            // INCLUDE "filename"
+            let filename = if let Token::StringLiteral(s) = self.advance().clone() {
+                s
+            } else {
+                return Err("Expected string literal after INCLUDE".to_string());
+            };
+            // Optional newline
+            self.match_token(Token::Newline);
+            return Ok(TopLevel::Include(filename));
+        }
+
         if self.match_token(Token::Const) {
             // CONST Name = Value
             let name = if let Token::Identifier(n) = self.advance().clone() {
@@ -1018,6 +1030,20 @@ END SUB
             assert_eq!(label, Some("MyData".to_string()));
         } else {
             panic!("Expected Restore");
+        }
+    }
+
+    #[test]
+    fn test_parse_include() {
+        let input = "INCLUDE \"lib.swiss\"";
+        let tokens = tokenize(input);
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse_program().expect("Failed to parse program");
+
+        if let TopLevel::Include(filename) = &program.declarations[0] {
+            assert_eq!(filename, "lib.swiss");
+        } else {
+            panic!("Expected Include");
         }
     }
 }

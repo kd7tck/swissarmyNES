@@ -281,7 +281,10 @@ fn validate_filename(name: &str) -> Result<(), String> {
     if name.contains('/') || name.contains('\\') || name.contains("..") {
         return Err("Invalid filename: Paths not allowed".to_string());
     }
-    if !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+    if !name
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
+    {
         return Err("Invalid filename: Invalid characters".to_string());
     }
     Ok(())

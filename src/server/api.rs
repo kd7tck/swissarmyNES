@@ -214,9 +214,7 @@ pub struct FileContent {
     content: String,
 }
 
-pub async fn get_file(
-    Path((name, filename)): Path<(String, String)>,
-) -> impl IntoResponse {
+pub async fn get_file(Path((name, filename)): Path<(String, String)>) -> impl IntoResponse {
     match project::read_file(&name, &filename) {
         Ok(content) => (StatusCode::OK, content).into_response(),
         Err(e) => (StatusCode::NOT_FOUND, e).into_response(),
@@ -249,9 +247,7 @@ pub async fn create_file(
     }
 }
 
-pub async fn delete_file(
-    Path((name, filename)): Path<(String, String)>,
-) -> impl IntoResponse {
+pub async fn delete_file(Path((name, filename)): Path<(String, String)>) -> impl IntoResponse {
     match project::delete_file(&name, &filename) {
         Ok(_) => StatusCode::OK.into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),

@@ -50,7 +50,7 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 6 (Advanced Math) and Phase 7 (Switch/Case) are complete.
+Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are complete.
 
 ### Phase 6: Advanced Math
 - **Implemented**: `INT` type (8-bit signed), 16-bit Multiplication/Division (`Math_Mul16`, `Math_Div16`), and Signed Comparisons.
@@ -67,11 +67,20 @@ Phase 6 (Advanced Math) and Phase 7 (Switch/Case) are complete.
     - `src/compiler/codegen.rs`: Implemented `Statement::Select`. Pushes `Expression` to Stack, then peeks it for each `CASE` comparison.
     - 16-bit comparisons save `X` to `$01` before using `TSX` to preserve the high byte.
 
+### Phase 8: Structs
+- **Implemented**: `TYPE` definitions and dot-notation access.
+- **Details**:
+    - **AST**: `Statement::Let` now takes `Expression` as target to support `MemberAccess` (L-values). `Expression::MemberAccess` added.
+    - **Parser**: Parses `TYPE ... END TYPE` and `expr.member`. Dot has high precedence (Call).
+    - **Codegen**: Allocates memory based on sum of member sizes. Resolves member addresses statically relative to base variable.
+    - **Limitations**: Structs cannot be used in arithmetic or assigned directly (must assign members). Arrays of structs not yet implemented.
+
 - **Next Steps**:
-    - Phase 8: Structs (Records).
+    - Phase 9: Enums & Constants.
 
 - **Pitfalls**:
     - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value). Use `GOTO` out of the block if early exit is needed, or structure code to fall through.
     - Integer literals returning `Word` means `Byte + Literal` promotes to 16-bit addition. This is safer for overflow but slower.
     - `Math_Div16` is currently Unsigned. Signed division logic is not fully implemented (treated as Unsigned for now).
     - 16-bit Math helpers use ZP $06-$09. Ensure these don't conflict with future Interrupt usage or other scratchpads.
+    - `Statement::Let` change required updating all tests that manually constructed ASTs. Future AST changes should be mindful of this.

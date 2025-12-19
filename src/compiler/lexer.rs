@@ -13,7 +13,8 @@ pub enum Token {
     Interrupt,
     Asm,
     On,
-    As, // Added for DIM Name AS Type
+    Type, // TYPE StructName
+    As,   // Added for DIM Name AS Type
     Do,
     While,
     For,
@@ -67,6 +68,7 @@ pub enum Token {
     Comma,        // ,
     Colon,        // :
     SemiColon,    // ;
+    Dot,          // .
     Hash,         // #
 
     // Delimiters
@@ -159,6 +161,10 @@ impl<'a> Lexer<'a> {
                         self.input.next();
                         Token::SemiColon
                     }
+                    '.' => {
+                        self.input.next();
+                        Token::Dot
+                    }
                     '#' => {
                         self.input.next();
                         Token::Hash
@@ -246,6 +252,7 @@ impl<'a> Lexer<'a> {
             "INTERRUPT" => Token::Interrupt,
             "ASM" => Token::Asm,
             "ON" => Token::On,
+            "TYPE" => Token::Type,
             "AS" => Token::As,
             "DO" => Token::Do,
             "WHILE" => Token::While,

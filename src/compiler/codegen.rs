@@ -937,7 +937,24 @@ impl CodeGenerator {
                                 }
                             }
                         }
+                        crate::compiler::ast::DataType::Struct(struct_name) => {
+                            if let Some(sym) = self.symbol_table.resolve(struct_name) {
+                                if let Some(size) = sym.value {
+                                    self.ram_pointer += size as u16;
+                                } else {
+                                    return Err(format!(
+                                        "Struct '{}' has no size defined",
+                                        struct_name
+                                    ));
+                                }
+                            } else {
+                                return Err(format!("Undefined struct '{}'", struct_name));
+                            }
+                        }
                     }
+                }
+                TopLevel::TypeDecl(_, _) => {
+                    // Handled by Analysis
                 }
                 TopLevel::Sub(sub_name, params, _) => {
                     self.symbol_table.enter_scope(); // Enter Sub Scope
@@ -973,6 +990,17 @@ impl CodeGenerator {
                             crate::compiler::ast::DataType::Word
                             | crate::compiler::ast::DataType::String => {
                                 self.ram_pointer += 2;
+                            }
+                            crate::compiler::ast::DataType::Struct(name) => {
+                                if let Some(sym) = self.symbol_table.resolve(name) {
+                                    if let Some(size) = sym.value {
+                                        self.ram_pointer += size as u16;
+                                    } else {
+                                        return Err(format!("Struct '{}' has no size", name));
+                                    }
+                                } else {
+                                    return Err(format!("Undefined struct '{}'", name));
+                                }
                             }
                         }
                     }
@@ -1021,6 +1049,9 @@ impl CodeGenerator {
             TopLevel::Include(_) => {
                 return Err("Unexpected INCLUDE directive during generation".to_string());
             }
+            TopLevel::TypeDecl(_, _) => {
+                // Nothing to generate
+            }
             TopLevel::Sub(name, _params, body) => {
                 self.output.push(format!("{}:", name));
                 // Enter scope for parameters/locals
@@ -1066,111 +1097,69 @@ impl CodeGenerator {
 
     fn generate_statement(&mut self, stmt: &Statement) -> Result<(), String> {
         match stmt {
-            Statement::Let(name, expr) => {
-                if let Some(sym) = self.symbol_table.resolve(name) {
-                    if let Some(addr) = sym.address {
-                        match sym.data_type {
-                            crate::compiler::ast::DataType::Word => {
-                                // 16-bit assignment
-                                // Note: SwissBASIC supports rudimentary 16-bit assignment for addresses.
-                                // Complex 16-bit math is not fully implemented yet (expressions are 8-bit).
-                                // We handle direct assignment of Literals and other WORD variables here.
-                                match expr {
-                                    Expression::Integer(val) => {
-                                        // Valid 16-bit assignment
-                                        let low = (val & 0xFF) as u8;
-                                        let high = ((val >> 8) & 0xFF) as u8;
-                                        self.output.push(format!("  LDA #${:02X}", low));
-                                        self.output.push(format!("  STA ${:04X}", addr));
-                                        self.output.push(format!("  LDA #${:02X}", high));
-                                        self.output.push(format!("  STA ${:04X}", addr + 1));
-                                    }
-                                    Expression::Identifier(src_name) => {
-                                        // Copy from another variable
-                                        if let Some(src_sym) = self.symbol_table.resolve(src_name) {
-                                            if let Some(src_addr) = src_sym.address {
-                                                if src_sym.data_type
-                                                    == crate::compiler::ast::DataType::Word
-                                                {
-                                                    // Copy Word
-                                                    self.output
-                                                        .push(format!("  LDA ${:04X}", src_addr));
-                                                    self.output
-                                                        .push(format!("  STA ${:04X}", addr));
-                                                    self.output.push(format!(
-                                                        "  LDA ${:04X}",
-                                                        src_addr + 1
-                                                    ));
-                                                    self.output
-                                                        .push(format!("  STA ${:04X}", addr + 1));
-                                                } else {
-                                                    // Copy Byte to Word (High = 0)
-                                                    self.output
-                                                        .push(format!("  LDA ${:04X}", src_addr));
-                                                    self.output
-                                                        .push(format!("  STA ${:04X}", addr));
-                                                    self.output.push("  LDA #0".to_string());
-                                                    self.output
-                                                        .push(format!("  STA ${:04X}", addr + 1));
-                                                }
-                                            } else if src_sym.kind == SymbolKind::Constant {
-                                                if let Some(val) = src_sym.value {
-                                                    let low = (val & 0xFF) as u8;
-                                                    let high = ((val >> 8) & 0xFF) as u8;
-                                                    self.output
-                                                        .push(format!("  LDA #${:02X}", low));
-                                                    self.output
-                                                        .push(format!("  STA ${:04X}", addr));
-                                                    self.output
-                                                        .push(format!("  LDA #${:02X}", high));
-                                                    self.output
-                                                        .push(format!("  STA ${:04X}", addr + 1));
-                                                } else {
-                                                    return Err(format!(
-                                                        "Constant '{}' has no value assigned",
-                                                        src_name
-                                                    ));
-                                                }
-                                            } else {
-                                                return Err(format!(
-                                                    "Variable '{}' has no address",
-                                                    src_name
-                                                ));
-                                            }
+            Statement::Let(target, expr) => {
+                let addr = self.get_static_address(target)?;
+                let target_type = self
+                    .resolve_type(target)
+                    .ok_or_else(|| "Unknown target type".to_string())?;
+
+                match target_type {
+                    crate::compiler::ast::DataType::Word => {
+                        // 16-bit assignment
+                        match expr {
+                            Expression::Integer(val) => {
+                                let low = (val & 0xFF) as u8;
+                                let high = ((val >> 8) & 0xFF) as u8;
+                                self.output.push(format!("  LDA #${:02X}", low));
+                                self.output.push(format!("  STA ${:04X}", addr));
+                                self.output.push(format!("  LDA #${:02X}", high));
+                                self.output.push(format!("  STA ${:04X}", addr + 1));
+                            }
+                            Expression::Identifier(src_name) => {
+                                // Copy
+                                if let Some(src_sym) = self.symbol_table.resolve(src_name) {
+                                    if let Some(src_addr) = src_sym.address {
+                                        if src_sym.data_type == DataType::Word {
+                                            self.output.push(format!("  LDA ${:04X}", src_addr));
+                                            self.output.push(format!("  STA ${:04X}", addr));
+                                            self.output
+                                                .push(format!("  LDA ${:04X}", src_addr + 1));
+                                            self.output.push(format!("  STA ${:04X}", addr + 1));
                                         } else {
-                                            return Err(format!(
-                                                "Undefined variable '{}'",
-                                                src_name
-                                            ));
-                                        }
-                                    }
-                                    _ => {
-                                        // Eval expression (Check 8/16 bit)
-                                        let rtype = self.generate_expression(expr)?;
-                                        self.output.push(format!("  STA ${:04X}", addr));
-                                        if rtype == DataType::Word {
-                                            self.output.push(format!("  STX ${:04X}", addr + 1));
-                                        } else {
+                                            self.output.push(format!("  LDA ${:04X}", src_addr));
+                                            self.output.push(format!("  STA ${:04X}", addr));
                                             self.output.push("  LDA #0".to_string());
+                                            self.output.push(format!("  STA ${:04X}", addr + 1));
+                                        }
+                                    } else if src_sym.kind == SymbolKind::Constant {
+                                        if let Some(val) = src_sym.value {
+                                            let low = (val & 0xFF) as u8;
+                                            let high = ((val >> 8) & 0xFF) as u8;
+                                            self.output.push(format!("  LDA #${:02X}", low));
+                                            self.output.push(format!("  STA ${:04X}", addr));
+                                            self.output.push(format!("  LDA #${:02X}", high));
                                             self.output.push(format!("  STA ${:04X}", addr + 1));
                                         }
                                     }
                                 }
                             }
                             _ => {
-                                // Byte/Bool assignment
-                                self.generate_expression(expr)?;
-                                self.output.push(format!("  STA ${:04X} ; {}", addr, name));
+                                let rtype = self.generate_expression(expr)?;
+                                self.output.push(format!("  STA ${:04X}", addr));
+                                if rtype == DataType::Word {
+                                    self.output.push(format!("  STX ${:04X}", addr + 1));
+                                } else {
+                                    self.output.push("  LDA #0".to_string());
+                                    self.output.push(format!("  STA ${:04X}", addr + 1));
+                                }
                             }
                         }
-                    } else {
-                        return Err(format!(
-                            "Variable '{}' has no address assigned (Locals not supported yet)",
-                            name
-                        ));
                     }
-                } else {
-                    return Err(format!("Undefined variable '{}'", name));
+                    _ => {
+                        // Byte/Bool/Int
+                        self.generate_expression(expr)?;
+                        self.output.push(format!("  STA ${:04X}", addr));
+                    }
                 }
             }
             Statement::Asm(lines) => {
@@ -1316,7 +1305,10 @@ impl CodeGenerator {
 
                 // 1. Initialize Variable
                 // Let(var, start)
-                self.generate_statement(&Statement::Let(var_name.clone(), start_expr.clone()))?;
+                self.generate_statement(&Statement::Let(
+                    Expression::Identifier(var_name.clone()),
+                    start_expr.clone(),
+                ))?;
 
                 self.output.push(format!("{}:", loop_label));
 
@@ -1499,6 +1491,9 @@ impl CodeGenerator {
                                     self.output.push(format!("  STX ${:04X}", addr + 1));
                                     // High
                                 }
+                                DataType::Struct(_) => {
+                                    return Err(format!("Cannot READ into struct '{}'", name));
+                                }
                             }
                         } else {
                             return Err(format!("Variable '{}' has no address", name));
@@ -1534,6 +1529,9 @@ impl CodeGenerator {
                         self.output.push("  PHA".to_string()); // Low
                         self.output.push("  TXA".to_string());
                         self.output.push("  PHA".to_string()); // High
+                    }
+                    DataType::Struct(_) => {
+                        return Err("Cannot SELECT on struct".to_string());
                     }
                 }
 
@@ -1670,6 +1668,63 @@ impl CodeGenerator {
         Ok(())
     }
 
+    fn get_static_address(&self, expr: &Expression) -> Result<u16, String> {
+        match expr {
+            Expression::Identifier(name) => self
+                .symbol_table
+                .resolve(name)
+                .and_then(|s| s.address)
+                .ok_or_else(|| format!("Symbol '{}' has no address", name)),
+            Expression::MemberAccess(base, member) => {
+                let base_addr = self.get_static_address(base)?;
+                let base_type = self.resolve_type(base).ok_or("Unknown base type")?;
+
+                if let DataType::Struct(s_name) = base_type {
+                    if let Some(sym) = self.symbol_table.resolve(&s_name) {
+                        if let Some(members) = &sym.members {
+                            for (m_name, _, offset) in members {
+                                if m_name == member {
+                                    return Ok(base_addr + offset);
+                                }
+                            }
+                        }
+                    }
+                }
+                Err("Invalid member access or struct not found".to_string())
+            }
+            _ => Err("Expression is not a static LValue".to_string()),
+        }
+    }
+
+    fn resolve_type(&self, expr: &Expression) -> Option<DataType> {
+        match expr {
+            Expression::Identifier(name) => {
+                self.symbol_table.resolve(name).map(|s| s.data_type.clone())
+            }
+            Expression::MemberAccess(base, member) => {
+                let base_type = self.resolve_type(base)?;
+                if let DataType::Struct(struct_name) = base_type {
+                    if let Some(sym) = self.symbol_table.resolve(&struct_name) {
+                        if let Some(members) = &sym.members {
+                            for (m_name, m_type, _) in members {
+                                if m_name == member {
+                                    return Some(m_type.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            Expression::Integer(_) => Some(DataType::Word),
+            Expression::BinaryOp(_, _, _) => Some(DataType::Word), // Approximate
+            Expression::UnaryOp(_, _) => Some(DataType::Int),
+            Expression::FunctionCall(_, _) => Some(DataType::Word),
+            Expression::Peek(_) => Some(DataType::Byte),
+            _ => None,
+        }
+    }
+
     fn generate_address_expression(&mut self, expr: &Expression) -> Result<(), String> {
         // Evaluate expression and store result in $02 (Low) and $03 (High)
         match expr {
@@ -1788,6 +1843,9 @@ impl CodeGenerator {
                                 self.output.push(format!("{}:", done_lbl));
                                 Ok(DataType::Int)
                             }
+                            DataType::Struct(_) => {
+                                Err(format!("Cannot evaluate struct '{}' as expression", name))
+                            }
                             _ => {
                                 self.output.push(format!("  LDA ${:04X} ; {}", addr, name));
                                 self.output.push("  LDX #0".to_string());
@@ -1816,6 +1874,43 @@ impl CodeGenerator {
                     }
                 } else {
                     Err(format!("Undefined variable '{}'", name))
+                }
+            }
+            Expression::MemberAccess(base, member) => {
+                let addr = self
+                    .get_static_address(&Expression::MemberAccess(base.clone(), member.clone()))?;
+                let dtype = self
+                    .resolve_type(&Expression::MemberAccess(base.clone(), member.clone()))
+                    .ok_or("Unknown type")?;
+
+                match dtype {
+                    DataType::Word => {
+                        self.output.push(format!("  LDA ${:04X}", addr));
+                        self.output.push(format!("  LDX ${:04X}", addr + 1));
+                        Ok(DataType::Word)
+                    }
+                    DataType::Int => {
+                        self.output.push(format!("  LDA ${:04X}", addr));
+                        // Sign extend
+                        self.output.push("  CMP #$80".to_string());
+                        let pos_lbl = self.new_label();
+                        let done_lbl = self.new_label();
+                        self.output.push(format!("  BCC {}", pos_lbl));
+                        self.output.push("  LDX #$FF".to_string());
+                        self.output.push(format!("  JMP {}", done_lbl));
+                        self.output.push(format!("{}:", pos_lbl));
+                        self.output.push("  LDX #0".to_string());
+                        self.output.push(format!("{}:", done_lbl));
+                        Ok(DataType::Int)
+                    }
+                    DataType::Struct(_) => {
+                        Err("Cannot evaluate struct member as expression".to_string())
+                    }
+                    _ => {
+                        self.output.push(format!("  LDA ${:04X}", addr));
+                        self.output.push("  LDX #0".to_string());
+                        Ok(DataType::Byte)
+                    }
                 }
             }
             Expression::Peek(addr_expr) => {
@@ -1921,6 +2016,7 @@ impl CodeGenerator {
                         self.output.push("  TXA".to_string());
                         self.output.push("  PHA".to_string()); // High
                     }
+                    DataType::Struct(_) => return Err("Struct math not supported".to_string()),
                 }
 
                 let type_right = self.generate_expression(right)?;
@@ -1946,6 +2042,7 @@ impl CodeGenerator {
                             self.output.push("  STA $00".to_string()); // Low (A)
                             self.output.push("  STX $01".to_string()); // High (X)
                         }
+                        DataType::Struct(_) => return Err("Struct math not supported".to_string()),
                     }
 
                     match type_left {
@@ -1958,6 +2055,7 @@ impl CodeGenerator {
                             self.output.push("  TAX".to_string());
                             self.output.push("  PLA".to_string()); // Low
                         }
+                        DataType::Struct(_) => return Err("Struct math not supported".to_string()),
                     }
 
                     match op {
@@ -2275,9 +2373,12 @@ mod tests {
                     "Main".to_string(),
                     vec![],
                     vec![
-                        Statement::Let("x".to_string(), Expression::Integer(10)),
                         Statement::Let(
-                            "y".to_string(),
+                            Expression::Identifier("x".to_string()),
+                            Expression::Integer(10),
+                        ),
+                        Statement::Let(
+                            Expression::Identifier("y".to_string()),
                             Expression::BinaryOp(
                                 Box::new(Expression::Identifier("x".to_string())),
                                 BinaryOperator::Add,
@@ -2313,7 +2414,7 @@ mod tests {
                     "Main".to_string(),
                     vec![],
                     vec![Statement::Let(
-                        "z".to_string(),
+                        Expression::Identifier("z".to_string()),
                         Expression::BinaryOp(
                             Box::new(Expression::BinaryOp(
                                 Box::new(Expression::Integer(1)),

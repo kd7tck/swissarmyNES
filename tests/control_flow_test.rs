@@ -23,9 +23,12 @@ fn test_codegen_if_statement() {
                         BinaryOperator::Equal,
                         Box::new(Expression::Integer(10)),
                     ),
-                    vec![Statement::Let("x".to_string(), Expression::Integer(20))],
+                    vec![Statement::Let(
+                        Expression::Identifier("x".to_string()),
+                        Expression::Integer(20),
+                    )],
                     Some(vec![Statement::Let(
-                        "x".to_string(),
+                        Expression::Identifier("x".to_string()),
                         Expression::Integer(30),
                     )]),
                 )],
@@ -63,7 +66,7 @@ fn test_codegen_while_statement() {
                         Box::new(Expression::Integer(10)),
                     ),
                     vec![Statement::Let(
-                        "x".to_string(),
+                        Expression::Identifier("x".to_string()),
                         Expression::BinaryOp(
                             Box::new(Expression::Identifier("x".to_string())),
                             BinaryOperator::Add,
@@ -104,7 +107,7 @@ fn test_codegen_for_statement() {
                     Expression::Integer(10),
                     None,
                     vec![Statement::Let(
-                        "i".to_string(),
+                        Expression::Identifier("i".to_string()),
                         Expression::Identifier("i".to_string()),
                     )],
                 )],

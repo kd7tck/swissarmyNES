@@ -8,6 +8,7 @@ pub enum SymbolKind {
     Sub,      // SUB definition
     Param,    // SUB parameter
     Local,    // Local variable (implicit or explicit in FOR/LET)
+    Struct,   // Struct definition
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -16,8 +17,9 @@ pub struct Symbol {
     pub data_type: DataType,
     pub kind: SymbolKind,
     pub address: Option<u16>,
-    pub value: Option<i32>,            // Added for Constants
-    pub params: Option<Vec<DataType>>, // Added for Subroutines
+    pub value: Option<i32>,            // Constants / Struct Size
+    pub params: Option<Vec<DataType>>, // Subroutines
+    pub members: Option<Vec<(String, DataType, u16)>>, // Struct members: Name, Type, Offset
 }
 
 #[derive(Debug)]
@@ -64,6 +66,34 @@ impl SymbolTable {
         kind: SymbolKind,
         params: Option<Vec<DataType>>,
     ) -> Result<(), String> {
+        self.define_full(name, data_type, kind, params, None, None)
+    }
+
+    pub fn define_struct(
+        &mut self,
+        name: String,
+        members: Vec<(String, DataType, u16)>,
+        size: u16,
+    ) -> Result<(), String> {
+        self.define_full(
+            name.clone(),
+            DataType::Struct(name),
+            SymbolKind::Struct,
+            None,
+            Some(members),
+            Some(size as i32),
+        )
+    }
+
+    fn define_full(
+        &mut self,
+        name: String,
+        data_type: DataType,
+        kind: SymbolKind,
+        params: Option<Vec<DataType>>,
+        members: Option<Vec<(String, DataType, u16)>>,
+        value: Option<i32>,
+    ) -> Result<(), String> {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(&name) {
                 return Err(format!(
@@ -76,8 +106,9 @@ impl SymbolTable {
                 data_type,
                 kind,
                 address: None,
-                value: None,
+                value,
                 params,
+                members,
             };
             scope.insert(name, symbol);
             Ok(())

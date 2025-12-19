@@ -100,6 +100,43 @@ impl Parser {
             return Ok(TopLevel::Dim(name, data_type, init_expr));
         }
 
+        if self.match_token(Token::Type) {
+            // TYPE Name
+            //   Field AS Type
+            // END TYPE
+            let name = if let Token::Identifier(n) = self.advance().clone() {
+                n
+            } else {
+                return Err("Expected identifier after TYPE".to_string());
+            };
+            self.consume(Token::Newline, "Expected newline after TYPE name")?;
+
+            let mut members = Vec::new();
+            while !self.check(Token::End) && !self.is_at_end() {
+                // Skip empty lines
+                if self.match_token(Token::Newline) {
+                    continue;
+                }
+
+                let member_name = if let Token::Identifier(n) = self.advance().clone() {
+                    n
+                } else {
+                    return Err("Expected member name in TYPE definition".to_string());
+                };
+
+                self.consume(Token::As, "Expected AS after member name")?;
+                let member_type = self.parse_type()?;
+                members.push((member_name, member_type));
+
+                self.consume(Token::Newline, "Expected newline after member definition")?;
+            }
+
+            self.consume(Token::End, "Expected END TYPE")?;
+            self.consume(Token::Type, "Expected TYPE after END")?;
+
+            return Ok(TopLevel::TypeDecl(name, members));
+        }
+
         if self.match_token(Token::Sub) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
@@ -254,8 +291,12 @@ impl Parser {
         if self.match_token(Token::String) {
             return Ok(DataType::String);
         }
+        if let Token::Identifier(name) = self.peek().clone() {
+            self.advance();
+            return Ok(DataType::Struct(name));
+        }
         Err(format!(
-            "Expected type (BYTE, WORD, BOOL, STRING), found {:?}",
+            "Expected type (BYTE, WORD, BOOL, STRING, StructName), found {:?}",
             self.peek()
         ))
     }
@@ -265,14 +306,12 @@ impl Parser {
     fn parse_statement(&mut self) -> Result<Statement, String> {
         if self.match_token(Token::Let) {
             // Explicit Let
-            let name = if let Token::Identifier(n) = self.advance().clone() {
-                n
-            } else {
-                return Err("Expected identifier after LET".to_string());
-            };
+            // Parse target (LValue)
+            // Use Comparison precedence to stop before '='
+            let target = self.parse_precedence(Precedence::Comparison)?;
             self.consume(Token::Equal, "Expected '=' after variable name in LET")?;
             let expr = self.parse_expression()?;
-            return Ok(Statement::Let(name, expr));
+            return Ok(Statement::Let(target, expr));
         }
         if self.match_token(Token::If) {
             return self.parse_if();
@@ -430,38 +469,39 @@ impl Parser {
 
             return Ok(Statement::On(vector, routine));
         }
-        // Identifier start: Assignment or Label (not supported yet) or Implicit CALL (if we allowed it, but we don't seem to have implicit call syntax in AST?)
-        // AST has Let.
-        // If it's an identifier, check for =
-        if let Token::Identifier(name) = self.peek().clone() {
-            self.advance();
+        // Identifier start: Assignment, Implicit Let, or Call
+        if matches!(self.peek(), Token::Identifier(_)) {
+            // Parse potential target or call expression
+            // Use Comparison precedence to stop before '='
+            let expr = self.parse_precedence(Precedence::Comparison)?;
+
             if self.match_token(Token::Equal) {
-                let expr = self.parse_expression()?;
-                return Ok(Statement::Let(name, expr));
+                // It is an assignment
+                let val = self.parse_expression()?;
+                return Ok(Statement::Let(expr, val));
             }
-            // Fallback: If not assignment, maybe it is a bare function call?
-            // "SwissBASIC" example showed `WaitFrame()`.
-            // So if Identifier then LParen, it is a Call statement (implicit).
-            // But `Call` variant in Statement is `Call(String, Vec<Expression>)`.
-            if self.match_token(Token::LParen) {
-                let mut args = Vec::new();
-                if !self.check(Token::RParen) {
-                    loop {
-                        args.push(self.parse_expression()?);
-                        if !self.match_token(Token::Comma) {
-                            break;
-                        }
-                    }
-                }
-                self.consume(Token::RParen, "Expected ')' after arguments")?;
-                // We map this to Call statement
+
+            // Check if it is a call
+            if let Expression::FunctionCall(name, args) = expr {
                 return Ok(Statement::Call(name, args));
             }
 
+            // Allow standalone identifier as call? (e.g. WaitFrame)
+            // Ideally we require parens, but if it parsed as Identifier and not FunctionCall,
+            // it means no parens were found.
+            // If the user typed "WaitFrame", it is Expression::Identifier("WaitFrame").
+            // We can interpret this as "Call WaitFrame()" for convenience?
+            // Standard BASIC allows `GOSUB Label`. `Call Name` is explicit.
+            // Implicit `Name` usually implies SUB call in some dialects.
+            // Let's allow it if it's top-level statement.
+            if let Expression::Identifier(name) = expr {
+                // Treat as call with no args
+                return Ok(Statement::Call(name, vec![]));
+            }
+
             return Err(format!(
-                "Unexpected token after identifier {}: {:?}",
-                name,
-                self.peek()
+                "Unexpected expression in statement position: {:?}",
+                expr
             ));
         }
 
@@ -617,12 +657,24 @@ impl Parser {
 
         while precedence <= self.get_precedence(self.peek()) {
             let op = self.advance().clone();
-            let binary_op = self
-                .token_to_binary_op(&op)
-                .ok_or("Expected binary operator")?;
-            let next_precedence = self.get_next_precedence(&op);
-            let right = self.parse_precedence(next_precedence)?;
-            left = Expression::BinaryOp(Box::new(left), binary_op, Box::new(right));
+
+            if op == Token::Dot {
+                // Member Access: Left . Right
+                // Right must be Identifier
+                let member = if let Token::Identifier(n) = self.advance().clone() {
+                    n
+                } else {
+                    return Err("Expected member name after '.'".to_string());
+                };
+                left = Expression::MemberAccess(Box::new(left), member);
+            } else {
+                let binary_op = self
+                    .token_to_binary_op(&op)
+                    .ok_or("Expected binary operator")?;
+                let next_precedence = self.get_next_precedence(&op);
+                let right = self.parse_precedence(next_precedence)?;
+                left = Expression::BinaryOp(Box::new(left), binary_op, Box::new(right));
+            }
         }
 
         Ok(left)
@@ -694,6 +746,7 @@ impl Parser {
             }
             Token::Plus | Token::Minus => Precedence::Term,
             Token::Star | Token::Slash => Precedence::Factor,
+            Token::Dot => Precedence::Call,
             _ => Precedence::None,
         }
     }
@@ -896,8 +949,12 @@ mod tests {
             }
             // Check body
             assert_eq!(then_block.len(), 1);
-            if let Statement::Let(name, _val) = &then_block[0] {
-                assert_eq!(name, "y");
+            if let Statement::Let(target, _val) = &then_block[0] {
+                if let Expression::Identifier(name) = target {
+                    assert_eq!(name, "y");
+                } else {
+                    panic!("Expected Identifier target");
+                }
             } else {
                 panic!("Expected Let in THEN block");
             }
@@ -971,8 +1028,12 @@ END SUB
             assert_eq!(name, "Main");
             assert!(params.is_empty());
             assert_eq!(body.len(), 1);
-            if let Statement::Let(var, expr) = &body[0] {
-                assert_eq!(var, "x");
+            if let Statement::Let(target, expr) = &body[0] {
+                if let Expression::Identifier(var) = target {
+                    assert_eq!(var, "x");
+                } else {
+                    panic!("Expected Identifier target");
+                }
                 // Expression is Identifier(MyConst)
                 if let Expression::Identifier(idname) = expr {
                     assert_eq!(idname, "MyConst");

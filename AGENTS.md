@@ -50,51 +50,24 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are complete.
-
-### Phase 6: Advanced Math
-- **Implemented**: `INT` type (8-bit signed), 16-bit Multiplication/Division (`Math_Mul16`, `Math_Div16`), Signed Division (`Math_Div16_Signed`), Modulo (`MOD`), and Signed Comparisons.
-- **Details**:
-    - `src/compiler/codegen.rs`: `BinaryOp` now supports 16-bit Multiply/Divide/Modulo via helper routines.
-    - Comparisons (`<`, `>`, `<=`, `>=`) handle Signed logic (checking Overflow flag) if `INT` is involved.
-    - Integer Literals are promoted to `DataType::Word` (if positive) or `DataType::Int` (if negative) to ensure 16-bit math precision by default.
-    - `Math_Mul16` and `Math_Div16` operate on A/X and $00/$01, using ZP $06-$09 as scratchpad.
-    - `Math_Div16_Signed` handles signed division and modulo.
-    - `MOD` operator added to AST, Lexer, Parser.
-
-### Phase 7: Switch/Case
-- **Implemented**: `SELECT CASE` statement.
-- **Details**:
-    - `src/compiler/parser.rs`: Added `parse_select`.
-    - `src/compiler/codegen.rs`: Implemented `Statement::Select`. Pushes `Expression` to Stack, then peeks it for each `CASE` comparison.
-    - 16-bit comparisons save `X` to `$01` before using `TSX` to preserve the high byte.
-
-### Phase 8: Structs
-- **Implemented**: `TYPE` definitions and dot-notation access.
-- **Details**:
-    - **AST**: `Statement::Let` now takes `Expression` as target to support `MemberAccess` (L-values). `Expression::MemberAccess` added.
-    - **Parser**: Parses `TYPE ... END TYPE` and `expr.member`. Dot has high precedence (Call).
-    - **Codegen**: Allocates memory based on sum of member sizes. Resolves member addresses statically relative to base variable.
-    - **Limitations**: Structs cannot be used in arithmetic or assigned directly (must assign members). Arrays of structs not yet implemented.
+Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are complete. Phase Refinement (Strings & Math) is also largely complete.
 
 ### Phase Refinement: Arrays & Foundation & Strings
 - **Implemented**:
-    - **Logic & Math**: XOR operator, Unary Operators (`-`, `NOT`), 8-bit `AND`/`OR` fix, `ABS()`, `SGN()`.
+    - **Logic & Math**: XOR operator, Unary Operators (`-`, `NOT`), 8-bit `AND`/`OR` fix, `ABS()`, `SGN()`, Bitwise Shifts (`<<`, `>>`).
     - **Memory**: Robust `PEEK` (Static optimization & Dynamic support), `POKE` (Dynamic fix).
     - **Arrays**: 1D Arrays, `DIM x(N)`.
     - **Strings**: `READ` support, `LEN()`, `ASC()`, `VAL()`, `CHR()`, `STR()`, `LEFT()`, `RIGHT()`, `MID()`.
+    - **String Ops**: Concatenation (`+`), Comparison (`=`, `<>`).
 - **Details**:
     - **Boolean**: Standardized `True` to `$FF` (All ones) to support Bitwise `NOT` correctly.
     - **Codegen**:
-        - Implemented `BinaryOperator::Xor` (8/16-bit).
-        - Fixed `BinaryOperator` for 8-bit `And`/`Or`/`Divide` (was missing).
-        - Implemented `Expression::UnaryOp` (`Negate`, `Not`).
-        - Implemented `Expression::Peek` with constant address optimization.
-        - Updated `generate_address_expression` to handle dynamic address expressions (e.g., `POKE(base + 1, val)`).
-        - Added built-in `ABS`, `SGN`, `ASC`, `VAL`, `CHR`, `STR`, `LEFT`, `RIGHT`, `MID` logic.
+        - Implemented `BinaryOperator::ShiftLeft/ShiftRight` (8/16-bit).
+        - Implemented `Runtime_StringConcat` and `Runtime_StringCompare`.
+        - `BinaryOperator::Add` handles String concatenation.
+        - `BinaryOperator::Equal/NotEqual` handles String comparison.
         - **String Heap**: Circular buffer (4x16 bytes) at `$02A0` for dynamic string results.
-    - **Parser/AST**: Added `Xor` token and precedence.
-    - **Analysis**: Added new built-ins to allowlist.
+    - **Parser/AST**: Added `ShiftLeft`/`ShiftRight` tokens and precedence.
 
 - **Next Steps**:
     - Phase 9: Enums & Constants.
@@ -103,3 +76,4 @@ Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are comple
     - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value).
     - `True` is now `$FF` (was `1`). Check assumptions in assembly injections if they rely on `1`.
     - 16-bit Math helpers use ZP $06-$09.
+    - **String Concatenation Limit**: The circular string heap has 4 slots. Complex expressions generating more than 4 simultaneous temporary strings (e.g. `s = a + b + c + d + e`) may overwrite early slots, potentially corrupting data if not evaluated strictly. Simple concatenations are safe.

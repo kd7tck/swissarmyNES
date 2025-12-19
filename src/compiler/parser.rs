@@ -745,7 +745,7 @@ impl Parser {
                 Precedence::Comparison
             }
             Token::Plus | Token::Minus => Precedence::Term,
-            Token::Star | Token::Slash => Precedence::Factor,
+            Token::Star | Token::Slash | Token::Mod => Precedence::Factor,
             Token::Dot => Precedence::Call,
             _ => Precedence::None,
         }
@@ -783,6 +783,7 @@ impl Parser {
             Token::GreaterEqual => Some(BinaryOperator::GreaterThanOrEqual),
             Token::And => Some(BinaryOperator::And),
             Token::Or => Some(BinaryOperator::Or),
+            Token::Mod => Some(BinaryOperator::Modulo),
             _ => None,
         }
     }

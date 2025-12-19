@@ -53,12 +53,14 @@ This document serves as the primary instruction manual for AI agents working on 
 Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are complete.
 
 ### Phase 6: Advanced Math
-- **Implemented**: `INT` type (8-bit signed), 16-bit Multiplication/Division (`Math_Mul16`, `Math_Div16`), and Signed Comparisons.
+- **Implemented**: `INT` type (8-bit signed), 16-bit Multiplication/Division (`Math_Mul16`, `Math_Div16`), Signed Division (`Math_Div16_Signed`), Modulo (`MOD`), and Signed Comparisons.
 - **Details**:
-    - `src/compiler/codegen.rs`: `BinaryOp` now supports 16-bit Multiply/Divide via helper routines.
+    - `src/compiler/codegen.rs`: `BinaryOp` now supports 16-bit Multiply/Divide/Modulo via helper routines.
     - Comparisons (`<`, `>`, `<=`, `>=`) handle Signed logic (checking Overflow flag) if `INT` is involved.
     - Integer Literals are promoted to `DataType::Word` (if positive) or `DataType::Int` (if negative) to ensure 16-bit math precision by default.
     - `Math_Mul16` and `Math_Div16` operate on A/X and $00/$01, using ZP $06-$09 as scratchpad.
+    - `Math_Div16_Signed` handles signed division and modulo.
+    - `MOD` operator added to AST, Lexer, Parser.
 
 ### Phase 7: Switch/Case
 - **Implemented**: `SELECT CASE` statement.
@@ -81,6 +83,5 @@ Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are comple
 - **Pitfalls**:
     - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value). Use `GOTO` out of the block if early exit is needed, or structure code to fall through.
     - Integer literals returning `Word` means `Byte + Literal` promotes to 16-bit addition. This is safer for overflow but slower.
-    - `Math_Div16` is currently Unsigned. Signed division logic is not fully implemented (treated as Unsigned for now).
     - 16-bit Math helpers use ZP $06-$09. Ensure these don't conflict with future Interrupt usage or other scratchpads.
     - `Statement::Let` change required updating all tests that manually constructed ASTs. Future AST changes should be mindful of this.

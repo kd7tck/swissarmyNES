@@ -635,6 +635,68 @@ impl CodeGenerator {
         self.output.push("  LDA $02".to_string());
         self.output.push("  RTS".to_string());
 
+        // Math_Mul16: A/X * $00/$01 -> A/X
+        self.output.push("Math_Mul16:".to_string());
+        self.output.push("  STA $06".to_string());
+        self.output.push("  STX $07".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $08".to_string());
+        self.output.push("  STA $09".to_string());
+        self.output.push("  LDY #16".to_string());
+        self.output.push("Math_Mul16Loop:".to_string());
+        self.output.push("  ASL $08".to_string());
+        self.output.push("  ROL $09".to_string());
+        self.output.push("  ASL $06".to_string());
+        self.output.push("  ROL $07".to_string());
+        self.output.push("  BCC Math_Mul16NoAdd".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  LDA $08".to_string());
+        self.output.push("  ADC $00".to_string());
+        self.output.push("  STA $08".to_string());
+        self.output.push("  LDA $09".to_string());
+        self.output.push("  ADC $01".to_string());
+        self.output.push("  STA $09".to_string());
+        self.output.push("Math_Mul16NoAdd:".to_string());
+        self.output.push("  DEY".to_string());
+        self.output.push("  BNE Math_Mul16Loop".to_string());
+        self.output.push("  LDA $08".to_string());
+        self.output.push("  LDX $09".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Math_Div16: A/X / $00/$01 -> A/X (Quotient)
+        self.output.push("Math_Div16:".to_string());
+        self.output.push("  STA $06".to_string());
+        self.output.push("  STX $07".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $08".to_string());
+        self.output.push("  STA $09".to_string());
+        self.output.push("  LDY #16".to_string());
+        self.output.push("Math_Div16Loop:".to_string());
+        self.output.push("  ASL $06".to_string());
+        self.output.push("  ROL $07".to_string());
+        self.output.push("  ROL $08".to_string());
+        self.output.push("  ROL $09".to_string());
+        self.output.push("  SEC".to_string());
+        self.output.push("  LDA $08".to_string());
+        self.output.push("  SBC $00".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  LDA $09".to_string());
+        self.output.push("  SBC $01".to_string());
+        self.output.push("  BCC Math_Div16Skip".to_string());
+        self.output.push("  STA $09".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $08".to_string());
+        self.output.push("  INC $06".to_string());
+        self.output.push("  JMP Math_Div16Next".to_string());
+        self.output.push("Math_Div16Skip:".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("Math_Div16Next:".to_string());
+        self.output.push("  DEY".to_string());
+        self.output.push("  BNE Math_Div16Loop".to_string());
+        self.output.push("  LDA $06".to_string());
+        self.output.push("  LDX $07".to_string());
+        self.output.push("  RTS".to_string());
+
         // Runtime_ReadByte: Read byte from (DATA_PTR) -> A, increment PTR
         // DATA_PTR is at $04/$05
         self.output.push("Runtime_ReadByte:".to_string());
@@ -856,7 +918,8 @@ impl CodeGenerator {
 
                     match dtype {
                         crate::compiler::ast::DataType::Byte
-                        | crate::compiler::ast::DataType::Bool => {
+                        | crate::compiler::ast::DataType::Bool
+                        | crate::compiler::ast::DataType::Int => {
                             self.ram_pointer += 1;
                         }
                         crate::compiler::ast::DataType::Word => {
@@ -903,7 +966,8 @@ impl CodeGenerator {
 
                         match param_type {
                             crate::compiler::ast::DataType::Byte
-                            | crate::compiler::ast::DataType::Bool => {
+                            | crate::compiler::ast::DataType::Bool
+                            | crate::compiler::ast::DataType::Int => {
                                 self.ram_pointer += 1;
                             }
                             crate::compiler::ast::DataType::Word
@@ -1418,7 +1482,7 @@ impl CodeGenerator {
                     if let Some(sym) = self.symbol_table.resolve(name) {
                         if let Some(addr) = sym.address {
                             match sym.data_type {
-                                DataType::Byte | DataType::Bool => {
+                                DataType::Byte | DataType::Bool | DataType::Int => {
                                     self.output.push("  JSR Runtime_ReadByte".to_string());
                                     self.output.push(format!("  STA ${:04X}", addr));
                                 }
@@ -1598,12 +1662,17 @@ impl CodeGenerator {
         // For Word: Low in A, High in X.
         match expr {
             Expression::Integer(val) => {
-                if (-128..=255).contains(val) {
-                    let byte_val = (val & 0xFF) as u8;
-                    self.output.push(format!("  LDA #${:02X}", byte_val));
-                    self.output.push("  LDX #0".to_string()); // Clear High Byte
-                    Ok(DataType::Byte)
-                } else if (-32768..=65535).contains(val) {
+                if (-32768..=65535).contains(val) {
+                    let low = (val & 0xFF) as u8;
+                    let high = ((val >> 8) & 0xFF) as u8;
+                    self.output.push(format!("  LDA #${:02X}", low));
+                    self.output.push(format!("  LDX #${:02X}", high));
+                    if *val < 0 {
+                        Ok(DataType::Int)
+                    } else {
+                        Ok(DataType::Word)
+                    }
+                } else if false {
                     let low = (val & 0xFF) as u8;
                     let high = ((val >> 8) & 0xFF) as u8;
                     self.output.push(format!("  LDA #${:02X}", low));
@@ -1629,6 +1698,20 @@ impl CodeGenerator {
                                     name
                                 ));
                                 Ok(DataType::Word)
+                            }
+                            DataType::Int => {
+                                self.output.push(format!("  LDA ${:04X} ; {}", addr, name));
+                                // Sign extend to X
+                                self.output.push("  CMP #$80".to_string());
+                                let pos_lbl = self.new_label();
+                                let done_lbl = self.new_label();
+                                self.output.push(format!("  BCC {}", pos_lbl));
+                                self.output.push("  LDX #$FF".to_string());
+                                self.output.push(format!("  JMP {}", done_lbl));
+                                self.output.push(format!("{}:", pos_lbl));
+                                self.output.push("  LDX #0".to_string());
+                                self.output.push(format!("{}:", done_lbl));
+                                Ok(DataType::Int)
                             }
                             _ => {
                                 self.output.push(format!("  LDA ${:04X} ; {}", addr, name));
@@ -1755,31 +1838,34 @@ impl CodeGenerator {
                 }
             }
             Expression::BinaryOp(left, op, right) => {
-                // 1. Eval Left
                 let type_left = self.generate_expression(left)?;
-                // Push Left
                 match type_left {
                     DataType::Byte | DataType::Bool => self.output.push("  PHA".to_string()),
-                    DataType::Word | DataType::String => {
+                    DataType::Word | DataType::String | DataType::Int => {
                         self.output.push("  PHA".to_string()); // Low
                         self.output.push("  TXA".to_string());
                         self.output.push("  PHA".to_string()); // High
                     }
                 }
 
-                // 2. Eval Right
                 let type_right = self.generate_expression(right)?;
 
-                // Check for Word Promotion
-                let is_word_op = type_left == DataType::Word || type_right == DataType::Word;
+                let is_16bit_op = type_left == DataType::Word
+                    || type_right == DataType::Word
+                    || type_left == DataType::Int
+                    || type_right == DataType::Int;
+                let is_signed = type_left == DataType::Int || type_right == DataType::Int;
 
-                if is_word_op {
-                    // Store Right in Zero Page Temp ($00 Low, $01 High)
+                if is_16bit_op {
                     match type_right {
                         DataType::Byte | DataType::Bool => {
                             self.output.push("  STA $00".to_string());
                             self.output.push("  LDA #0".to_string());
                             self.output.push("  STA $01".to_string());
+                        }
+                        DataType::Int => {
+                            self.output.push("  STA $00".to_string());
+                            self.output.push("  STX $01".to_string());
                         }
                         DataType::Word | DataType::String => {
                             self.output.push("  STA $00".to_string()); // Low (A)
@@ -1787,30 +1873,32 @@ impl CodeGenerator {
                         }
                     }
 
-                    // Pop Left -> A (Low), X (High)
                     match type_left {
                         DataType::Byte | DataType::Bool => {
                             self.output.push("  PLA".to_string()); // Low
                             self.output.push("  LDX #0".to_string()); // High
                         }
-                        DataType::Word | DataType::String => {
+                        DataType::Word | DataType::String | DataType::Int => {
                             self.output.push("  PLA".to_string()); // High
                             self.output.push("  TAX".to_string());
                             self.output.push("  PLA".to_string()); // Low
                         }
                     }
 
-                    // Now Left is in A(Low)/X(High). Right is in $00/$01.
                     match op {
                         BinaryOperator::Add => {
                             self.output.push("  CLC".to_string());
                             self.output.push("  ADC $00".to_string());
-                            self.output.push("  PHA".to_string()); // Save Low
-                            self.output.push("  TXA".to_string()); // Get High
+                            self.output.push("  PHA".to_string());
+                            self.output.push("  TXA".to_string());
                             self.output.push("  ADC $01".to_string());
-                            self.output.push("  TAX".to_string()); // Result High in X
-                            self.output.push("  PLA".to_string()); // Result Low in A
-                            Ok(DataType::Word)
+                            self.output.push("  TAX".to_string());
+                            self.output.push("  PLA".to_string());
+                            if is_signed {
+                                Ok(DataType::Int)
+                            } else {
+                                Ok(DataType::Word)
+                            }
                         }
                         BinaryOperator::Subtract => {
                             self.output.push("  SEC".to_string());
@@ -1820,68 +1908,167 @@ impl CodeGenerator {
                             self.output.push("  SBC $01".to_string());
                             self.output.push("  TAX".to_string());
                             self.output.push("  PLA".to_string());
-                            Ok(DataType::Word)
+                            if is_signed {
+                                Ok(DataType::Int)
+                            } else {
+                                Ok(DataType::Word)
+                            }
+                        }
+                        BinaryOperator::Multiply => {
+                            self.output.push("  JSR Math_Mul16".to_string());
+                            if is_signed {
+                                Ok(DataType::Int)
+                            } else {
+                                Ok(DataType::Word)
+                            }
+                        }
+                        BinaryOperator::Divide => {
+                            self.output.push("  JSR Math_Div16".to_string());
+                            if is_signed {
+                                Ok(DataType::Int)
+                            } else {
+                                Ok(DataType::Word)
+                            }
+                        }
+                        BinaryOperator::And => {
+                            self.output.push("  AND $00".to_string());
+                            self.output.push("  PHA".to_string());
+                            self.output.push("  TXA".to_string());
+                            self.output.push("  AND $01".to_string());
+                            self.output.push("  TAX".to_string());
+                            self.output.push("  PLA".to_string());
+                            if is_signed {
+                                Ok(DataType::Int)
+                            } else {
+                                Ok(DataType::Word)
+                            }
+                        }
+                        BinaryOperator::Or => {
+                            self.output.push("  ORA $00".to_string());
+                            self.output.push("  PHA".to_string());
+                            self.output.push("  TXA".to_string());
+                            self.output.push("  ORA $01".to_string());
+                            self.output.push("  TAX".to_string());
+                            self.output.push("  PLA".to_string());
+                            if is_signed {
+                                Ok(DataType::Int)
+                            } else {
+                                Ok(DataType::Word)
+                            }
                         }
                         _ => {
-                            // Logic ops on 16-bit?
-                            // For Comparisons (<, >, =), result is Byte (Boolean).
-                            // For bitwise (AND, OR), result is Word.
+                            // Comparisons
+                            let true_lbl = self.new_label();
+                            let false_lbl = self.new_label();
+                            let end_lbl = self.new_label();
+
                             match op {
-                                BinaryOperator::Equal
-                                | BinaryOperator::NotEqual
-                                | BinaryOperator::LessThan
+                                BinaryOperator::Equal | BinaryOperator::NotEqual => {
+                                    self.output.push("  CPX $01".to_string());
+                                    self.output.push(format!("  BNE {}", false_lbl));
+                                    self.output.push("  CMP $00".to_string());
+                                    if matches!(op, BinaryOperator::Equal) {
+                                        self.output.push(format!("  BNE {}", false_lbl));
+                                    } else {
+                                        self.output.push(format!("  BEQ {}", false_lbl));
+                                    }
+                                    self.output.push(format!("  JMP {}", true_lbl));
+                                }
+                                BinaryOperator::LessThan
                                 | BinaryOperator::GreaterThan
                                 | BinaryOperator::LessThanOrEqual
                                 | BinaryOperator::GreaterThanOrEqual => {
-                                    // 16-bit Compare
-                                    // CMP High then CMP Low
-                                    // CMP M: A-M.
-                                    // High Byte: CPX $01
+                                    self.output.push("  SEC".to_string());
+                                    self.output.push("  SBC $00".to_string());
+                                    self.output.push("  PHA".to_string());
+                                    self.output.push("  TXA".to_string());
+                                    self.output.push("  SBC $01".to_string());
+                                    self.output.push("  TAX".to_string());
+                                    self.output.push("  PLA".to_string());
 
-                                    let true_lbl = self.new_label();
-                                    let false_lbl = self.new_label();
-                                    let end_lbl = self.new_label();
+                                    if is_signed {
+                                        let overflow_lbl = self.new_label();
+                                        match op {
+                                            BinaryOperator::LessThan => {
+                                                self.output.push(format!("  BVS {}", overflow_lbl));
+                                                self.output.push(format!("  BMI {}", true_lbl));
+                                                self.output.push(format!("  JMP {}", false_lbl));
+                                                self.output.push(format!("{}:", overflow_lbl));
+                                                self.output.push(format!("  BPL {}", true_lbl));
+                                                self.output.push(format!("  JMP {}", false_lbl));
+                                            }
+                                            BinaryOperator::GreaterThanOrEqual => {
+                                                self.output.push(format!("  BVS {}", overflow_lbl));
+                                                self.output.push(format!("  BPL {}", true_lbl));
+                                                self.output.push(format!("  JMP {}", false_lbl));
+                                                self.output.push(format!("{}:", overflow_lbl));
+                                                self.output.push(format!("  BMI {}", true_lbl));
+                                                self.output.push(format!("  JMP {}", false_lbl));
+                                            }
+                                            BinaryOperator::GreaterThan => {
+                                                self.output.push(format!("  BVS {}", overflow_lbl));
+                                                self.output.push(format!("  BMI {}", false_lbl));
+                                                self.output.push("  STX $01".to_string());
+                                                self.output.push("  ORA $01".to_string());
+                                                self.output.push(format!("  BEQ {}", false_lbl));
+                                                self.output.push(format!("  JMP {}", true_lbl));
 
-                                    // Compare High Bytes
-                                    self.output.push("  CPX $01".to_string());
-                                    self.output.push(format!("  BNE {}", false_lbl)); // If high bytes diff, result determined?
-                                                                                      // Wait, if high bytes diff, we need to know direction for < >.
-                                                                                      // If strict equal/not equal, BNE is enough.
+                                                self.output.push(format!("{}:", overflow_lbl));
+                                                self.output.push(format!("  BPL {}", false_lbl));
+                                                self.output.push(format!("  JMP {}", true_lbl));
+                                            }
+                                            BinaryOperator::LessThanOrEqual => {
+                                                self.output.push(format!("  BVS {}", overflow_lbl));
+                                                self.output.push(format!("  BMI {}", true_lbl));
+                                                self.output.push("  STX $01".to_string());
+                                                self.output.push("  ORA $01".to_string());
+                                                self.output.push(format!("  BEQ {}", true_lbl));
+                                                self.output.push(format!("  JMP {}", false_lbl));
 
-                                    // For now, let's implement simplified 16-bit comparison logic
-                                    // Compare High
-                                    // If Not Equal: Result is based on High comparison
-                                    // If Equal: Result is based on Low comparison
-
-                                    match op {
-                                        BinaryOperator::Equal => {
-                                            self.output.push(format!("  BNE {}", false_lbl));
-                                            self.output.push("  CMP $00".to_string()); // Compare Low
-                                            self.output.push(format!("  BNE {}", false_lbl));
-                                            // Equal
-                                            self.output.push(format!("{}:", true_lbl));
-                                            self.output.push("  LDA #1".to_string());
-                                            self.output.push(format!("  JMP {}", end_lbl));
-                                            self.output.push(format!("{}:", false_lbl));
-                                            self.output.push("  LDA #0".to_string());
-                                            self.output.push(format!("{}:", end_lbl));
+                                                self.output.push(format!("{}:", overflow_lbl));
+                                                self.output.push(format!("  BPL {}", true_lbl));
+                                                self.output.push(format!("  JMP {}", false_lbl));
+                                            }
+                                            _ => {}
                                         }
-                                        _ => {
-                                            // Fallback: Just support Add/Sub/Eq for now as per plan
-                                            self.output.push("  LDA #0".to_string());
-                                            // Not implemented
+                                    } else {
+                                        match op {
+                                            BinaryOperator::LessThan => {
+                                                self.output.push(format!("  BCC {}", true_lbl));
+                                                self.output.push(format!("  JMP {}", false_lbl));
+                                            }
+                                            BinaryOperator::GreaterThanOrEqual => {
+                                                self.output.push(format!("  BCS {}", true_lbl));
+                                                self.output.push(format!("  JMP {}", false_lbl));
+                                            }
+                                            BinaryOperator::GreaterThan => {
+                                                self.output.push(format!("  BCC {}", false_lbl));
+                                                self.output.push("  STX $01".to_string());
+                                                self.output.push("  ORA $01".to_string());
+                                                self.output.push(format!("  BNE {}", true_lbl));
+                                                self.output.push(format!("  JMP {}", false_lbl));
+                                            }
+                                            BinaryOperator::LessThanOrEqual => {
+                                                self.output.push(format!("  BCC {}", true_lbl));
+                                                self.output.push("  STX $01".to_string());
+                                                self.output.push("  ORA $01".to_string());
+                                                self.output.push(format!("  BEQ {}", true_lbl));
+                                                self.output.push(format!("  JMP {}", false_lbl));
+                                            }
+                                            _ => {}
                                         }
                                     }
-
-                                    self.output.push("  LDX #0".to_string());
-                                    Ok(DataType::Byte)
                                 }
-                                _ => {
-                                    self.output.push("  LDA #0".to_string());
-                                    self.output.push("  LDX #0".to_string());
-                                    Ok(DataType::Word)
-                                }
+                                _ => {}
                             }
+                            self.output.push(format!("{}:", false_lbl));
+                            self.output.push("  LDA #0".to_string());
+                            self.output.push(format!("  JMP {}", end_lbl));
+                            self.output.push(format!("{}:", true_lbl));
+                            self.output.push("  LDA #1".to_string());
+                            self.output.push(format!("{}:", end_lbl));
+                            self.output.push("  LDX #0".to_string());
+                            Ok(DataType::Bool)
                         }
                     }
                 } else {

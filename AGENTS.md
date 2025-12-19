@@ -50,17 +50,16 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 5 (16-bit Math Expansion) is complete.
-- **Implemented**: 16-bit addition/subtraction, `WORD` variable assignment updates, and `generate_expression` return type refactor.
+Phase 6 (Advanced Math) is complete.
+- **Implemented**: `INT` type (8-bit signed), 16-bit Multiplication/Division (`Math_Mul16`, `Math_Div16`), and Signed Comparisons.
 - **Details**:
-    - `src/compiler/codegen.rs`: `generate_expression` now returns `Result<DataType, String>`.
-    - 16-bit Integer literals are supported.
-    - 8-bit values are automatically zero-extended to 16-bit when operated with 16-bit values.
-    - Result of 8-bit operations ensures `X` register is 0.
+    - `src/compiler/codegen.rs`: `BinaryOp` now supports 16-bit Multiply/Divide via helper routines.
+    - Comparisons (`<`, `>`, `<=`, `>=`) handle Signed logic (checking Overflow flag) if `INT` is involved.
+    - Integer Literals are promoted to `DataType::Word` (if positive) or `DataType::Int` (if negative) to ensure 16-bit math precision by default.
+    - `Math_Mul16` and `Math_Div16` operate on A/X and $00/$01, using ZP $06-$09 as scratchpad.
 - **Next Steps**:
-    - Phase 6: Advanced Math (Mul/Div/Signed).
+    - Phase 7: Switch/Case Statement.
 - **Pitfalls**:
-    - `generate_expression` returning `DataType` means the caller must decide how to handle the result (e.g., if it's in A/X or just A).
-    - `LDX #0` is emitted frequently for safety; peephole optimization (Phase 41) will clean this up later.
-    - 16-bit comparisons are partially implemented; extensive testing for signed vs unsigned comparisons is needed in Phase 6.
-    - `TopLevel::Include` and `preprocessor` usage remains critical for multi-file projects.
+    - Integer literals returning `Word` means `Byte + Literal` promotes to 16-bit addition. This is safer for overflow but slower.
+    - `Math_Div16` is currently Unsigned. Signed division logic is not fully implemented (treated as Unsigned for now).
+    - 16-bit Math helpers use ZP $06-$09. Ensure these don't conflict with future Interrupt usage or other scratchpads.

@@ -339,6 +339,9 @@ impl Parser {
             }
             return Ok(Statement::Read(vars));
         }
+        if self.match_token(Token::Select) {
+            return self.parse_select();
+        }
         if self.match_token(Token::Restore) {
             // RESTORE [Label]
             let mut label = None;
@@ -481,7 +484,7 @@ impl Parser {
         let t = self.peek();
         matches!(
             t,
-            Token::End | Token::Else | Token::Wend | Token::Next | Token::Loop
+            Token::End | Token::Else | Token::Wend | Token::Next | Token::Loop | Token::Case
         )
     }
 
@@ -563,6 +566,44 @@ impl Parser {
         Ok(Statement::For(
             var_name, start_expr, end_expr, step_expr, body,
         ))
+    }
+
+    fn parse_select(&mut self) -> Result<Statement, String> {
+        self.consume(Token::Case, "Expected CASE after SELECT")?;
+        let expr = self.parse_expression()?;
+        self.consume(Token::Newline, "Expected newline after SELECT CASE <expr>")?;
+
+        let mut cases = Vec::new();
+        let mut case_else = None;
+
+        while !self.check(Token::End) && !self.is_at_end() {
+            if self.match_token(Token::Newline) {
+                continue;
+            }
+
+            if self.match_token(Token::Case) {
+                if self.match_token(Token::Else) {
+                    self.consume(Token::Newline, "Expected newline after CASE ELSE")?;
+                    let block = self.parse_block()?;
+                    case_else = Some(block);
+                } else {
+                    let val = self.parse_expression()?;
+                    self.consume(Token::Newline, "Expected newline after CASE <val>")?;
+                    let block = self.parse_block()?;
+                    cases.push((val, block));
+                }
+            } else {
+                return Err(format!(
+                    "Expected CASE or END SELECT, found {:?}",
+                    self.peek()
+                ));
+            }
+        }
+
+        self.consume(Token::End, "Expected END SELECT")?;
+        self.consume(Token::Select, "Expected SELECT after END")?;
+
+        Ok(Statement::Select(expr, cases, case_else))
     }
 
     // --- Expression Parsing ---

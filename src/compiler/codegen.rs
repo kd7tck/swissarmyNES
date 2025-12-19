@@ -1519,6 +1519,81 @@ impl CodeGenerator {
                     return Err(format!("Could not find data label '{}'", target));
                 }
             }
+            Statement::Select(expr, cases, case_else) => {
+                let end_select_label = self.new_label();
+
+                // 1. Evaluate Expression
+                let expr_type = self.generate_expression(expr)?;
+
+                // 2. Push to Stack
+                match expr_type {
+                    DataType::Byte | DataType::Bool => {
+                        self.output.push("  PHA".to_string());
+                    }
+                    DataType::Word | DataType::Int | DataType::String => {
+                        self.output.push("  PHA".to_string()); // Low
+                        self.output.push("  TXA".to_string());
+                        self.output.push("  PHA".to_string()); // High
+                    }
+                }
+
+                // 3. Generate Checks
+                for (case_val, case_body) in cases {
+                    let next_case = self.new_label();
+
+                    // Eval Case Value -> A/X
+                    self.generate_expression(case_val)?;
+
+                    // Compare (Stack vs A/X)
+                    self.output.push("  TSX".to_string());
+
+                    match expr_type {
+                        DataType::Byte | DataType::Bool => {
+                            // A has Case Val. Stack has Select Val at $0101,X
+                            self.output.push("  CMP $0101, X".to_string());
+                            self.output.push(format!("  BNE {}", next_case));
+                        }
+                        _ => {
+                            // A=Low, X=High of Case Val.
+                            // Stack: High at 101, Low at 102.
+                            // We must save X (High Byte) because TSX clobbers it.
+                            self.output.push("  STX $01".to_string()); // Save High
+                            self.output.push("  TSX".to_string());
+
+                            self.output.push("  CMP $0102, X".to_string()); // Compare Low
+                            self.output.push(format!("  BNE {}", next_case));
+
+                            self.output.push("  LDA $01".to_string()); // Restore High
+                            self.output.push("  CMP $0101, X".to_string()); // Compare High
+                            self.output.push(format!("  BNE {}", next_case));
+                        }
+                    }
+
+                    // If we are here, it matched.
+                    self.generate_block(case_body)?;
+                    self.output.push(format!("  JMP {}", end_select_label));
+
+                    self.output.push(format!("{}:", next_case));
+                }
+
+                // Else
+                if let Some(else_body) = case_else {
+                    self.generate_block(else_body)?;
+                }
+
+                self.output.push(format!("{}:", end_select_label));
+
+                // 4. Pop Stack
+                match expr_type {
+                    DataType::Byte | DataType::Bool => {
+                        self.output.push("  PLA".to_string());
+                    }
+                    _ => {
+                        self.output.push("  PLA".to_string());
+                        self.output.push("  PLA".to_string());
+                    }
+                }
+            }
         }
         Ok(())
     }

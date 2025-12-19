@@ -55,11 +55,11 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Update expression evaluator to handle signed comparisons.
 - **Completion Criteria:** `LET w = 200 * 50` compiles and runs correctly. `-5 < 10` evaluates to true.
 
-## Phase 7: Switch/Case Statement
+## Phase 7: Switch/Case Statement (Completed)
 **Goal:** cleaner state machine logic for game loops.
 - **Action Items:**
     - Add `SELECT CASE` / `CASE` / `END SELECT` to grammar.
-    - CodeGen: Compile to a series of `CMP` / `BEQ` jumps or a jump table if dense.
+    - CodeGen: Compile to a series of `CMP` / `BEQ` jumps.
 - **Completion Criteria:** Replaces nested `IF/ELSEIF` chains in a test program.
 
 ## Phase 8: Structs (Records)

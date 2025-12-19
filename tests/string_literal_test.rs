@@ -24,7 +24,7 @@ fn test_string_literal_in_call() {
                 "Main".to_string(),
                 vec![],
                 vec![Statement::Call(
-                    "Print".to_string(),
+                    Expression::Identifier("Print".to_string()),
                     vec![Expression::StringLiteral("Hello".to_string())],
                 )],
             ),

@@ -83,8 +83,10 @@ mod tests {
         // Should load #$07 and store to Low, load #$20 and store to High
         let found_assignment = asm_lines.iter().any(|line| line.contains("LDA #$07"))
             && asm_lines.iter().any(|line| line.contains("STA $0300"))
-            && asm_lines.iter().any(|line| line.contains("LDA #$20"))
-            && asm_lines.iter().any(|line| line.contains("STA $0301"));
+            && ((asm_lines.iter().any(|line| line.contains("LDA #$20"))
+                && asm_lines.iter().any(|line| line.contains("STA $0301")))
+                || (asm_lines.iter().any(|line| line.contains("LDX #$20"))
+                    && asm_lines.iter().any(|line| line.contains("STX $0301"))));
 
         assert!(
             found_assignment,

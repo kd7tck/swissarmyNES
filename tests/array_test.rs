@@ -1,0 +1,82 @@
+#[cfg(test)]
+mod tests {
+    use swissarmynes::compiler::analysis::SemanticAnalyzer;
+    use swissarmynes::compiler::codegen::CodeGenerator;
+    use swissarmynes::compiler::lexer::Lexer;
+    use swissarmynes::compiler::parser::Parser;
+
+    #[test]
+    fn test_array_declaration_and_access() {
+        let source = "
+            DIM arr(10) AS BYTE
+            DIM idx AS BYTE
+            DIM x AS BYTE
+
+            SUB Main()
+                arr(0) = 5
+                idx = 2
+                arr(idx) = 10
+
+                ' Read back
+                x = arr(0)
+                x = arr(idx)
+            END SUB
+        ";
+
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("Lexing failed");
+
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().expect("Parsing failed");
+
+        let mut analyzer = SemanticAnalyzer::new();
+        analyzer.analyze(&program).expect("Analysis failed");
+
+        let symbol_table = analyzer.symbol_table;
+        let mut codegen = CodeGenerator::new(symbol_table);
+        let asm_lines = codegen.generate(&program).expect("Codegen failed");
+        let asm_source = asm_lines.join("\n");
+
+        // Verify allocation
+        // arr @ $0300. Size 10. Next var idx @ $030A.
+        assert!(asm_lines.iter().any(|line| line.contains("arr @ $0300")));
+        assert!(asm_lines.iter().any(|line| line.contains("idx @ $030A"))); // 300 + 10 = 30A
+
+        // Verify assignment arr(0) = 5
+        // Should calculate address $0300 + 0 = $0300.
+        // STA ($02),Y or similar.
+        // Or constant optimization if implemented (I didn't implement const array access optimization yet).
+        // It uses `generate_array_address`.
+        // Base=$0300. Index=0. Addr=$0300.
+        // STA ($02), Y
+        // Look for STA ($02),Y
+        assert!(asm_lines.iter().any(|line| line.contains("STA ($02),Y")));
+    }
+
+    #[test]
+    fn test_word_array() {
+        let source = "
+            DIM warr(5) AS WORD
+            DIM val AS WORD
+            SUB Main()
+                warr(1) = 1000
+                val = warr(1)
+            END SUB
+        ";
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("Lexing failed");
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().expect("Parsing failed");
+        let mut analyzer = SemanticAnalyzer::new();
+        analyzer.analyze(&program).expect("Analysis failed");
+        let symbol_table = analyzer.symbol_table;
+        let mut codegen = CodeGenerator::new(symbol_table);
+        let asm_lines = codegen.generate(&program).expect("Codegen failed");
+
+        // Size 5 * 2 = 10 bytes.
+        // Assignment 1000 ($03E8).
+        // Word assignment logic involves storing Low and High.
+        // Look for INY
+        assert!(asm_lines.iter().any(|line| line.contains("INY")));
+    }
+}

@@ -12,6 +12,7 @@ pub struct Parser {
 enum Precedence {
     None,
     Or,         // OR
+    Xor,        // XOR
     And,        // AND
     Equality,   // = <>
     Comparison, // < > <= >=
@@ -665,6 +666,7 @@ impl Parser {
     fn get_precedence(&self, token: &Token) -> Precedence {
         match token {
             Token::Or => Precedence::Or,
+            Token::Xor => Precedence::Xor,
             Token::And => Precedence::And,
             Token::Equal | Token::NotEqual => Precedence::Equality,
             Token::Less | Token::Greater | Token::LessEqual | Token::GreaterEqual => {
@@ -681,7 +683,8 @@ impl Parser {
     fn get_next_precedence(&self, token: &Token) -> Precedence {
         let p = self.get_precedence(token);
         match p {
-            Precedence::Or => Precedence::And,
+            Precedence::Or => Precedence::Xor,
+            Precedence::Xor => Precedence::And,
             Precedence::And => Precedence::Equality,
             Precedence::Equality => Precedence::Comparison,
             Precedence::Comparison => Precedence::Term,
@@ -708,6 +711,7 @@ impl Parser {
             Token::GreaterEqual => Some(BinaryOperator::GreaterThanOrEqual),
             Token::And => Some(BinaryOperator::And),
             Token::Or => Some(BinaryOperator::Or),
+            Token::Xor => Some(BinaryOperator::Xor),
             Token::Mod => Some(BinaryOperator::Modulo),
             _ => None,
         }

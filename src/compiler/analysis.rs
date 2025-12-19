@@ -353,6 +353,20 @@ impl SemanticAnalyzer {
                             }
                         }
                         return;
+                    } else if name.eq_ignore_ascii_case("ABS") {
+                        if args.len() != 1 {
+                            self.errors.push("ABS expects 1 argument".to_string());
+                        } else {
+                            self.analyze_expression(&args[0]);
+                        }
+                        return;
+                    } else if name.eq_ignore_ascii_case("SGN") {
+                        if args.len() != 1 {
+                            self.errors.push("SGN expects 1 argument".to_string());
+                        } else {
+                            self.analyze_expression(&args[0]);
+                        }
+                        return;
                     }
                 }
 
@@ -423,11 +437,18 @@ impl SemanticAnalyzer {
             Expression::Identifier(name) => {
                 self.symbol_table.resolve(name).map(|s| s.data_type.clone())
             }
-            Expression::Call(callee, _) => {
+            Expression::Call(callee, args) => {
                 // Built-ins
                 if let Expression::Identifier(name) = &**callee {
                     if name.eq_ignore_ascii_case("LEN") {
                         return Some(DataType::Word);
+                    } else if name.eq_ignore_ascii_case("ABS") {
+                        if let Some(arg_type) = args.first().and_then(|a| self.resolve_type(a)) {
+                            return Some(arg_type);
+                        }
+                        return Some(DataType::Int);
+                    } else if name.eq_ignore_ascii_case("SGN") {
+                        return Some(DataType::Int);
                     }
                 }
 

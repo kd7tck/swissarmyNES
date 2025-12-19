@@ -5,7 +5,7 @@ pub enum Expression {
     Identifier(String),
     BinaryOp(Box<Expression>, BinaryOperator, Box<Expression>),
     UnaryOp(UnaryOperator, Box<Expression>),
-    FunctionCall(String, Vec<Expression>),
+    Call(Box<Expression>, Vec<Expression>), // Replaces FunctionCall. Covers Funcs and Arrays.
     Peek(Box<Expression>),
     MemberAccess(Box<Expression>, String), // structure.member
 }
@@ -47,15 +47,15 @@ pub enum Statement {
         Vec<Statement>,
     ), // var, start, end, step, body
     Return(Option<Expression>),
-    Call(String, Vec<Expression>), // CALL SubName(args)
-    Poke(Expression, Expression),  // address, value
-    PlaySfx(Expression),           // sfx_id
+    Call(Expression, Vec<Expression>), // CALL Expr(args). Usually Expr is Identifier.
+    Poke(Expression, Expression),      // address, value
+    PlaySfx(Expression),               // sfx_id
     Print(Vec<Expression>),
-    Asm(Vec<String>), // Raw assembly lines (if inside a SUB, though usually ASM is top-level too, but can be inline)
+    Asm(Vec<String>), // Raw assembly lines
     Comment(String),
     On(String, String),      // ON NMI DO RoutineName
     Read(Vec<String>),       // READ var1, var2
-    Restore(Option<String>), // RESTORE [Label] (reset data pointer)
+    Restore(Option<String>), // RESTORE [Label]
     Select(
         Expression,
         Vec<(Expression, Vec<Statement>)>,
@@ -73,8 +73,6 @@ pub enum TopLevel {
     Asm(Vec<String>),                                     // Top-level ASM block
     Data(Option<String>, Vec<Expression>),                // [Label:] DATA 1, 2, 3
     Include(String),                                      // INCLUDE "filename"
-                                                          // We could allow generic statements at top level if we want a "script" mode,
-                                                          // but strict separation is safer for a compiled language targeting NES.
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -85,6 +83,7 @@ pub enum DataType {
     Bool,
     String,
     Struct(String),
+    Array(Box<DataType>, usize), // Array of Type, Size
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -114,22 +113,16 @@ mod tests {
     }
 
     #[test]
-    fn test_toplevel_creation() {
-        let sub = TopLevel::Sub(
-            "Main".to_string(),
-            vec![],
-            vec![Statement::Let(
-                Expression::Identifier("x".to_string()),
-                Expression::Integer(1),
-            )],
+    fn test_call_creation() {
+        let expr = Expression::Call(
+            Box::new(Expression::Identifier("MyFunc".to_string())),
+            vec![Expression::Integer(1)],
         );
-
-        if let TopLevel::Sub(name, params, body) = sub {
-            assert_eq!(name, "Main");
-            assert_eq!(params.len(), 0);
-            assert_eq!(body.len(), 1);
+        if let Expression::Call(target, args) = expr {
+            assert_eq!(*target, Expression::Identifier("MyFunc".to_string()));
+            assert_eq!(args.len(), 1);
         } else {
-            panic!("Expected Sub");
+            panic!("Expected Call");
         }
     }
 }

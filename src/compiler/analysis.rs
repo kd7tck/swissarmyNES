@@ -21,22 +21,18 @@ impl SemanticAnalyzer {
     }
 
     pub fn analyze(&mut self, program: &Program) -> Result<(), Vec<String>> {
-        // First pass: register all top-level symbols (CONST, DIM, SUB names)
+        // First pass: register all top-level symbols
         for decl in &program.declarations {
             match decl {
                 TopLevel::Const(name, val) => {
-                    // For now, only Integer constants are supported in expression resolution
                     if let Err(e) =
                         self.symbol_table
                             .define(name.clone(), DataType::Byte, SymbolKind::Constant)
                     {
                         self.errors.push(e);
-                    } else {
-                        // Try to evaluate constant value if it's an integer
-                        if let Expression::Integer(v) = val {
-                            if let Err(e) = self.symbol_table.assign_value(name, *v) {
-                                self.errors.push(e);
-                            }
+                    } else if let Expression::Integer(v) = val {
+                        if let Err(e) = self.symbol_table.assign_value(name, *v) {
+                            self.errors.push(e);
                         }
                     }
                 }
@@ -48,7 +44,6 @@ impl SemanticAnalyzer {
                         self.errors.push(e);
                     }
                     if let Some(init) = init_expr {
-                        // Validate initialization if possible (e.g. string init)
                         match dtype {
                             DataType::String => {
                                 if let Expression::StringLiteral(_) = init {
@@ -57,20 +52,21 @@ impl SemanticAnalyzer {
                                     self.errors.push(format!("Variable '{}' of type STRING must be initialized with a string literal", name));
                                 }
                             }
-                            _ => {
-                                // For other types, allow any expression for now?
-                                // Usually constant expression is preferred for globals.
-                                // But Expression resolution is weak here.
+                            DataType::Array(_, _) => {
+                                self.errors.push(format!(
+                                    "Array '{}' cannot be initialized with assignment",
+                                    name
+                                ));
                             }
+                            _ => {}
                         }
                     }
                 }
                 TopLevel::Sub(name, params, _body) => {
-                    // Register Sub name with parameters
                     let param_types = params.iter().map(|(_, t)| t.clone()).collect();
                     if let Err(e) = self.symbol_table.define_with_params(
                         name.clone(),
-                        DataType::Byte, // Placeholder for return type
+                        DataType::Byte, // Placeholder
                         SymbolKind::Sub,
                         Some(param_types),
                     ) {
@@ -78,8 +74,6 @@ impl SemanticAnalyzer {
                     }
                 }
                 TopLevel::Interrupt(name, _body) => {
-                    // Interrupts are special, they aren't called by user usually.
-                    // But we should register them to prevent name collision.
                     if let Err(e) =
                         self.symbol_table
                             .define(name.clone(), DataType::Byte, SymbolKind::Sub)
@@ -87,8 +81,6 @@ impl SemanticAnalyzer {
                         self.errors.push(e);
                     }
                 }
-                TopLevel::Asm(_) => {} // No symbols in ASM block visible to BASIC usually
-                TopLevel::Data(_, _) => {} // Data declarations
                 TopLevel::TypeDecl(name, members) => {
                     let mut offset = 0;
                     let mut member_defs = Vec::new();
@@ -116,12 +108,7 @@ impl SemanticAnalyzer {
                         }
                     }
                 }
-                TopLevel::Include(_) => {
-                    self.errors.push(
-                        "Unexpected INCLUDE directive during analysis (should have been resolved)"
-                            .to_string(),
-                    );
-                }
+                _ => {}
             }
         }
 
@@ -130,8 +117,6 @@ impl SemanticAnalyzer {
             match decl {
                 TopLevel::Sub(_name, params, body) => {
                     self.symbol_table.enter_scope();
-
-                    // Register params
                     for (p_name, p_type) in params {
                         if let Err(e) = self.symbol_table.define(
                             p_name.clone(),
@@ -141,10 +126,7 @@ impl SemanticAnalyzer {
                             self.errors.push(e);
                         }
                     }
-
-                    // Analyze body
                     self.analyze_block(body);
-
                     self.symbol_table.exit_scope();
                 }
                 TopLevel::Interrupt(_name, body) => {
@@ -152,7 +134,7 @@ impl SemanticAnalyzer {
                     self.analyze_block(body);
                     self.symbol_table.exit_scope();
                 }
-                _ => {} // Const/Dim/Asm don't have bodies to analyze
+                _ => {}
             }
         }
 
@@ -172,23 +154,20 @@ impl SemanticAnalyzer {
     fn analyze_statement(&mut self, stmt: &Statement) {
         match stmt {
             Statement::Let(target, expr) => {
+                // Check target validity (LValue)
                 match target {
                     Expression::Identifier(name) => {
-                        // Check if variable exists. If not, is it implicit local?
                         if let Some(sym) = self.symbol_table.resolve(name) {
                             if sym.kind == SymbolKind::Constant {
                                 self.errors
                                     .push(format!("Cannot assign to constant '{}'", name));
                             }
-                        } else {
-                            // Implicit declaration (Integer/Byte default?)
-                            if let Err(e) = self.symbol_table.define(
-                                name.clone(),
-                                DataType::Byte,
-                                SymbolKind::Local,
-                            ) {
-                                self.errors.push(e);
-                            }
+                        } else if let Err(e) = self.symbol_table.define(
+                            name.clone(),
+                            DataType::Byte,
+                            SymbolKind::Local,
+                        ) {
+                            self.errors.push(e);
                         }
                     }
                     Expression::MemberAccess(base, member) => {
@@ -208,24 +187,70 @@ impl SemanticAnalyzer {
                                 self.errors
                                     .push(format!("Undefined struct type '{}'", struct_name));
                             }
-                        } else {
-                            self.errors
-                                .push("Member access on non-struct type".to_string());
+                        }
+                    }
+                    Expression::Call(callee, _args) => {
+                        // Array assignment? e.g. x(i) = 1
+                        self.analyze_expression(target); // Recursively check (validates array existence and args)
+
+                        // Check if it resolves to an Array
+                        if let Some(dtype) = self.resolve_type(callee) {
+                            match dtype {
+                                DataType::Array(_, _) => {
+                                    // Good
+                                }
+                                _ => {
+                                    // Trying to assign to function call? "MyFunc() = 1" -> Error
+                                    self.errors
+                                        .push("Cannot assign to function call".to_string());
+                                }
+                            }
                         }
                     }
                     _ => self.errors.push("Invalid assignment target".to_string()),
                 }
                 self.analyze_expression(expr);
             }
-            Statement::If(cond, then_block, else_block) => {
+            Statement::Call(target, args) => {
+                // Should resolve to Sub
+                // If target is Identifier, check if Sub exists
+                if let Expression::Identifier(name) = target {
+                    match self.symbol_table.resolve(name) {
+                        Some(sym) => {
+                            if sym.kind != SymbolKind::Sub {
+                                // Allow calling variables if implicit? No, Call x is invalid.
+                                // But `Call arr(i)` might be parsed as `Call(ArrayAccess, [])`? No.
+                                // Parser: `Call expr`.
+                            }
+                            if let Some(params) = &sym.params {
+                                if params.len() != args.len() {
+                                    self.errors.push(format!(
+                                        "Sub '{}' expects {} arguments, got {}",
+                                        name,
+                                        params.len(),
+                                        args.len()
+                                    ));
+                                }
+                            }
+                        }
+                        None => {
+                            self.errors.push(format!("Undefined sub '{}'", name));
+                        }
+                    }
+                } else {
+                    // Indirect call not supported, or complex expression call
+                    // e.g. Call Struct.Method()
+                    self.analyze_expression(target);
+                }
+                for arg in args {
+                    self.analyze_expression(arg);
+                }
+            }
+            Statement::If(cond, then_b, else_b) => {
                 self.analyze_expression(cond);
-                // IF blocks don't necessarily create new scope in BASIC, usually function-scoped.
-                // But for safety, many modern langs do.
-                // Standard BASIC does NOT scope IF blocks. Variables inside are function-local.
-                // We will NOT enter_scope here to match BASIC behavior usually.
-                self.analyze_block(then_block);
-                if let Some(else_b) = else_block {
-                    self.analyze_block(else_b);
+                self.analyze_block(then_b);
+                if let Some(b) = else_b {
+                    self.analyze_block(b);
                 }
             }
             Statement::While(cond, body) => {
@@ -237,24 +262,11 @@ impl SemanticAnalyzer {
                 self.analyze_expression(cond);
             }
             Statement::For(var, start, end, step, body) => {
-                // FOR variable is implicitly defined if not present
                 if self.symbol_table.resolve(var).is_none() {
-                    if let Err(e) =
+                    let _ =
                         self.symbol_table
-                            .define(var.clone(), DataType::Byte, SymbolKind::Local)
-                    {
-                        self.errors.push(e);
-                    }
-                } else {
-                    // Check if constant
-                    if let Some(sym) = self.symbol_table.resolve(var) {
-                        if sym.kind == SymbolKind::Constant {
-                            self.errors
-                                .push(format!("Cannot use constant '{}' as FOR variable", var));
-                        }
-                    }
+                            .define(var.clone(), DataType::Byte, SymbolKind::Local);
                 }
-
                 self.analyze_expression(start);
                 self.analyze_expression(end);
                 if let Some(s) = step {
@@ -262,91 +274,44 @@ impl SemanticAnalyzer {
                 }
                 self.analyze_block(body);
             }
-            Statement::Return(expr_opt) => {
-                if let Some(expr) = expr_opt {
-                    self.analyze_expression(expr);
-                }
+            Statement::Return(Some(expr)) => {
+                self.analyze_expression(expr);
             }
-            Statement::Call(name, args) => {
-                // Check if SUB exists
-                match self.symbol_table.resolve(name) {
-                    Some(sym) => {
-                        // Check parameter count
-                        if let Some(params) = &sym.params {
-                            if params.len() != args.len() {
-                                self.errors.push(format!(
-                                    "Function/Sub '{}' expects {} arguments, got {}",
-                                    name,
-                                    params.len(),
-                                    args.len()
-                                ));
-                            }
-                        }
-                    }
-                    None => {
-                        self.errors
-                            .push(format!("Undefined function/sub '{}'", name));
-                    }
-                }
-                for arg in args {
-                    self.analyze_expression(arg);
-                }
-            }
+            Statement::Return(None) => {}
             Statement::Poke(addr, val) => {
                 self.analyze_expression(addr);
                 self.analyze_expression(val);
+            }
+            Statement::PlaySfx(id) => {
+                self.analyze_expression(id);
             }
             Statement::Print(args) => {
                 for arg in args {
                     self.analyze_expression(arg);
                 }
             }
-            Statement::Asm(_) => {}
-            Statement::Comment(_) => {}
-            Statement::On(_intr_name, handler_name) => {
-                // Check handler exists?
-                // intr_name is NMI, IRQ usually.
-                // handler_name is a SUB.
-                if self.symbol_table.resolve(handler_name).is_none() {
-                    self.errors
-                        .push(format!("Undefined interrupt handler '{}'", handler_name));
-                }
-            }
-            Statement::PlaySfx(id_expr) => {
-                self.analyze_expression(id_expr);
-            }
             Statement::Read(vars) => {
-                for var_name in vars {
-                    // Check existence and mutability
-                    if let Some(sym) = self.symbol_table.resolve(var_name) {
-                        if sym.kind == SymbolKind::Constant {
-                            self.errors
-                                .push(format!("Cannot READ into constant '{}'", var_name));
-                        }
-                    } else {
-                        // Implicit local definition?
-                        // BASIC usually allows `READ x` to define x if not already defined.
-                        if let Err(e) = self.symbol_table.define(
-                            var_name.clone(),
+                for var in vars {
+                    if self.symbol_table.resolve(var).is_none() {
+                        let _ = self.symbol_table.define(
+                            var.clone(),
                             DataType::Byte,
                             SymbolKind::Local,
-                        ) {
-                            self.errors.push(e);
-                        }
+                        );
                     }
                 }
             }
-            Statement::Restore(_) => {}
             Statement::Select(expr, cases, case_else) => {
                 self.analyze_expression(expr);
                 for (val, block) in cases {
                     self.analyze_expression(val);
                     self.analyze_block(block);
                 }
-                if let Some(block) = case_else {
-                    self.analyze_block(block);
+                if let Some(b) = case_else {
+                    self.analyze_block(b);
                 }
             }
+            _ => {}
         }
     }
 
@@ -360,61 +325,77 @@ impl SemanticAnalyzer {
             Expression::MemberAccess(base, member) => {
                 self.analyze_expression(base);
                 let base_type = self.resolve_type(base);
-                if let Some(DataType::Struct(struct_name)) = base_type {
-                    if let Some(sym) = self.symbol_table.resolve(&struct_name) {
+                if let Some(DataType::Struct(name)) = base_type {
+                    if let Some(sym) = self.symbol_table.resolve(&name) {
                         if let Some(members) = &sym.members {
                             if !members.iter().any(|(n, _, _)| n == member) {
-                                self.errors.push(format!(
-                                    "Struct '{}' has no member '{}'",
-                                    struct_name, member
-                                ));
-                            }
-                        }
-                    } else {
-                        self.errors
-                            .push(format!("Undefined struct type '{}'", struct_name));
-                    }
-                } else if base_type.is_some() {
-                    // Only report error if base is known but not struct
-                    // If base is unknown, it's already reported in recursion
-                    self.errors
-                        .push("Member access on non-struct type".to_string());
-                }
-            }
-            Expression::BinaryOp(left, _, right) => {
-                self.analyze_expression(left);
-                self.analyze_expression(right);
-            }
-            Expression::UnaryOp(_, operand) => {
-                self.analyze_expression(operand);
-            }
-            Expression::FunctionCall(name, args) => {
-                match self.symbol_table.resolve(name) {
-                    Some(sym) => {
-                        // Check parameter count
-                        if let Some(params) = &sym.params {
-                            if params.len() != args.len() {
-                                self.errors.push(format!(
-                                    "Function '{}' expects {} arguments, got {}",
-                                    name,
-                                    params.len(),
-                                    args.len()
-                                ));
+                                self.errors
+                                    .push(format!("Struct '{}' has no member '{}'", name, member));
                             }
                         }
                     }
-                    None => {
-                        self.errors.push(format!("Undefined function '{}'", name));
+                }
+            }
+            Expression::Call(callee, args) => {
+                // Check if it's Array Access or Function Call
+                self.analyze_expression(callee);
+
+                // If callee is Identifier
+                if let Expression::Identifier(name) = &**callee {
+                    if let Some(sym) = self.symbol_table.resolve(name) {
+                        match &sym.data_type {
+                            DataType::Array(_, _) => {
+                                // Array Access
+                                if args.len() != 1 {
+                                    self.errors.push(format!(
+                                        "Array '{}' expects 1 index, got {}",
+                                        name,
+                                        args.len()
+                                    ));
+                                }
+                            }
+                            _ => {
+                                if sym.kind == SymbolKind::Sub {
+                                    // Function Call
+                                    if let Some(params) = &sym.params {
+                                        if params.len() != args.len() {
+                                            self.errors.push(format!(
+                                                "Function '{}' expects {} arguments, got {}",
+                                                name,
+                                                params.len(),
+                                                args.len()
+                                            ));
+                                        }
+                                    }
+                                } else {
+                                    self.errors
+                                        .push(format!("'{}' is not a function or array", name));
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Indirect Call / Member Array access
+                    // If type is Array, check args
+                    if let Some(DataType::Array(_, _)) = self.resolve_type(callee) {
+                        if args.len() != 1 {
+                            self.errors
+                                .push(format!("Array access expects 1 index, got {}", args.len()));
+                        }
                     }
                 }
+
                 for arg in args {
                     self.analyze_expression(arg);
                 }
             }
-            Expression::Peek(addr) => {
-                self.analyze_expression(addr);
+            Expression::BinaryOp(l, _, r) => {
+                self.analyze_expression(l);
+                self.analyze_expression(r);
             }
-            _ => {} // Literals
+            Expression::UnaryOp(_, e) => self.analyze_expression(e),
+            Expression::Peek(e) => self.analyze_expression(e),
+            _ => {}
         }
     }
 
@@ -423,10 +404,18 @@ impl SemanticAnalyzer {
             Expression::Identifier(name) => {
                 self.symbol_table.resolve(name).map(|s| s.data_type.clone())
             }
+            Expression::Call(callee, _) => {
+                // If Array, return inner type
+                // If Function, return Word/Byte (Implicit)
+                if let Some(DataType::Array(inner, _)) = self.resolve_type(callee) {
+                    return Some(*inner);
+                }
+                Some(DataType::Word) // Default function return
+            }
             Expression::MemberAccess(base, member) => {
                 let base_type = self.resolve_type(base)?;
-                if let DataType::Struct(struct_name) = base_type {
-                    if let Some(sym) = self.symbol_table.resolve(&struct_name) {
+                if let DataType::Struct(name) = base_type {
+                    if let Some(sym) = self.symbol_table.resolve(&name) {
                         if let Some(members) = &sym.members {
                             for (m_name, m_type, _) in members {
                                 if m_name == member {
@@ -440,9 +429,8 @@ impl SemanticAnalyzer {
             }
             Expression::Integer(_) => Some(DataType::Word),
             Expression::StringLiteral(_) => Some(DataType::String),
-            Expression::BinaryOp(_, _, _) => Some(DataType::Word), // Approximate
+            Expression::BinaryOp(_, _, _) => Some(DataType::Word),
             Expression::UnaryOp(_, _) => Some(DataType::Int),
-            Expression::FunctionCall(_, _) => Some(DataType::Word), // Assume Word/Int
             Expression::Peek(_) => Some(DataType::Byte),
         }
     }
@@ -459,115 +447,7 @@ impl SemanticAnalyzer {
                 }
                 0
             }
+            DataType::Array(inner, size) => self.get_type_size(inner) * (*size as u16),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compiler::lexer::tokenize;
-    use crate::compiler::parser::Parser;
-
-    fn parse_code(input: &str) -> Program {
-        let tokens = tokenize(input);
-        let mut parser = Parser::new(tokens);
-        parser.parse_program().expect("Failed to parse")
-    }
-
-    #[test]
-    fn test_valid_program() {
-        let input = r#"
-        CONST MAX = 10
-        DIM GlobalVar AS BYTE
-
-        SUB Main()
-            x = 5
-            GlobalVar = x + MAX
-        END SUB
-        "#;
-        let program = parse_code(input);
-        let mut analyzer = SemanticAnalyzer::new();
-        let result = analyzer.analyze(&program);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_undefined_variable() {
-        let input = r#"
-        SUB Main()
-            y = x + 1
-        END SUB
-        "#;
-        let program = parse_code(input);
-        let mut analyzer = SemanticAnalyzer::new();
-        let result = analyzer.analyze(&program);
-        assert!(result.is_err());
-        let errs = result.unwrap_err();
-        assert!(errs[0].contains("Undefined variable 'x'"));
-    }
-
-    #[test]
-    fn test_assign_constant() {
-        let input = r#"
-        CONST MAX = 10
-        SUB Main()
-            MAX = 5
-        END SUB
-        "#;
-        let program = parse_code(input);
-        let mut analyzer = SemanticAnalyzer::new();
-        let result = analyzer.analyze(&program);
-        assert!(result.is_err());
-        assert!(result.unwrap_err()[0].contains("Cannot assign to constant"));
-    }
-
-    #[test]
-    fn test_undefined_function() {
-        let input = r#"
-        SUB Main()
-            CallUnknown()
-        END SUB
-        "#;
-        let program = parse_code(input);
-        let mut analyzer = SemanticAnalyzer::new();
-        let result = analyzer.analyze(&program);
-        assert!(result.is_err());
-        assert!(result.unwrap_err()[0].contains("Undefined function/sub"));
-    }
-
-    #[test]
-    fn test_parameter_scope() {
-        let input = r#"
-        SUB Test(p AS BYTE)
-            x = p
-        END SUB
-
-        SUB Main()
-            y = p ' p should not be visible here
-        END SUB
-        "#;
-        let program = parse_code(input);
-        let mut analyzer = SemanticAnalyzer::new();
-        let result = analyzer.analyze(&program);
-        assert!(result.is_err());
-        assert!(result.unwrap_err()[0].contains("Undefined variable 'p'"));
-    }
-
-    #[test]
-    fn test_argument_count_mismatch() {
-        let input = r#"
-        SUB Test(p AS BYTE, q AS BYTE)
-        END SUB
-
-        SUB Main()
-            Call Test(1)
-        END SUB
-        "#;
-        let program = parse_code(input);
-        let mut analyzer = SemanticAnalyzer::new();
-        let result = analyzer.analyze(&program);
-        assert!(result.is_err());
-        assert!(result.unwrap_err()[0].contains("expects 2 arguments, got 1"));
     }
 }

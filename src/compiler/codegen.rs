@@ -854,17 +854,12 @@ impl CodeGenerator {
         }
 
         // String Pointers
-        let mut emitted_strings = std::collections::HashSet::new();
-        for decl in &program.declarations {
-            if let TopLevel::Dim(_, DataType::String, Some(Expression::StringLiteral(val))) = decl {
-                if !emitted_strings.contains(val) {
-                    if let Some(label) = self.string_literals.get(val) {
-                        self.output.push(format!("Ptr_{}: WORD {}", label, label));
-                        emitted_strings.insert(val.clone());
-                        // current_addr is unused for now as this is the end of the table generation
-                    }
-                }
-            }
+        // Must emit in same order as allocate_memory (sorted)
+        let mut sorted_strings: Vec<_> = self.string_literals.iter().collect();
+        sorted_strings.sort_by_key(|(k, _)| *k);
+
+        for (_, label) in sorted_strings {
+            self.output.push(format!("Ptr_{}: WORD {}", label, label));
         }
 
         self.output.push("".to_string());
@@ -889,7 +884,110 @@ impl CodeGenerator {
         Ok(())
     }
 
+    fn collect_all_strings(&mut self, program: &Program) {
+        for decl in &program.declarations {
+            match decl {
+                TopLevel::Const(_, expr) => self.collect_strings_expr(expr),
+                TopLevel::Dim(_, _, Some(expr)) => self.collect_strings_expr(expr),
+                TopLevel::Sub(_, _, body) => self.collect_strings_block(body),
+                TopLevel::Interrupt(_, body) => self.collect_strings_block(body),
+                TopLevel::Data(_, exprs) => {
+                    for e in exprs {
+                        self.collect_strings_expr(e);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn collect_strings_block(&mut self, statements: &[Statement]) {
+        for stmt in statements {
+            self.collect_strings_stmt(stmt);
+        }
+    }
+
+    fn collect_strings_stmt(&mut self, stmt: &Statement) {
+        match stmt {
+            Statement::Let(target, expr) => {
+                self.collect_strings_expr(target);
+                self.collect_strings_expr(expr);
+            }
+            Statement::If(cond, then_b, else_b) => {
+                self.collect_strings_expr(cond);
+                self.collect_strings_block(then_b);
+                if let Some(b) = else_b {
+                    self.collect_strings_block(b);
+                }
+            }
+            Statement::While(cond, body) => {
+                self.collect_strings_expr(cond);
+                self.collect_strings_block(body);
+            }
+            Statement::DoWhile(body, cond) => {
+                self.collect_strings_block(body);
+                self.collect_strings_expr(cond);
+            }
+            Statement::For(_, start, end, step, body) => {
+                self.collect_strings_expr(start);
+                self.collect_strings_expr(end);
+                if let Some(s) = step {
+                    self.collect_strings_expr(s);
+                }
+                self.collect_strings_block(body);
+            }
+            Statement::Return(Some(expr)) => self.collect_strings_expr(expr),
+            Statement::Call(_, args) => {
+                for arg in args {
+                    self.collect_strings_expr(arg);
+                }
+            }
+            Statement::Poke(addr, val) => {
+                self.collect_strings_expr(addr);
+                self.collect_strings_expr(val);
+            }
+            Statement::PlaySfx(expr) => self.collect_strings_expr(expr),
+            Statement::Select(expr, cases, else_b) => {
+                self.collect_strings_expr(expr);
+                for (val, block) in cases {
+                    self.collect_strings_expr(val);
+                    self.collect_strings_block(block);
+                }
+                if let Some(b) = else_b {
+                    self.collect_strings_block(b);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn collect_strings_expr(&mut self, expr: &Expression) {
+        match expr {
+            Expression::StringLiteral(s) => {
+                if !self.string_literals.contains_key(s) {
+                    let label = self.new_label();
+                    self.string_literals.insert(s.clone(), label);
+                }
+            }
+            Expression::BinaryOp(l, _, r) => {
+                self.collect_strings_expr(l);
+                self.collect_strings_expr(r);
+            }
+            Expression::UnaryOp(_, e) => self.collect_strings_expr(e),
+            Expression::FunctionCall(_, args) => {
+                for arg in args {
+                    self.collect_strings_expr(arg);
+                }
+            }
+            Expression::Peek(e) => self.collect_strings_expr(e),
+            Expression::MemberAccess(e, _) => self.collect_strings_expr(e),
+            _ => {}
+        }
+    }
+
     fn allocate_memory(&mut self, program: &Program) -> Result<(), String> {
+        self.collect_all_strings(program);
+
         // Simple allocation strategy: Linear allocation in Zero Page (0x00 - 0xFF)
         // or RAM (0x0200 - 0x07FF)
 
@@ -910,7 +1008,7 @@ impl CodeGenerator {
 
         for decl in &program.declarations {
             match decl {
-                TopLevel::Dim(name, dtype, init_expr) => {
+                TopLevel::Dim(name, dtype, _init_expr) => {
                     // Assign address
                     self.symbol_table.assign_address(name, self.ram_pointer)?;
                     self.output
@@ -927,15 +1025,6 @@ impl CodeGenerator {
                         }
                         crate::compiler::ast::DataType::String => {
                             self.ram_pointer += 2;
-                            if let Some(Expression::StringLiteral(val)) = init_expr {
-                                if !self.string_literals.contains_key(val) {
-                                    let label = self.new_label();
-                                    self.string_literals.insert(val.clone(), label.clone());
-                                    // Allocate Data Table Entry
-                                    self.data_table_offsets.insert(label, data_table_addr);
-                                    data_table_addr += 2;
-                                }
-                            }
                         }
                         crate::compiler::ast::DataType::Struct(struct_name) => {
                             if let Some(sym) = self.symbol_table.resolve(struct_name) {
@@ -1041,6 +1130,20 @@ impl CodeGenerator {
                 _ => {}
             }
         }
+
+        // Allocate Data Table entries for all collected strings
+        // Sort to ensure deterministic order
+        let mut sorted_strings: Vec<_> = self.string_literals.iter().collect();
+        sorted_strings.sort_by_key(|(k, _)| *k);
+
+        for (_, label) in sorted_strings {
+            if !self.data_table_offsets.contains_key(label) {
+                self.data_table_offsets
+                    .insert(label.clone(), data_table_addr);
+                data_table_addr += 2;
+            }
+        }
+
         Ok(())
     }
 
@@ -1812,8 +1915,19 @@ impl CodeGenerator {
                     Err(format!("Integer literal {} exceeds 16-bit limit", val))
                 }
             }
-            Expression::StringLiteral(_) => {
-                Err("String literals not supported in expressions".to_string())
+            Expression::StringLiteral(s) => {
+                if let Some(label) = self.string_literals.get(s) {
+                    if let Some(addr) = self.data_table_offsets.get(label) {
+                        // Read pointer from Data Table
+                        self.output.push(format!("  LDA ${:04X}", addr)); // Low
+                        self.output.push(format!("  LDX ${:04X}", addr + 1)); // High
+                        Ok(DataType::String)
+                    } else {
+                        Err(format!("String literal '{}' has no data table entry", s))
+                    }
+                } else {
+                    Err(format!("String literal '{}' was not allocated", s))
+                }
             }
             Expression::Identifier(name) => {
                 if let Some(sym) = self.symbol_table.resolve(name) {

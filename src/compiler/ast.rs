@@ -7,6 +7,7 @@ pub enum Expression {
     UnaryOp(UnaryOperator, Box<Expression>),
     FunctionCall(String, Vec<Expression>),
     Peek(Box<Expression>),
+    MemberAccess(Box<Expression>, String), // structure.member
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -33,7 +34,7 @@ pub enum UnaryOperator {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
-    Let(String, Expression),
+    Let(Expression, Expression), // target, value (target must be lvalue)
     If(Expression, Vec<Statement>, Option<Vec<Statement>>), // condition, then_block, else_block
     While(Expression, Vec<Statement>),
     DoWhile(Vec<Statement>, Expression), // DO ... LOOP WHILE expr
@@ -64,6 +65,7 @@ pub enum Statement {
 #[derive(Debug, PartialEq, Clone)]
 pub enum TopLevel {
     Sub(String, Vec<(String, DataType)>, Vec<Statement>), // Name, Params, Body
+    TypeDecl(String, Vec<(String, DataType)>),            // TYPE Name ... END TYPE
     Interrupt(String, Vec<Statement>),                    // Interrupt Name (NMI/IRQ), Body
     Const(String, Expression),                            // Global Const
     Dim(String, DataType, Option<Expression>),            // Global Dim with optional initialization
@@ -81,6 +83,7 @@ pub enum DataType {
     Int,
     Bool,
     String,
+    Struct(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -114,7 +117,10 @@ mod tests {
         let sub = TopLevel::Sub(
             "Main".to_string(),
             vec![],
-            vec![Statement::Let("x".to_string(), Expression::Integer(1))],
+            vec![Statement::Let(
+                Expression::Identifier("x".to_string()),
+                Expression::Integer(1),
+            )],
         );
 
         if let TopLevel::Sub(name, params, body) = sub {

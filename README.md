@@ -28,6 +28,7 @@
     - **Instruments**: Select from various Duty Cycles (12.5%, 25%, 50%, 75%) and Envelopes (Constant, Decay).
   - **Structure**:
     - `SUB`: Define subroutines.
+    - `TYPE`: Define custom structures (e.g. `TYPE Point \n x AS BYTE \n y AS BYTE \n END TYPE`).
     - `INTERRUPT`: Define interrupt handlers (e.g., `INTERRUPT NMI() ... END INTERRUPT`).
     - `ON <Vector> DO <Routine>`: Map interrupts to routines at runtime (e.g., `ON NMI DO MyVBlank`).
 - **Web IDE**:

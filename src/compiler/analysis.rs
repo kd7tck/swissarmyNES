@@ -89,6 +89,33 @@ impl SemanticAnalyzer {
                 }
                 TopLevel::Asm(_) => {} // No symbols in ASM block visible to BASIC usually
                 TopLevel::Data(_, _) => {} // Data declarations
+                TopLevel::TypeDecl(name, members) => {
+                    let mut offset = 0;
+                    let mut member_defs = Vec::new();
+                    let mut error = false;
+
+                    for (m_name, m_type) in members {
+                        let size = self.get_type_size(m_type);
+                        if size == 0 && matches!(m_type, DataType::Struct(_)) {
+                            self.errors.push(format!(
+                                "Undefined or invalid type for member '{}' in struct '{}'",
+                                m_name, name
+                            ));
+                            error = true;
+                        }
+                        member_defs.push((m_name.clone(), m_type.clone(), offset));
+                        offset += size;
+                    }
+
+                    if !error {
+                        if let Err(e) =
+                            self.symbol_table
+                                .define_struct(name.clone(), member_defs, offset)
+                        {
+                            self.errors.push(e);
+                        }
+                    }
+                }
                 TopLevel::Include(_) => {
                     self.errors.push(
                         "Unexpected INCLUDE directive during analysis (should have been resolved)"
@@ -144,24 +171,48 @@ impl SemanticAnalyzer {
 
     fn analyze_statement(&mut self, stmt: &Statement) {
         match stmt {
-            Statement::Let(name, expr) => {
-                // Check if variable exists. If not, is it implicit local?
-                // For now, let's assume we allow implicit locals (common in BASIC).
-                // If resolved, check if it's writable (not CONST).
-                if let Some(sym) = self.symbol_table.resolve(name) {
-                    if sym.kind == SymbolKind::Constant {
-                        self.errors
-                            .push(format!("Cannot assign to constant '{}'", name));
+            Statement::Let(target, expr) => {
+                match target {
+                    Expression::Identifier(name) => {
+                        // Check if variable exists. If not, is it implicit local?
+                        if let Some(sym) = self.symbol_table.resolve(name) {
+                            if sym.kind == SymbolKind::Constant {
+                                self.errors
+                                    .push(format!("Cannot assign to constant '{}'", name));
+                            }
+                        } else {
+                            // Implicit declaration (Integer/Byte default?)
+                            if let Err(e) = self.symbol_table.define(
+                                name.clone(),
+                                DataType::Byte,
+                                SymbolKind::Local,
+                            ) {
+                                self.errors.push(e);
+                            }
+                        }
                     }
-                } else {
-                    // Implicit declaration (Integer/Byte default?)
-                    // Define in current scope
-                    if let Err(e) =
-                        self.symbol_table
-                            .define(name.clone(), DataType::Byte, SymbolKind::Local)
-                    {
-                        self.errors.push(e);
+                    Expression::MemberAccess(base, member) => {
+                        self.analyze_expression(base);
+                        let base_type = self.resolve_type(base);
+                        if let Some(DataType::Struct(struct_name)) = base_type {
+                            if let Some(sym) = self.symbol_table.resolve(&struct_name) {
+                                if let Some(members) = &sym.members {
+                                    if !members.iter().any(|(n, _, _)| n == member) {
+                                        self.errors.push(format!(
+                                            "Struct '{}' has no member '{}'",
+                                            struct_name, member
+                                        ));
+                                    }
+                                }
+                            } else {
+                                self.errors
+                                    .push(format!("Undefined struct type '{}'", struct_name));
+                            }
+                        } else {
+                            self.errors.push("Member access on non-struct type".to_string());
+                        }
                     }
+                    _ => self.errors.push("Invalid assignment target".to_string()),
                 }
                 self.analyze_expression(expr);
             }
@@ -305,6 +356,29 @@ impl SemanticAnalyzer {
                     self.errors.push(format!("Undefined variable '{}'", name));
                 }
             }
+            Expression::MemberAccess(base, member) => {
+                self.analyze_expression(base);
+                let base_type = self.resolve_type(base);
+                if let Some(DataType::Struct(struct_name)) = base_type {
+                    if let Some(sym) = self.symbol_table.resolve(&struct_name) {
+                        if let Some(members) = &sym.members {
+                            if !members.iter().any(|(n, _, _)| n == member) {
+                                self.errors.push(format!(
+                                    "Struct '{}' has no member '{}'",
+                                    struct_name, member
+                                ));
+                            }
+                        }
+                    } else {
+                        self.errors
+                            .push(format!("Undefined struct type '{}'", struct_name));
+                    }
+                } else if base_type.is_some() {
+                    // Only report error if base is known but not struct
+                    // If base is unknown, it's already reported in recursion
+                    self.errors.push("Member access on non-struct type".to_string());
+                }
+            }
             Expression::BinaryOp(left, _, right) => {
                 self.analyze_expression(left);
                 self.analyze_expression(right);
@@ -339,6 +413,50 @@ impl SemanticAnalyzer {
                 self.analyze_expression(addr);
             }
             _ => {} // Literals
+        }
+    }
+
+    fn resolve_type(&self, expr: &Expression) -> Option<DataType> {
+        match expr {
+            Expression::Identifier(name) => {
+                self.symbol_table.resolve(name).map(|s| s.data_type.clone())
+            }
+            Expression::MemberAccess(base, member) => {
+                let base_type = self.resolve_type(base)?;
+                if let DataType::Struct(struct_name) = base_type {
+                    if let Some(sym) = self.symbol_table.resolve(&struct_name) {
+                        if let Some(members) = &sym.members {
+                            for (m_name, m_type, _) in members {
+                                if m_name == member {
+                                    return Some(m_type.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+                None
+            }
+            Expression::Integer(_) => Some(DataType::Word),
+            Expression::StringLiteral(_) => Some(DataType::String),
+            Expression::BinaryOp(_, _, _) => Some(DataType::Word), // Approximate
+            Expression::UnaryOp(_, _) => Some(DataType::Int),
+            Expression::FunctionCall(_, _) => Some(DataType::Word), // Assume Word/Int
+            Expression::Peek(_) => Some(DataType::Byte),
+        }
+    }
+
+    fn get_type_size(&self, dt: &DataType) -> u16 {
+        match dt {
+            DataType::Byte | DataType::Int | DataType::Bool => 1,
+            DataType::Word | DataType::String => 2,
+            DataType::Struct(name) => {
+                if let Some(sym) = self.symbol_table.resolve(name) {
+                    if let Some(size) = sym.value {
+                        return size as u16;
+                    }
+                }
+                0
+            }
         }
     }
 }

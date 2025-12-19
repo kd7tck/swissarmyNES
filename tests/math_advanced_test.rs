@@ -21,7 +21,7 @@ fn test_mul_16_generation() {
                 "Main".to_string(),
                 vec![],
                 vec![Statement::Let(
-                    "w".to_string(),
+                    Expression::Identifier("w".to_string()),
                     Expression::BinaryOp(
                         Box::new(Expression::Integer(200)),
                         BinaryOperator::Multiply,
@@ -58,7 +58,7 @@ fn test_div_16_generation() {
                 "Main".to_string(),
                 vec![],
                 vec![Statement::Let(
-                    "w".to_string(),
+                    Expression::Identifier("w".to_string()),
                     Expression::BinaryOp(
                         Box::new(Expression::Integer(10000)),
                         BinaryOperator::Divide,
@@ -98,7 +98,10 @@ fn test_signed_comparison_generation() {
                         BinaryOperator::LessThan,
                         Box::new(Expression::Integer(10)),
                     ),
-                    vec![Statement::Let("i".to_string(), Expression::Integer(1))],
+                    vec![Statement::Let(
+                        Expression::Identifier("i".to_string()),
+                        Expression::Integer(1),
+                    )],
                     None,
                 )],
             ),

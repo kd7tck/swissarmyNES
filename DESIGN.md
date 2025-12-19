@@ -62,7 +62,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - CodeGen: Compile to a series of `CMP` / `BEQ` jumps.
 - **Completion Criteria:** Replaces nested `IF/ELSEIF` chains in a test program.
 
-## Phase 8: Structs (Records)
+## Phase 8: Structs (Records) (Completed)
 **Goal:** Group related data (e.g., Player.x, Player.y, Player.hp).
 - **Action Items:**
     - Add `TYPE` / `END TYPE` syntax.

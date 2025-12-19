@@ -27,15 +27,21 @@ fn test_codegen_select_statement() {
                     vec![
                         (
                             Expression::Integer(1),
-                            vec![Statement::Let("x".to_string(), Expression::Integer(10))],
+                            vec![Statement::Let(
+                                Expression::Identifier("x".to_string()),
+                                Expression::Integer(10),
+                            )],
                         ),
                         (
                             Expression::Integer(2),
-                            vec![Statement::Let("x".to_string(), Expression::Integer(20))],
+                            vec![Statement::Let(
+                                Expression::Identifier("x".to_string()),
+                                Expression::Integer(20),
+                            )],
                         ),
                     ],
                     Some(vec![Statement::Let(
-                        "x".to_string(),
+                        Expression::Identifier("x".to_string()),
                         Expression::Integer(0),
                     )]),
                 )],
@@ -91,7 +97,10 @@ fn test_codegen_select_word() {
                     Expression::Identifier("w".to_string()),
                     vec![(
                         Expression::Integer(1000),
-                        vec![Statement::Let("w".to_string(), Expression::Integer(1))],
+                        vec![Statement::Let(
+                            Expression::Identifier("w".to_string()),
+                            Expression::Integer(1),
+                        )],
                     )],
                     None,
                 )],

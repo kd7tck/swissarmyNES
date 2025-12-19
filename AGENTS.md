@@ -82,7 +82,7 @@ Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are comple
     - **Logic & Math**: XOR operator, Unary Operators (`-`, `NOT`), 8-bit `AND`/`OR` fix, `ABS()`, `SGN()`.
     - **Memory**: Robust `PEEK` (Static optimization & Dynamic support), `POKE` (Dynamic fix).
     - **Arrays**: 1D Arrays, `DIM x(N)`.
-    - **Strings**: `READ` support, `LEN()`.
+    - **Strings**: `READ` support, `LEN()`, `ASC()`, `VAL()`, `CHR()`, `STR()`, `LEFT()`, `RIGHT()`, `MID()`.
 - **Details**:
     - **Boolean**: Standardized `True` to `$FF` (All ones) to support Bitwise `NOT` correctly.
     - **Codegen**:
@@ -91,13 +91,13 @@ Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are comple
         - Implemented `Expression::UnaryOp` (`Negate`, `Not`).
         - Implemented `Expression::Peek` with constant address optimization.
         - Updated `generate_address_expression` to handle dynamic address expressions (e.g., `POKE(base + 1, val)`).
-        - Added built-in `ABS` and `SGN` logic in `Expression::Call`.
+        - Added built-in `ABS`, `SGN`, `ASC`, `VAL`, `CHR`, `STR`, `LEFT`, `RIGHT`, `MID` logic.
+        - **String Heap**: Circular buffer (4x16 bytes) at `$02A0` for dynamic string results.
     - **Parser/AST**: Added `Xor` token and precedence.
-    - **Analysis**: Added `ABS`, `SGN` to built-in allowlist.
+    - **Analysis**: Added new built-ins to allowlist.
 
 - **Next Steps**:
     - Phase 9: Enums & Constants.
-    - More String manipulation functions (`LEFT`, `RIGHT`, `MID` - requires String Heap strategy).
 
 - **Pitfalls**:
     - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value).

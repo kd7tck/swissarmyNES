@@ -48,6 +48,7 @@ impl CodeGenerator {
 
         self.generate_sound_engine();
         self.generate_math_helpers();
+        self.generate_string_helpers();
         self.generate_string_data();
         self.generate_user_data(program)?;
         self.generate_data_tables(program)?;
@@ -690,6 +691,394 @@ impl CodeGenerator {
         self.output.push("  PLA".to_string());
         self.output.push("Math_DivSigned_Done:".to_string());
         self.output.push("  RTS".to_string());
+    }
+
+    fn generate_string_helpers(&mut self) {
+        self.output.push("; --- String Helpers ---".to_string());
+
+        // Runtime_GetHeapSlot
+        // Returns ptr to next 16-byte slot in A (Low), X (High)
+        // Uses $0E (Index), $0A (Temp)
+        self.output.push("Runtime_GetHeapSlot:".to_string());
+        self.output.push("  INC $0E".to_string());
+        self.output.push("  LDA $0E".to_string());
+        self.output.push("  AND #$03".to_string());
+        self.output.push("  STA $0E".to_string());
+        self.output.push("  TAX".to_string()); // Slot Index
+        self.output.push("  LDA #0".to_string()); // Offset = Index * 16
+        self.output.push("  CPX #0".to_string());
+        self.output.push("  BEQ Heap_OffsetCalc".to_string());
+        self.output.push("Heap_Loop:".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #16".to_string());
+        self.output.push("  DEX".to_string());
+        self.output.push("  BNE Heap_Loop".to_string());
+        self.output.push("Heap_OffsetCalc:".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #$A0".to_string()); // Base $02A0
+        self.output.push("  LDX #$02".to_string()); // High Byte
+        self.output.push("  RTS".to_string());
+
+        // Runtime_Asc
+        // Input: A/X = String Ptr
+        // Output: A = First Char (Word returned as A/0)
+        self.output.push("Runtime_Asc:".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  STX $03".to_string());
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($02),Y".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Runtime_Val
+        // Input: A/X = String Ptr
+        // Output: A/X = Value
+        self.output.push("Runtime_Val:".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  STX $03".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $0A".to_string()); // Result Low
+        self.output.push("  STA $0B".to_string()); // Result High
+        self.output.push("  STA $0C".to_string()); // Sign (0=Pos, 1=Neg)
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($02),Y".to_string());
+        self.output.push("  CMP #$2D".to_string()); // '-'
+        self.output.push("  BNE Val_Loop".to_string());
+        self.output.push("  INC $0C".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("Val_Loop:".to_string());
+        self.output.push("  LDA ($02),Y".to_string());
+        self.output.push("  CMP #0".to_string());
+        self.output.push("  BEQ Val_Done".to_string());
+        self.output.push("  SEC".to_string());
+        self.output.push("  SBC #$30".to_string()); // - '0'
+        self.output.push("  BMI Val_Done".to_string()); // Not digit
+        self.output.push("  CMP #10".to_string());
+        self.output.push("  BCS Val_Done".to_string()); // Not digit
+        self.output.push("  PHA".to_string()); // Save digit
+                                               // Result * 10
+        self.output.push("  LDA $0A".to_string());
+        self.output.push("  LDX $0B".to_string());
+        self.output.push("  STA $00".to_string()); // Mul16 expects args in A/X and $00/$01... wait, Mul16 takes A/X * $00/$01
+        self.output.push("  STX $01".to_string());
+        self.output.push("  LDA #10".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("  JSR Math_Mul16".to_string());
+        self.output.push("  STA $0A".to_string());
+        self.output.push("  STX $0B".to_string());
+        // Add digit
+        self.output.push("  PLA".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $0A".to_string());
+        self.output.push("  STA $0A".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  ADC $0B".to_string());
+        self.output.push("  STA $0B".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  JMP Val_Loop".to_string());
+        self.output.push("Val_Done:".to_string());
+        self.output.push("  LDA $0C".to_string());
+        self.output.push("  BEQ Val_Ret".to_string());
+        // Negate
+        self.output.push("  LDA $0A".to_string());
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #1".to_string());
+        self.output.push("  STA $0A".to_string());
+        self.output.push("  LDA $0B".to_string());
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  ADC #0".to_string());
+        self.output.push("  STA $0B".to_string());
+        self.output.push("Val_Ret:".to_string());
+        self.output.push("  LDA $0A".to_string());
+        self.output.push("  LDX $0B".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Runtime_Chr
+        // Input: A (Char)
+        // Output: A/X (String Ptr)
+        self.output.push("Runtime_Chr:".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  JSR Runtime_GetHeapSlot".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  STX $03".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  LDX $03".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Runtime_Str
+        // Input: A/X (Number)
+        // Output: A/X (String Ptr)
+        self.output.push("Runtime_Str:".to_string());
+        self.output.push("  STA $0A".to_string()); // Value Low
+        self.output.push("  STX $0B".to_string()); // Value High
+        self.output.push("  JSR Runtime_GetHeapSlot".to_string());
+        self.output.push("  STA $02".to_string()); // Ptr Low
+        self.output.push("  STX $03".to_string()); // Ptr High
+        self.output.push("  LDY #0".to_string());
+        // Check Sign (assume 16-bit signed if High > $7F)
+        self.output.push("  LDA $0B".to_string());
+        self.output.push("  BPL Str_Pos".to_string());
+        self.output.push("  LDA #$2D".to_string()); // '-'
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  INY".to_string());
+        // Negate $0A/$0B
+        self.output.push("  LDA $0A".to_string());
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #1".to_string());
+        self.output.push("  STA $0A".to_string());
+        self.output.push("  LDA $0B".to_string());
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  ADC #0".to_string());
+        self.output.push("  STA $0B".to_string());
+        self.output.push("Str_Pos:".to_string());
+        // Convert
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $0C".to_string()); // Digit Count
+        self.output.push("Str_Loop:".to_string());
+        // Divide $0A/$0B by 10
+        self.output.push("  LDA $0A".to_string());
+        self.output.push("  LDX $0B".to_string());
+        self.output.push("  STA $00".to_string()); // Div args
+        self.output.push("  STX $01".to_string());
+        self.output.push("  LDA #10".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("  JSR Math_Div16".to_string());
+        // Remainder in $08/$09 (Wait, Div16 puts remainder in $08/$09? No, Div16 returns quotient in A/X. Remainder?)
+        // Let's check Math_Div16:
+        // "Math_Div16 returns quotient in A/X. Remainder is NOT returned?"
+        // Oops. Math_Div16 in codegen does NOT expose remainder in $08.
+        // Math_Div16_Signed DOES expose remainder in $08 (Wait, does it?).
+        // Math_Div16 implementation:
+        // Div16 returns Quotient in A/X ($06/$07).
+        // Where is remainder?
+        // It uses $08/$09 as temporary dividend/remainder.
+        // At end, $08/$09 holds remainder!
+        // Yes: "ROL $08", "ROL $09".
+        // And "LDA $06", "LDX $07", "RTS".
+        // So $08/$09 IS remainder.
+        self.output.push("  STA $0A".to_string()); // Update Value
+        self.output.push("  STX $0B".to_string());
+        self.output.push("  LDA $08".to_string()); // Remainder Low (High is 0 for 10)
+        self.output.push("  PHA".to_string());
+        self.output.push("  INC $0C".to_string());
+        self.output.push("  LDA $0A".to_string());
+        self.output.push("  ORA $0B".to_string());
+        self.output.push("  BNE Str_Loop".to_string());
+        // Pop
+        self.output.push("Str_Pop:".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #$30".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  DEC $0C".to_string());
+        self.output.push("  BNE Str_Pop".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  LDX $03".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Runtime_Left
+        // Input: Stack (Count), A/X (Str Ptr)
+        // Output: A/X (New Str Ptr)
+        self.output.push("Runtime_Left:".to_string());
+        self.output.push("  STA $04".to_string()); // Src Ptr
+        self.output.push("  STX $05".to_string());
+        self.output.push("  PLA".to_string()); // Ret Low
+        self.output.push("  STA $0A".to_string());
+        self.output.push("  PLA".to_string()); // Ret High
+        self.output.push("  STA $0B".to_string());
+        self.output.push("  PLA".to_string()); // Count (Low) - assuming < 256 for string ops
+        self.output.push("  STA $0C".to_string());
+
+        // Safety: Clamp Count to 15
+        self.output.push("  CMP #16".to_string());
+        self.output.push("  BCC Left_CountOk".to_string());
+        self.output.push("  LDA #15".to_string());
+        self.output.push("  STA $0C".to_string());
+        self.output.push("Left_CountOk:".to_string());
+
+        // Restore Ret
+        self.output.push("  LDA $0B".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  LDA $0A".to_string());
+        self.output.push("  PHA".to_string());
+
+        self.output.push("  JSR Runtime_GetHeapSlot".to_string());
+        self.output.push("  STA $02".to_string()); // Dest
+        self.output.push("  STX $03".to_string());
+        self.output.push("  LDY #0".to_string());
+        self.output.push("Left_Loop:".to_string());
+        self.output.push("  CPY $0C".to_string());
+        self.output.push("  BEQ Left_Done".to_string());
+        self.output.push("  LDA ($04),Y".to_string());
+        self.output.push("  BEQ Left_Done".to_string()); // End of src
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  JMP Left_Loop".to_string());
+        self.output.push("Left_Done:".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  LDX $03".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Runtime_Right
+        // Input: Stack (Count), A/X (Str Ptr)
+        self.output.push("Runtime_Right:".to_string());
+        self.output.push("  STA $04".to_string());
+        self.output.push("  STX $05".to_string());
+        // Pop Return Addr
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0A".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0B".to_string());
+        // Pop Count
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0C".to_string());
+
+        // Safety: Clamp Count to 15
+        self.output.push("  CMP #16".to_string());
+        self.output.push("  BCC Right_CountOk".to_string());
+        self.output.push("  LDA #15".to_string());
+        self.output.push("  STA $0C".to_string());
+        self.output.push("Right_CountOk:".to_string());
+
+        // Push Ret
+        self.output.push("  LDA $0B".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  LDA $0A".to_string());
+        self.output.push("  PHA".to_string());
+
+        // Calc Len
+        self.output.push("  LDA $04".to_string());
+        self.output.push("  LDX $05".to_string());
+        self.output.push("  JSR Runtime_StringLen".to_string());
+        // Returns Len in A/X. (A=Low)
+        self.output.push("  SEC".to_string());
+        self.output.push("  SBC $0C".to_string()); // Len - Count
+        self.output.push("  BCC Right_Full".to_string()); // Count > Len
+        self.output.push("  TAY".to_string()); // Index
+        self.output.push("  JMP Right_Copy".to_string());
+        self.output.push("Right_Full:".to_string());
+        self.output.push("  LDY #0".to_string());
+        self.output.push("Right_Copy:".to_string());
+        self.output.push("  STY $0D".to_string()); // Start Index
+        self.output.push("  JSR Runtime_GetHeapSlot".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  STX $03".to_string());
+        self.output.push("  LDY #0".to_string());
+
+        // Add Start to Src Ptr
+        self.output.push("  LDA $04".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $0D".to_string());
+        self.output.push("  STA $04".to_string());
+        self.output.push("  LDA $05".to_string());
+        self.output.push("  ADC #0".to_string());
+        self.output.push("  STA $05".to_string());
+
+        self.output.push("Right_Loop:".to_string());
+        self.output.push("  LDA ($04),Y".to_string());
+        self.output.push("  BEQ Right_Done".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  JMP Right_Loop".to_string());
+
+        self.output.push("Right_Done:".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  LDX $03".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Runtime_Mid
+        // Input: Stack(Len), Stack(Start), A/X(Str)
+        self.output.push("Runtime_Mid:".to_string());
+        self.output.push("  STA $04".to_string());
+        self.output.push("  STX $05".to_string());
+        // Pop Ret
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0A".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0B".to_string());
+        // Pop Start
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0C".to_string()); // Start
+                                                   // Pop Len
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0D".to_string()); // Len
+
+        // Safety: Clamp Len to 15
+        self.output.push("  LDA $0D".to_string());
+        self.output.push("  CMP #16".to_string());
+        self.output.push("  BCC Mid_LenOk".to_string());
+        self.output.push("  LDA #15".to_string());
+        self.output.push("  STA $0D".to_string());
+        self.output.push("Mid_LenOk:".to_string());
+
+        // Push Ret
+        self.output.push("  LDA $0B".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  LDA $0A".to_string());
+        self.output.push("  PHA".to_string());
+
+        // Adjust Start (1-based to 0-based)
+        self.output.push("  LDA $0C".to_string());
+        self.output.push("  BEQ Mid_BadStart".to_string());
+        self.output.push("  DEC $0C".to_string());
+        self.output.push("  JMP Mid_StartOk".to_string());
+        self.output.push("Mid_BadStart:".to_string());
+        // Return Empty String
+        self.output.push("  JSR Runtime_GetHeapSlot".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  STX $03".to_string());
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  LDX $03".to_string());
+        self.output.push("  RTS".to_string());
+        self.output.push("Mid_StartOk:".to_string());
+
+        // Add Start to Src Ptr
+        self.output.push("  LDA $04".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $0C".to_string());
+        self.output.push("  STA $04".to_string());
+        self.output.push("  LDA $05".to_string());
+        self.output.push("  ADC #0".to_string());
+        self.output.push("  STA $05".to_string());
+
+        self.output.push("  JSR Runtime_GetHeapSlot".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  STX $03".to_string());
+        self.output.push("  LDY #0".to_string());
+        self.output.push("Mid_Loop:".to_string());
+        self.output.push("  CPY $0D".to_string());
+        self.output.push("  BEQ Mid_Done".to_string());
+        self.output.push("  LDA ($04),Y".to_string());
+        self.output.push("  BEQ Mid_Done".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  JMP Mid_Loop".to_string());
+        self.output.push("Mid_Done:".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  LDX $03".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("".to_string());
     }
 
     fn generate_string_data(&mut self) {
@@ -1700,6 +2089,49 @@ impl CodeGenerator {
 
                             return Ok(DataType::Int);
                         }
+                    } else if name.eq_ignore_ascii_case("ASC") {
+                        self.generate_expression(&args[0])?;
+                        self.output.push("  JSR Runtime_Asc".to_string());
+                        return Ok(DataType::Word);
+                    } else if name.eq_ignore_ascii_case("VAL") {
+                        self.generate_expression(&args[0])?;
+                        self.output.push("  JSR Runtime_Val".to_string());
+                        return Ok(DataType::Word);
+                    } else if name.eq_ignore_ascii_case("CHR") {
+                        self.generate_expression(&args[0])?;
+                        self.output.push("  JSR Runtime_Chr".to_string());
+                        return Ok(DataType::String);
+                    } else if name.eq_ignore_ascii_case("STR") {
+                        self.generate_expression(&args[0])?;
+                        self.output.push("  JSR Runtime_Str".to_string());
+                        return Ok(DataType::String);
+                    } else if name.eq_ignore_ascii_case("LEFT") {
+                        // Arg 1: Count (Stack)
+                        self.generate_expression(&args[1])?;
+                        self.output.push("  PHA".to_string());
+                        // Arg 0: String (A/X)
+                        self.generate_expression(&args[0])?;
+                        self.output.push("  JSR Runtime_Left".to_string());
+                        return Ok(DataType::String);
+                    } else if name.eq_ignore_ascii_case("RIGHT") {
+                        // Arg 1: Count (Stack)
+                        self.generate_expression(&args[1])?;
+                        self.output.push("  PHA".to_string());
+                        // Arg 0: String (A/X)
+                        self.generate_expression(&args[0])?;
+                        self.output.push("  JSR Runtime_Right".to_string());
+                        return Ok(DataType::String);
+                    } else if name.eq_ignore_ascii_case("MID") {
+                        // Arg 2: Len (Stack)
+                        self.generate_expression(&args[2])?;
+                        self.output.push("  PHA".to_string());
+                        // Arg 1: Start (Stack)
+                        self.generate_expression(&args[1])?;
+                        self.output.push("  PHA".to_string());
+                        // Arg 0: String (A/X)
+                        self.generate_expression(&args[0])?;
+                        self.output.push("  JSR Runtime_Mid".to_string());
+                        return Ok(DataType::String);
                     }
                 }
 

@@ -36,6 +36,7 @@ pub enum Token {
     And,
     Or,
     Not,
+    Mod, // Added Modulo
     Let,
     PlaySfx,
     Data,
@@ -44,6 +45,7 @@ pub enum Token {
     Include,
     Select,
     Case,
+    Is, // Added IS for Select Case
 
     // Identifiers
     Identifier(String),
@@ -275,6 +277,7 @@ impl<'a> Lexer<'a> {
             "AND" => Token::And,
             "OR" => Token::Or,
             "NOT" => Token::Not,
+            "MOD" => Token::Mod,
             "LET" => Token::Let,
             "PLAY_SFX" => Token::PlaySfx,
             "DATA" => Token::Data,
@@ -283,6 +286,7 @@ impl<'a> Lexer<'a> {
             "INCLUDE" => Token::Include,
             "SELECT" => Token::Select,
             "CASE" => Token::Case,
+            "IS" => Token::Is,
             _ => Token::Identifier(ident),
         }
     }
@@ -426,7 +430,7 @@ mod tests {
 
     #[test]
     fn test_keywords() {
-        let input = "IF THEN ELSE END SUB WHILE WEND DO CONST DIM AS BYTE WORD INT BOOL PEEK POKE PRINT RETURN CALL AND OR NOT INCLUDE";
+        let input = "IF THEN ELSE END SUB WHILE WEND DO CONST DIM AS BYTE WORD INT BOOL PEEK POKE PRINT RETURN CALL AND OR NOT INCLUDE SELECT CASE IS MOD";
         let tokens = tokenize(input);
 
         let expected = vec![
@@ -454,6 +458,10 @@ mod tests {
             Token::Or,
             Token::Not,
             Token::Include,
+            Token::Select,
+            Token::Case,
+            Token::Is,
+            Token::Mod,
             Token::EOF,
         ];
 

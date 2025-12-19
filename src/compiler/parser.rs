@@ -1,5 +1,6 @@
 use super::ast::{
-    BinaryOperator, DataType, Expression, Program, Statement, TopLevel, UnaryOperator,
+    BinaryOperator, CaseCondition, DataType, Expression, Program, Statement, TopLevel,
+    UnaryOperator,
 };
 use super::lexer::Token;
 
@@ -16,7 +17,7 @@ enum Precedence {
     Equality,   // = <>
     Comparison, // < > <= >=
     Term,       // + -
-    Factor,     // * /
+    Factor,     // * / MOD
     Unary,      // NOT -
     Call,       // . ()
     Primary,
@@ -258,6 +259,11 @@ impl Parser {
                         Token::Hash => line.push('#'),
                         Token::Colon => line.push(':'),
                         Token::SemiColon => line.push(';'),
+                        Token::Is => line.push_str("IS"),
+                        Token::Mod => line.push_str("MOD"),
+                        Token::And => line.push_str("AND"),
+                        Token::Or => line.push_str("OR"),
+                        Token::Not => line.push_str("NOT"),
                         _ => line.push('?'),
                     }
                     line.push(' ');
@@ -627,10 +633,10 @@ impl Parser {
                     let block = self.parse_block()?;
                     case_else = Some(block);
                 } else {
-                    let val = self.parse_expression()?;
-                    self.consume(Token::Newline, "Expected newline after CASE <val>")?;
+                    let condition = self.parse_case_condition()?;
+                    self.consume(Token::Newline, "Expected newline after CASE condition")?;
                     let block = self.parse_block()?;
-                    cases.push((val, block));
+                    cases.push((condition, block));
                 }
             } else {
                 return Err(format!(
@@ -644,6 +650,31 @@ impl Parser {
         self.consume(Token::Select, "Expected SELECT after END")?;
 
         Ok(Statement::Select(expr, cases, case_else))
+    }
+
+    fn parse_case_condition(&mut self) -> Result<CaseCondition, String> {
+        // CASE 1
+        // CASE 1 TO 5
+        // CASE IS > 5
+
+        if self.match_token(Token::Is) {
+            // CASE IS > 5
+            let op_token = self.advance().clone();
+            let op = self
+                .token_to_binary_op(&op_token)
+                .ok_or("Expected comparison operator after IS")?;
+            let val = self.parse_expression()?;
+            Ok(CaseCondition::Comparison(op, val))
+        } else {
+            let val = self.parse_expression()?;
+            if self.match_token(Token::To) {
+                // CASE 1 TO 5
+                let end = self.parse_expression()?;
+                Ok(CaseCondition::Range(val, end))
+            } else {
+                Ok(CaseCondition::Equal(val))
+            }
+        }
     }
 
     // --- Expression Parsing ---
@@ -745,7 +776,7 @@ impl Parser {
                 Precedence::Comparison
             }
             Token::Plus | Token::Minus => Precedence::Term,
-            Token::Star | Token::Slash => Precedence::Factor,
+            Token::Star | Token::Slash | Token::Mod => Precedence::Factor,
             Token::Dot => Precedence::Call,
             _ => Precedence::None,
         }
@@ -775,6 +806,7 @@ impl Parser {
             Token::Minus => Some(BinaryOperator::Subtract),
             Token::Star => Some(BinaryOperator::Multiply),
             Token::Slash => Some(BinaryOperator::Divide),
+            Token::Mod => Some(BinaryOperator::Modulo),
             Token::Equal => Some(BinaryOperator::Equal),
             Token::NotEqual => Some(BinaryOperator::NotEqual),
             Token::Less => Some(BinaryOperator::LessThan),
@@ -1149,6 +1181,52 @@ END SUB
             assert_eq!(filename, "lib.swiss");
         } else {
             panic!("Expected Include");
+        }
+    }
+
+    #[test]
+    fn test_parse_modulo() {
+        let input = "10 MOD 3";
+        let tokens = tokenize(input);
+        let mut parser = Parser::new(tokens);
+        let expr = parser
+            .parse_expression()
+            .expect("Failed to parse expression");
+
+        if let Expression::BinaryOp(_left, op, _right) = expr {
+            assert_eq!(op, BinaryOperator::Modulo);
+        } else {
+            panic!("Expected Modulo op");
+        }
+    }
+
+    #[test]
+    fn test_parse_select_case_ranges() {
+        let input = "SELECT CASE x\nCASE 1\ny = 1\nCASE 2 TO 5\ny = 2\nCASE IS > 5\ny = 3\nEND SELECT";
+        let tokens = tokenize(input);
+        let mut parser = Parser::new(tokens);
+        let stmt = parser
+            .parse_statement()
+            .expect("Failed to parse SELECT statement");
+
+        if let Statement::Select(_expr, cases, _else_case) = stmt {
+            assert_eq!(cases.len(), 3);
+            match &cases[0].0 {
+                CaseCondition::Equal(_) => {}
+                _ => panic!("Expected Equal case"),
+            }
+            match &cases[1].0 {
+                CaseCondition::Range(_, _) => {}
+                _ => panic!("Expected Range case"),
+            }
+            match &cases[2].0 {
+                CaseCondition::Comparison(op, _) => {
+                    assert_eq!(*op, BinaryOperator::GreaterThan);
+                }
+                _ => panic!("Expected Comparison case"),
+            }
+        } else {
+            panic!("Expected Select");
         }
     }
 }

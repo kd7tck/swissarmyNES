@@ -1,5 +1,6 @@
 use crate::compiler::ast::{
-    BinaryOperator, DataType, Expression, Program, Statement, TopLevel, UnaryOperator,
+    BinaryOperator, CaseCondition, DataType, Expression, Program, Statement, TopLevel,
+    UnaryOperator,
 };
 use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 use std::collections::HashMap;
@@ -13,6 +14,7 @@ pub struct CodeGenerator {
     label_counter: usize,
     data_table_offsets: HashMap<String, u16>,
     sub_signatures: HashMap<String, Vec<(u16, DataType)>>,
+    sub_locals: HashMap<String, Vec<(String, u16, DataType)>>,
     string_literals: HashMap<String, String>,
 }
 
@@ -25,6 +27,7 @@ impl CodeGenerator {
             label_counter: 0,
             data_table_offsets: HashMap::new(),
             sub_signatures: HashMap::new(),
+            sub_locals: HashMap::new(),
             string_literals: HashMap::new(),
         }
     }
@@ -949,8 +952,15 @@ impl CodeGenerator {
             Statement::PlaySfx(expr) => self.collect_strings_expr(expr),
             Statement::Select(expr, cases, else_b) => {
                 self.collect_strings_expr(expr);
-                for (val, block) in cases {
-                    self.collect_strings_expr(val);
+                for (cond, block) in cases {
+                    match cond {
+                        CaseCondition::Equal(val) => self.collect_strings_expr(val),
+                        CaseCondition::Range(start, end) => {
+                            self.collect_strings_expr(start);
+                            self.collect_strings_expr(end);
+                        }
+                        CaseCondition::Comparison(_, val) => self.collect_strings_expr(val),
+                    }
                     self.collect_strings_block(block);
                 }
                 if let Some(b) = else_b {
@@ -982,6 +992,84 @@ impl CodeGenerator {
             Expression::Peek(e) => self.collect_strings_expr(e),
             Expression::MemberAccess(e, _) => self.collect_strings_expr(e),
             _ => {}
+        }
+    }
+
+    fn allocate_locals(&mut self, sub_name: &str, block: &[Statement]) {
+        for stmt in block {
+            match stmt {
+                Statement::Let(target, _) => {
+                    if let Expression::Identifier(name) = target {
+                        // Check if already defined (Global, Param, or previous Local)
+                        if self.symbol_table.resolve(name).is_none() {
+                            // Define implicit local (Byte)
+                            let _ = self.symbol_table.define(
+                                name.clone(),
+                                DataType::Byte,
+                                SymbolKind::Local,
+                            );
+                            // Assign address
+                            let _ = self.symbol_table.assign_address(name, self.ram_pointer);
+                            self.output.push(format!("; Local {} @ ${:04X}", name, self.ram_pointer));
+
+                            // Store in sub_locals
+                            self.sub_locals.entry(sub_name.to_string()).or_default().push((name.clone(), self.ram_pointer, DataType::Byte));
+
+                            self.ram_pointer += 1;
+                        }
+                    }
+                }
+                Statement::For(var_name, _, _, _, body) => {
+                    if self.symbol_table.resolve(var_name).is_none() {
+                        let _ = self.symbol_table.define(
+                            var_name.clone(),
+                            DataType::Byte,
+                            SymbolKind::Local,
+                        );
+                        let _ = self.symbol_table.assign_address(var_name, self.ram_pointer);
+                        self.output.push(format!("; Local For {} @ ${:04X}", var_name, self.ram_pointer));
+
+                        self.sub_locals.entry(sub_name.to_string()).or_default().push((var_name.clone(), self.ram_pointer, DataType::Byte));
+
+                        self.ram_pointer += 1;
+                    }
+                    self.allocate_locals(sub_name, body);
+                }
+                Statement::If(_, then_block, else_block) => {
+                    self.allocate_locals(sub_name, then_block);
+                    if let Some(b) = else_block {
+                        self.allocate_locals(sub_name, b);
+                    }
+                }
+                Statement::While(_, body) => self.allocate_locals(sub_name, body),
+                Statement::DoWhile(body, _) => self.allocate_locals(sub_name, body),
+                Statement::Select(_, cases, else_block) => {
+                    for (_, body) in cases {
+                        self.allocate_locals(sub_name, body);
+                    }
+                    if let Some(b) = else_block {
+                        self.allocate_locals(sub_name, b);
+                    }
+                }
+                Statement::Read(vars) => {
+                    for name in vars {
+                        if self.symbol_table.resolve(name).is_none() {
+                            let _ = self.symbol_table.define(
+                                name.clone(),
+                                DataType::Byte,
+                                SymbolKind::Local,
+                            );
+                            let _ = self.symbol_table.assign_address(name, self.ram_pointer);
+                            self.output.push(format!("; Local Read {} @ ${:04X}", name, self.ram_pointer));
+
+                            self.sub_locals.entry(sub_name.to_string()).or_default().push((name.clone(), self.ram_pointer, DataType::Byte));
+
+                            self.ram_pointer += 1;
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -1045,7 +1133,7 @@ impl CodeGenerator {
                 TopLevel::TypeDecl(_, _) => {
                     // Handled by Analysis
                 }
-                TopLevel::Sub(sub_name, params, _) => {
+                TopLevel::Sub(sub_name, params, body) => {
                     self.symbol_table.enter_scope(); // Enter Sub Scope
 
                     let mut sig_params = Vec::new();
@@ -1093,6 +1181,10 @@ impl CodeGenerator {
                             }
                         }
                     }
+
+                    // Collect implicit locals
+                    self.allocate_locals(sub_name, body);
+
                     // Store signature
                     self.sub_signatures.insert(sub_name.clone(), sig_params);
 
@@ -1103,7 +1195,11 @@ impl CodeGenerator {
 
                     self.symbol_table.exit_scope();
                 }
-                TopLevel::Interrupt(name, _) => {
+                TopLevel::Interrupt(name, body) => {
+                    self.symbol_table.enter_scope();
+                    self.allocate_locals(name, body);
+                    self.symbol_table.exit_scope();
+
                     // Interrupts need Data Table entries
                     let upper = name.to_uppercase();
                     if upper == "NMI" {
@@ -1159,6 +1255,16 @@ impl CodeGenerator {
                 self.output.push(format!("{}:", name));
                 // Enter scope for parameters/locals
                 self.symbol_table.enter_scope();
+
+                // Restore implicit locals allocated in pass 1
+                if let Some(locals) = self.sub_locals.get(name) {
+                    for (var_name, addr, dtype) in locals {
+                        // Re-define in current scope
+                        let _ = self.symbol_table.define(var_name.clone(), dtype.clone(), SymbolKind::Local);
+                        let _ = self.symbol_table.assign_address(var_name, *addr);
+                    }
+                }
+
                 self.generate_block(body)?;
                 self.symbol_table.exit_scope();
                 self.output.push("  RTS".to_string());
@@ -1167,6 +1273,15 @@ impl CodeGenerator {
             TopLevel::Interrupt(name, body) => {
                 self.output.push(format!("{}:", name));
                 self.symbol_table.enter_scope();
+
+                // Restore implicit locals
+                if let Some(locals) = self.sub_locals.get(name) {
+                    for (var_name, addr, dtype) in locals {
+                        let _ = self.symbol_table.define(var_name.clone(), dtype.clone(), SymbolKind::Local);
+                        let _ = self.symbol_table.assign_address(var_name, *addr);
+                    }
+                }
+
                 self.generate_block(body)?;
                 self.symbol_table.exit_scope();
                 self.output.push("  RTI".to_string());
@@ -1639,40 +1754,62 @@ impl CodeGenerator {
                 }
 
                 // 3. Generate Checks
-                for (case_val, case_body) in cases {
+                for (cond, case_body) in cases {
                     let next_case = self.new_label();
 
-                    // Eval Case Value -> A/X
-                    self.generate_expression(case_val)?;
-
-                    // Compare (Stack vs A/X)
-                    self.output.push("  TSX".to_string());
-
-                    match expr_type {
-                        DataType::Byte | DataType::Bool => {
-                            // A has Case Val. Stack has Select Val at $0101,X
-                            self.output.push("  CMP $0101, X".to_string());
-                            self.output.push(format!("  BNE {}", next_case));
+                    match cond {
+                        CaseCondition::Equal(case_val) => {
+                            self.generate_expression(case_val)?;
+                            // Compare with Stack
+                            self.generate_comparison_with_stack(&expr_type, next_case.as_str())?;
                         }
-                        _ => {
-                            // A=Low, X=High of Case Val.
-                            // Stack: High at 101, Low at 102.
-                            // We must save X (High Byte) because TSX clobbers it.
-                            self.output.push("  STX $01".to_string()); // Save High
-                            self.output.push("  TSX".to_string());
+                        CaseCondition::Range(start, end) => {
+                            // >= Start AND <= End
+                            let skip_range = self.new_label();
+                            // Check >= Start
+                            self.generate_expression(start)?;
+                            self.generate_comparison_op_with_stack(
+                                &expr_type,
+                                BinaryOperator::GreaterThanOrEqual,
+                                skip_range.as_str(),
+                                true, // Inverted: if NOT >= Start, Jump
+                            )?;
 
-                            self.output.push("  CMP $0102, X".to_string()); // Compare Low
-                            self.output.push(format!("  BNE {}", next_case));
+                            // Check <= End
+                            self.generate_expression(end)?;
+                            self.generate_comparison_op_with_stack(
+                                &expr_type,
+                                BinaryOperator::LessThanOrEqual,
+                                skip_range.as_str(),
+                                true,
+                            )?;
 
-                            self.output.push("  LDA $01".to_string()); // Restore High
-                            self.output.push("  CMP $0101, X".to_string()); // Compare High
-                            self.output.push(format!("  BNE {}", next_case));
+                            // If here, matched.
+                            self.generate_block(case_body)?;
+                            self.output.push(format!("  JMP {}", end_select_label));
+
+                            self.output.push(format!("{}:", skip_range));
+                            self.output.push(format!("  JMP {}", next_case));
+                        }
+                        CaseCondition::Comparison(op, val) => {
+                            self.generate_expression(val)?;
+                            self.generate_comparison_op_with_stack(
+                                &expr_type,
+                                op.clone(),
+                                next_case.as_str(),
+                                true, // Inverted logic (Jump if False)
+                            )?;
                         }
                     }
 
-                    // If we are here, it matched.
-                    self.generate_block(case_body)?;
-                    self.output.push(format!("  JMP {}", end_select_label));
+                    // If Equal case fell through here (match success)
+                    if let CaseCondition::Equal(_) = cond {
+                        self.generate_block(case_body)?;
+                        self.output.push(format!("  JMP {}", end_select_label));
+                    } else if let CaseCondition::Comparison(_, _) = cond {
+                        self.generate_block(case_body)?;
+                        self.output.push(format!("  JMP {}", end_select_label));
+                    }
 
                     self.output.push(format!("{}:", next_case));
                 }
@@ -1696,6 +1833,139 @@ impl CodeGenerator {
                 }
             }
         }
+        Ok(())
+    }
+
+    fn generate_comparison_with_stack(
+        &mut self,
+        expr_type: &DataType,
+        fail_label: &str,
+    ) -> Result<(), String> {
+        self.output.push("  TSX".to_string());
+        match expr_type {
+            DataType::Byte | DataType::Bool => {
+                // A has Case Val. Stack has Select Val at $0101,X
+                self.output.push("  CMP $0101, X".to_string());
+                self.output.push(format!("  BNE {}", fail_label));
+            }
+            _ => {
+                // A=Low, X=High of Case Val.
+                // Stack: High at 101, Low at 102.
+                // We must save X (High Byte) because TSX clobbers it.
+                self.output.push("  STX $01".to_string()); // Save High
+                self.output.push("  TSX".to_string());
+
+                self.output.push("  CMP $0102, X".to_string()); // Compare Low
+                self.output.push(format!("  BNE {}", fail_label));
+
+                self.output.push("  LDA $01".to_string()); // Restore High
+                self.output.push("  CMP $0101, X".to_string()); // Compare High
+                self.output.push(format!("  BNE {}", fail_label));
+            }
+        }
+        Ok(())
+    }
+
+    // Helper to generate comparisons between Top of Stack (LHS) and A/X (RHS)
+    // Used for Ranges and Comparisons in SELECT CASE
+    // If invert is true, jump to fail_label if Condition is FALSE.
+    fn generate_comparison_op_with_stack(
+        &mut self,
+        expr_type: &DataType,
+        op: BinaryOperator,
+        fail_label: &str,
+        invert: bool,
+    ) -> Result<(), String> {
+        match expr_type {
+            DataType::Byte | DataType::Bool => {
+                // RHS in A.
+                // LHS on Stack.
+                self.output.push("  STA $00".to_string()); // Save RHS
+                self.output.push("  TSX".to_string());
+                self.output.push("  LDA $0101, X".to_string()); // Load LHS
+                self.output.push("  CMP $00".to_string()); // LHS - RHS
+            }
+            _ => {
+                // RHS in A (Low), X (High).
+                // LHS on Stack. High at 101, Low at 102.
+                self.output.push("  STA $00".to_string()); // RHS Low
+                self.output.push("  STX $01".to_string()); // RHS High
+
+                self.output.push("  TSX".to_string());
+                self.output.push("  LDA $0102, X".to_string()); // LHS Low
+                self.output.push("  SEC".to_string());
+                self.output.push("  SBC $00".to_string()); // Low - Low
+
+                self.output.push("  LDA $0101, X".to_string()); // LHS High
+                self.output.push("  SBC $01".to_string()); // High - High - Borrow
+            }
+        }
+
+        // Unsigned logic:
+        match op {
+            BinaryOperator::Equal => {
+                if invert {
+                    self.output.push(format!("  BNE {}", fail_label));
+                } else {
+                    self.output.push(format!("  BEQ {}", fail_label));
+                }
+            }
+            BinaryOperator::NotEqual => {
+                if invert {
+                    self.output.push(format!("  BEQ {}", fail_label));
+                } else {
+                    self.output.push(format!("  BNE {}", fail_label));
+                }
+            }
+            BinaryOperator::LessThan => {
+                // BCC means Less (Unsigned)
+                if invert {
+                    self.output.push(format!("  BCS {}", fail_label));
+                } else {
+                    self.output.push(format!("  BCC {}", fail_label));
+                }
+            }
+            BinaryOperator::GreaterThanOrEqual => {
+                // BCS means >= (Unsigned)
+                if invert {
+                    self.output.push(format!("  BCC {}", fail_label));
+                } else {
+                    self.output.push(format!("  BCS {}", fail_label));
+                }
+            }
+            BinaryOperator::LessThanOrEqual => {
+                // <= means BCC or BEQ.
+                if invert {
+                    // Fail if > (Carry Set AND Not Zero)
+                    let ok_lbl = self.new_label();
+                    self.output.push(format!("  BCC {}", ok_lbl)); // < (OK)
+                    self.output.push(format!("  BEQ {}", ok_lbl)); // = (OK)
+                    self.output.push(format!("  JMP {}", fail_label));
+                    self.output.push(format!("{}:", ok_lbl));
+                } else {
+                    // Jump if <=
+                    self.output.push(format!("  BCC {}", fail_label));
+                    self.output.push(format!("  BEQ {}", fail_label));
+                }
+            }
+            BinaryOperator::GreaterThan => {
+                // > means BCS and BNE.
+                if invert {
+                    // Fail if <=
+                    self.output.push(format!("  BCC {}", fail_label));
+                    self.output.push(format!("  BEQ {}", fail_label));
+                } else {
+                    // Jump if >
+                    let ok_lbl = self.new_label();
+                    self.output.push(format!("  BCC {}", ok_lbl));
+                    self.output.push(format!("  BEQ {}", ok_lbl));
+                    self.output.push(format!("  JMP {}", fail_label)); // Jump!
+                    self.output.push(format!("{}:", ok_lbl));
+                }
+            }
+            _ => return Err("Unsupported op in Select Case".to_string()),
+        }
+
         Ok(())
     }
 
@@ -2217,6 +2487,17 @@ impl CodeGenerator {
                                 Ok(DataType::Word)
                             }
                         }
+                        BinaryOperator::Modulo => {
+                            self.output.push("  JSR Math_Div16".to_string());
+                            // Remainder is in $08/$09
+                            self.output.push("  LDA $08".to_string());
+                            self.output.push("  LDX $09".to_string());
+                            if is_signed {
+                                Ok(DataType::Int)
+                            } else {
+                                Ok(DataType::Word)
+                            }
+                        }
                         BinaryOperator::And => {
                             self.output.push("  AND $00".to_string());
                             self.output.push("  PHA".to_string());
@@ -2377,6 +2658,11 @@ impl CodeGenerator {
                         }
                         BinaryOperator::Divide => {
                             self.output.push("  JSR Math_Div8".to_string());
+                        }
+                        BinaryOperator::Modulo => {
+                            self.output.push("  JSR Math_Div8".to_string());
+                            // Remainder in $03
+                            self.output.push("  LDA $03".to_string());
                         }
                         BinaryOperator::And => {
                             self.output.push("  AND $00".to_string());

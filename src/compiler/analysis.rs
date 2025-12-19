@@ -1,4 +1,6 @@
-use crate::compiler::ast::{DataType, Expression, Program, Statement, TopLevel};
+use crate::compiler::ast::{
+    BinaryOperator, CaseCondition, DataType, Expression, Program, Statement, TopLevel,
+};
 use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 
 pub struct SemanticAnalyzer {
@@ -339,8 +341,15 @@ impl SemanticAnalyzer {
             Statement::Restore(_) => {}
             Statement::Select(expr, cases, case_else) => {
                 self.analyze_expression(expr);
-                for (val, block) in cases {
-                    self.analyze_expression(val);
+                for (cond, block) in cases {
+                    match cond {
+                        CaseCondition::Equal(val) => self.analyze_expression(val),
+                        CaseCondition::Range(start, end) => {
+                            self.analyze_expression(start);
+                            self.analyze_expression(end);
+                        }
+                        CaseCondition::Comparison(_, val) => self.analyze_expression(val),
+                    }
                     self.analyze_block(block);
                 }
                 if let Some(block) = case_else {
@@ -440,7 +449,12 @@ impl SemanticAnalyzer {
             }
             Expression::Integer(_) => Some(DataType::Word),
             Expression::StringLiteral(_) => Some(DataType::String),
-            Expression::BinaryOp(_, _, _) => Some(DataType::Word), // Approximate
+            Expression::BinaryOp(_, op, _) => {
+                match op {
+                    BinaryOperator::Modulo => Some(DataType::Word), // or Int?
+                    _ => Some(DataType::Word),                      // Approximate
+                }
+            }
             Expression::UnaryOp(_, _) => Some(DataType::Int),
             Expression::FunctionCall(_, _) => Some(DataType::Word), // Assume Word/Int
             Expression::Peek(_) => Some(DataType::Byte),

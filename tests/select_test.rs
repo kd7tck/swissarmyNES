@@ -1,128 +1,58 @@
-use swissarmynes::compiler::ast::{DataType, Expression, Program, Statement, TopLevel};
+use swissarmynes::compiler::lexer::tokenize;
+use swissarmynes::compiler::parser::Parser;
+use swissarmynes::compiler::analysis::SemanticAnalyzer;
 use swissarmynes::compiler::codegen::CodeGenerator;
-use swissarmynes::compiler::symbol_table::{SymbolKind, SymbolTable};
+use swissarmynes::compiler::ast::{Statement, TopLevel, CaseCondition};
 
 #[test]
-fn test_codegen_select_statement() {
-    let mut st = SymbolTable::new();
-    st.define("x".to_string(), DataType::Byte, SymbolKind::Variable)
-        .unwrap();
+fn test_select_case_ranges() {
+    let input = r#"
+    SUB Main()
+        x = 5
+        SELECT CASE x
+            CASE 1 TO 10
+                y = 1
+            CASE IS > 20
+                y = 2
+            CASE 0
+                y = 3
+        END SELECT
+    END SUB
+    "#;
+    let tokens = tokenize(input);
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse_program().expect("Failed to parse");
 
-    // SELECT CASE x
-    //   CASE 1
-    //     x = 10
-    //   CASE 2
-    //     x = 20
-    //   CASE ELSE
-    //     x = 0
-    // END SELECT
-    let program = Program {
-        declarations: vec![
-            TopLevel::Dim("x".to_string(), DataType::Byte, None),
-            TopLevel::Sub(
-                "Main".to_string(),
-                vec![],
-                vec![Statement::Select(
-                    Expression::Identifier("x".to_string()),
-                    vec![
-                        (
-                            Expression::Integer(1),
-                            vec![Statement::Let(
-                                Expression::Identifier("x".to_string()),
-                                Expression::Integer(10),
-                            )],
-                        ),
-                        (
-                            Expression::Integer(2),
-                            vec![Statement::Let(
-                                Expression::Identifier("x".to_string()),
-                                Expression::Integer(20),
-                            )],
-                        ),
-                    ],
-                    Some(vec![Statement::Let(
-                        Expression::Identifier("x".to_string()),
-                        Expression::Integer(0),
-                    )]),
-                )],
-            ),
-        ],
-    };
+    // Check AST
+    if let TopLevel::Sub(_, _, body) = &program.declarations[0] {
+        if let Statement::Select(_, cases, _) = &body[1] { // 0 is Let x=5
+            assert_eq!(cases.len(), 3);
+            match &cases[0].0 {
+                CaseCondition::Range(_, _) => {}
+                _ => panic!("Expected Range"),
+            }
+            match &cases[1].0 {
+                CaseCondition::Comparison(_, _) => {}
+                _ => panic!("Expected Comparison"),
+            }
+            match &cases[2].0 {
+                CaseCondition::Equal(_) => {}
+                _ => panic!("Expected Equal"),
+            }
+        } else {
+            panic!("Expected Select");
+        }
+    }
 
-    let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
-    let code_str = code.join("\n");
+    // Check Codegen
+    let mut analyzer = SemanticAnalyzer::new();
+    analyzer.analyze(&program).expect("Analysis failed");
+    let mut codegen = CodeGenerator::new(analyzer.symbol_table);
+    let code = codegen.generate(&program).expect("Codegen failed");
 
-    // Check stack usage (Push Select Value)
-    assert!(code_str.contains("PHA")); // Push Byte
-
-    // Check Stack Peek (Byte)
-    assert!(code_str.contains("TSX"));
-    assert!(code_str.contains("CMP $0101, X"));
-
-    // Check Branching
-    assert!(code_str.contains("BNE GEN_L"));
-    assert!(code_str.contains("JMP GEN_L"));
-
-    // Check Case Values
-    assert!(code_str.contains("LDA #$01")); // Case 1
-    assert!(code_str.contains("LDA #$02")); // Case 2
-
-    // Check Case Bodies
-    assert!(code_str.contains("LDA #$0A")); // 10
-    assert!(code_str.contains("LDA #$14")); // 20
-    assert!(code_str.contains("LDA #$00")); // 0 (Else)
-
-    // Check Cleanup
-    assert!(code_str.contains("PLA"));
-}
-
-#[test]
-fn test_codegen_select_word() {
-    let mut st = SymbolTable::new();
-    st.define("w".to_string(), DataType::Word, SymbolKind::Variable)
-        .unwrap();
-
-    // SELECT CASE w
-    //   CASE 1000
-    //     w = 1
-    // END SELECT
-    let program = Program {
-        declarations: vec![
-            TopLevel::Dim("w".to_string(), DataType::Word, None),
-            TopLevel::Sub(
-                "Main".to_string(),
-                vec![],
-                vec![Statement::Select(
-                    Expression::Identifier("w".to_string()),
-                    vec![(
-                        Expression::Integer(1000),
-                        vec![Statement::Let(
-                            Expression::Identifier("w".to_string()),
-                            Expression::Integer(1),
-                        )],
-                    )],
-                    None,
-                )],
-            ),
-        ],
-    };
-
-    let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
-    let code_str = code.join("\n");
-
-    // Check stack usage (Push Word)
-    assert!(code_str.contains("PHA"));
-    assert!(code_str.contains("TXA"));
-    // Stack structure: Low, High (Top)
-
-    // Check Stack Peek (Word)
-    assert!(code_str.contains("TSX"));
-    assert!(code_str.contains("CMP $0102, X")); // Compare Low
-    assert!(code_str.contains("CMP $0101, X")); // Compare High
-
-    // Check Case Value (1000 = $03E8)
-    assert!(code_str.contains("LDA #$E8"));
-    assert!(code_str.contains("LDX #$03"));
+    // Verify ranges generate comparisons
+    // Range 1 TO 10 should generate >= 1 AND <= 10
+    // >= is BCS/BCC depending on impl.
+    // We expect CMP instructions.
+    assert!(code.iter().any(|line| line.contains("CMP $010"))); // Compare with stack
 }

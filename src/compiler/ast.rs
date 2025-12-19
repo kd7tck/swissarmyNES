@@ -16,6 +16,7 @@ pub enum BinaryOperator {
     Subtract,
     Multiply,
     Divide,
+    Modulo,
     Equal,
     NotEqual,
     LessThan,
@@ -30,6 +31,13 @@ pub enum BinaryOperator {
 pub enum UnaryOperator {
     Not,
     Negate, // for negative numbers like -5
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum CaseCondition {
+    Equal(Expression),
+    Range(Expression, Expression), // start TO end
+    Comparison(BinaryOperator, Expression), // IS > 5 (Op, Value)
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -57,7 +65,7 @@ pub enum Statement {
     Restore(Option<String>), // RESTORE [Label] (reset data pointer)
     Select(
         Expression,
-        Vec<(Expression, Vec<Statement>)>,
+        Vec<(CaseCondition, Vec<Statement>)>,
         Option<Vec<Statement>>,
     ), // SELECT CASE expr, cases, case_else
 }

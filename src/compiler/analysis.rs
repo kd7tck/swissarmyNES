@@ -367,6 +367,105 @@ impl SemanticAnalyzer {
                             self.analyze_expression(&args[0]);
                         }
                         return;
+                    } else if name.eq_ignore_ascii_case("ASC") {
+                        if args.len() != 1 {
+                            self.errors.push("ASC expects 1 argument".to_string());
+                        } else {
+                            self.analyze_expression(&args[0]);
+                            if let Some(dtype) = self.resolve_type(&args[0]) {
+                                if dtype != DataType::String {
+                                    self.errors
+                                        .push("ASC expects a string argument".to_string());
+                                }
+                            }
+                        }
+                        return;
+                    } else if name.eq_ignore_ascii_case("VAL") {
+                        if args.len() != 1 {
+                            self.errors.push("VAL expects 1 argument".to_string());
+                        } else {
+                            self.analyze_expression(&args[0]);
+                            if let Some(dtype) = self.resolve_type(&args[0]) {
+                                if dtype != DataType::String {
+                                    self.errors
+                                        .push("VAL expects a string argument".to_string());
+                                }
+                            }
+                        }
+                        return;
+                    } else if name.eq_ignore_ascii_case("CHR") {
+                        if args.len() != 1 {
+                            self.errors.push("CHR expects 1 argument".to_string());
+                        } else {
+                            self.analyze_expression(&args[0]);
+                            if let Some(dtype) = self.resolve_type(&args[0]) {
+                                match dtype {
+                                    DataType::Byte | DataType::Word | DataType::Int => {}
+                                    _ => self
+                                        .errors
+                                        .push("CHR expects a numeric argument".to_string()),
+                                }
+                            }
+                        }
+                        return;
+                    } else if name.eq_ignore_ascii_case("STR") {
+                        if args.len() != 1 {
+                            self.errors.push("STR expects 1 argument".to_string());
+                        } else {
+                            self.analyze_expression(&args[0]);
+                            if let Some(dtype) = self.resolve_type(&args[0]) {
+                                match dtype {
+                                    DataType::Byte | DataType::Word | DataType::Int => {}
+                                    _ => self
+                                        .errors
+                                        .push("STR expects a numeric argument".to_string()),
+                                }
+                            }
+                        }
+                        return;
+                    } else if name.eq_ignore_ascii_case("LEFT") {
+                        if args.len() != 2 {
+                            self.errors.push("LEFT expects 2 arguments".to_string());
+                        } else {
+                            self.analyze_expression(&args[0]);
+                            self.analyze_expression(&args[1]);
+                            if let Some(dtype) = self.resolve_type(&args[0]) {
+                                if dtype != DataType::String {
+                                    self.errors
+                                        .push("LEFT expects string as first argument".to_string());
+                                }
+                            }
+                        }
+                        return;
+                    } else if name.eq_ignore_ascii_case("RIGHT") {
+                        if args.len() != 2 {
+                            self.errors.push("RIGHT expects 2 arguments".to_string());
+                        } else {
+                            self.analyze_expression(&args[0]);
+                            self.analyze_expression(&args[1]);
+                            if let Some(dtype) = self.resolve_type(&args[0]) {
+                                if dtype != DataType::String {
+                                    self.errors
+                                        .push("RIGHT expects string as first argument".to_string());
+                                }
+                            }
+                        }
+                        return;
+                    } else if name.eq_ignore_ascii_case("MID") {
+                        if args.len() != 3 {
+                            self.errors.push("MID expects 3 arguments".to_string());
+                        } else {
+                            self.analyze_expression(&args[0]);
+                            self.analyze_expression(&args[1]);
+                            self.analyze_expression(&args[2]);
+                            if let Some(dtype) = self.resolve_type(&args[0]) {
+                                if dtype != DataType::String {
+                                    self.errors
+                                        .push("MID expects string as first argument".to_string());
+                                }
+                            }
+                        }
+                        return;
                     }
                 }
 
@@ -449,6 +548,20 @@ impl SemanticAnalyzer {
                         return Some(DataType::Int);
                     } else if name.eq_ignore_ascii_case("SGN") {
                         return Some(DataType::Int);
+                    } else if name.eq_ignore_ascii_case("ASC") {
+                        return Some(DataType::Word);
+                    } else if name.eq_ignore_ascii_case("VAL") {
+                        return Some(DataType::Word);
+                    } else if name.eq_ignore_ascii_case("CHR") {
+                        return Some(DataType::String);
+                    } else if name.eq_ignore_ascii_case("STR") {
+                        return Some(DataType::String);
+                    } else if name.eq_ignore_ascii_case("LEFT") {
+                        return Some(DataType::String);
+                    } else if name.eq_ignore_ascii_case("RIGHT") {
+                        return Some(DataType::String);
+                    } else if name.eq_ignore_ascii_case("MID") {
+                        return Some(DataType::String);
                     }
                 }
 

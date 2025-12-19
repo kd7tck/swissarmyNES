@@ -548,19 +548,14 @@ impl SemanticAnalyzer {
                         return Some(DataType::Int);
                     } else if name.eq_ignore_ascii_case("SGN") {
                         return Some(DataType::Int);
-                    } else if name.eq_ignore_ascii_case("ASC") {
+                    } else if name.eq_ignore_ascii_case("ASC") || name.eq_ignore_ascii_case("VAL") {
                         return Some(DataType::Word);
-                    } else if name.eq_ignore_ascii_case("VAL") {
-                        return Some(DataType::Word);
-                    } else if name.eq_ignore_ascii_case("CHR") {
-                        return Some(DataType::String);
-                    } else if name.eq_ignore_ascii_case("STR") {
-                        return Some(DataType::String);
-                    } else if name.eq_ignore_ascii_case("LEFT") {
-                        return Some(DataType::String);
-                    } else if name.eq_ignore_ascii_case("RIGHT") {
-                        return Some(DataType::String);
-                    } else if name.eq_ignore_ascii_case("MID") {
+                    } else if name.eq_ignore_ascii_case("CHR")
+                        || name.eq_ignore_ascii_case("STR")
+                        || name.eq_ignore_ascii_case("LEFT")
+                        || name.eq_ignore_ascii_case("RIGHT")
+                        || name.eq_ignore_ascii_case("MID")
+                    {
                         return Some(DataType::String);
                     }
                 }

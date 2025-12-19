@@ -209,7 +209,8 @@ impl SemanticAnalyzer {
                                     .push(format!("Undefined struct type '{}'", struct_name));
                             }
                         } else {
-                            self.errors.push("Member access on non-struct type".to_string());
+                            self.errors
+                                .push("Member access on non-struct type".to_string());
                         }
                     }
                     _ => self.errors.push("Invalid assignment target".to_string()),
@@ -376,7 +377,8 @@ impl SemanticAnalyzer {
                 } else if base_type.is_some() {
                     // Only report error if base is known but not struct
                     // If base is unknown, it's already reported in recursion
-                    self.errors.push("Member access on non-struct type".to_string());
+                    self.errors
+                        .push("Member access on non-struct type".to_string());
                 }
             }
             Expression::BinaryOp(left, _, right) => {

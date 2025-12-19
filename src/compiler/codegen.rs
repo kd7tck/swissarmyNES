@@ -942,7 +942,10 @@ impl CodeGenerator {
                                 if let Some(size) = sym.value {
                                     self.ram_pointer += size as u16;
                                 } else {
-                                    return Err(format!("Struct '{}' has no size defined", struct_name));
+                                    return Err(format!(
+                                        "Struct '{}' has no size defined",
+                                        struct_name
+                                    ));
                                 }
                             } else {
                                 return Err(format!("Undefined struct '{}'", struct_name));
@@ -1121,27 +1124,21 @@ impl CodeGenerator {
                                             self.output.push(format!("  STA ${:04X}", addr));
                                             self.output
                                                 .push(format!("  LDA ${:04X}", src_addr + 1));
-                                            self.output
-                                                .push(format!("  STA ${:04X}", addr + 1));
+                                            self.output.push(format!("  STA ${:04X}", addr + 1));
                                         } else {
                                             self.output.push(format!("  LDA ${:04X}", src_addr));
                                             self.output.push(format!("  STA ${:04X}", addr));
                                             self.output.push("  LDA #0".to_string());
-                                            self.output
-                                                .push(format!("  STA ${:04X}", addr + 1));
+                                            self.output.push(format!("  STA ${:04X}", addr + 1));
                                         }
                                     } else if src_sym.kind == SymbolKind::Constant {
                                         if let Some(val) = src_sym.value {
                                             let low = (val & 0xFF) as u8;
                                             let high = ((val >> 8) & 0xFF) as u8;
-                                            self.output
-                                                .push(format!("  LDA #${:02X}", low));
-                                            self.output
-                                                .push(format!("  STA ${:04X}", addr));
-                                            self.output
-                                                .push(format!("  LDA #${:02X}", high));
-                                            self.output
-                                                .push(format!("  STA ${:04X}", addr + 1));
+                                            self.output.push(format!("  LDA #${:02X}", low));
+                                            self.output.push(format!("  STA ${:04X}", addr));
+                                            self.output.push(format!("  LDA #${:02X}", high));
+                                            self.output.push(format!("  STA ${:04X}", addr + 1));
                                         }
                                     }
                                 }
@@ -1880,37 +1877,39 @@ impl CodeGenerator {
                 }
             }
             Expression::MemberAccess(base, member) => {
-                let addr = self.get_static_address(&Expression::MemberAccess(base.clone(), member.clone()))?;
-                let dtype = self.resolve_type(&Expression::MemberAccess(base.clone(), member.clone()))
-                                .ok_or("Unknown type")?;
+                let addr = self
+                    .get_static_address(&Expression::MemberAccess(base.clone(), member.clone()))?;
+                let dtype = self
+                    .resolve_type(&Expression::MemberAccess(base.clone(), member.clone()))
+                    .ok_or("Unknown type")?;
 
                 match dtype {
                     DataType::Word => {
-                         self.output.push(format!("  LDA ${:04X}", addr));
-                         self.output.push(format!("  LDX ${:04X}", addr + 1));
-                         Ok(DataType::Word)
+                        self.output.push(format!("  LDA ${:04X}", addr));
+                        self.output.push(format!("  LDX ${:04X}", addr + 1));
+                        Ok(DataType::Word)
                     }
                     DataType::Int => {
-                         self.output.push(format!("  LDA ${:04X}", addr));
-                         // Sign extend
-                         self.output.push("  CMP #$80".to_string());
-                         let pos_lbl = self.new_label();
-                         let done_lbl = self.new_label();
-                         self.output.push(format!("  BCC {}", pos_lbl));
-                         self.output.push("  LDX #$FF".to_string());
-                         self.output.push(format!("  JMP {}", done_lbl));
-                         self.output.push(format!("{}:", pos_lbl));
-                         self.output.push("  LDX #0".to_string());
-                         self.output.push(format!("{}:", done_lbl));
-                         Ok(DataType::Int)
+                        self.output.push(format!("  LDA ${:04X}", addr));
+                        // Sign extend
+                        self.output.push("  CMP #$80".to_string());
+                        let pos_lbl = self.new_label();
+                        let done_lbl = self.new_label();
+                        self.output.push(format!("  BCC {}", pos_lbl));
+                        self.output.push("  LDX #$FF".to_string());
+                        self.output.push(format!("  JMP {}", done_lbl));
+                        self.output.push(format!("{}:", pos_lbl));
+                        self.output.push("  LDX #0".to_string());
+                        self.output.push(format!("{}:", done_lbl));
+                        Ok(DataType::Int)
                     }
                     DataType::Struct(_) => {
                         Err("Cannot evaluate struct member as expression".to_string())
                     }
                     _ => {
-                         self.output.push(format!("  LDA ${:04X}", addr));
-                         self.output.push("  LDX #0".to_string());
-                         Ok(DataType::Byte)
+                        self.output.push(format!("  LDA ${:04X}", addr));
+                        self.output.push("  LDX #0".to_string());
+                        Ok(DataType::Byte)
                     }
                 }
             }

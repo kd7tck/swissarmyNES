@@ -494,10 +494,10 @@ impl Parser {
             // Standard BASIC allows `GOSUB Label`. `Call Name` is explicit.
             // Implicit `Name` usually implies SUB call in some dialects.
             // Let's allow it if it's top-level statement.
-             if let Expression::Identifier(name) = expr {
+            if let Expression::Identifier(name) = expr {
                 // Treat as call with no args
                 return Ok(Statement::Call(name, vec![]));
-             }
+            }
 
             return Err(format!(
                 "Unexpected expression in statement position: {:?}",

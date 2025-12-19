@@ -77,6 +77,79 @@ fn test_div_16_generation() {
 }
 
 #[test]
+fn test_div_16_signed_generation() {
+    let mut st = SymbolTable::new();
+    st.define(
+        "i".to_string(),
+        DataType::Int,
+        swissarmynes::compiler::symbol_table::SymbolKind::Variable,
+    )
+    .unwrap();
+
+    let program = Program {
+        declarations: vec![
+            TopLevel::Dim("i".to_string(), DataType::Int, None),
+            TopLevel::Sub(
+                "Main".to_string(),
+                vec![],
+                vec![Statement::Let(
+                    Expression::Identifier("i".to_string()),
+                    Expression::BinaryOp(
+                        Box::new(Expression::Identifier("i".to_string())),
+                        BinaryOperator::Divide,
+                        Box::new(Expression::Integer(-2)),
+                    ),
+                )],
+            ),
+        ],
+    };
+
+    let mut cg = CodeGenerator::new(st);
+    let code = cg.generate(&program).expect("Codegen failed");
+
+    assert!(code
+        .iter()
+        .any(|line| line.contains("JSR Math_Div16_Signed")));
+}
+
+#[test]
+fn test_mod_generation() {
+    let mut st = SymbolTable::new();
+    st.define(
+        "w".to_string(),
+        DataType::Word,
+        swissarmynes::compiler::symbol_table::SymbolKind::Variable,
+    )
+    .unwrap();
+
+    let program = Program {
+        declarations: vec![
+            TopLevel::Dim("w".to_string(), DataType::Word, None),
+            TopLevel::Sub(
+                "Main".to_string(),
+                vec![],
+                vec![Statement::Let(
+                    Expression::Identifier("w".to_string()),
+                    Expression::BinaryOp(
+                        Box::new(Expression::Integer(10)),
+                        BinaryOperator::Modulo,
+                        Box::new(Expression::Integer(3)),
+                    ),
+                )],
+            ),
+        ],
+    };
+
+    let mut cg = CodeGenerator::new(st);
+    let code = cg.generate(&program).expect("Codegen failed");
+
+    assert!(code.iter().any(|line| line.contains("JSR Math_Div16")));
+    // Check it reads Remainder from $08/$09
+    assert!(code.iter().any(|line| line.contains("LDA $08")));
+    assert!(code.iter().any(|line| line.contains("LDX $09")));
+}
+
+#[test]
 fn test_signed_comparison_generation() {
     let mut st = SymbolTable::new();
     st.define(

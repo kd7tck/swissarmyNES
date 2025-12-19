@@ -632,6 +632,7 @@ impl CodeGenerator {
         self.output.push("Math_DivSkip:".to_string());
         self.output.push("  DEX".to_string());
         self.output.push("  BNE Math_DivLoop".to_string());
+        self.output.push("  STA $01".to_string());
         self.output.push("  LDA $02".to_string());
         self.output.push("  RTS".to_string());
 
@@ -734,6 +735,108 @@ impl CodeGenerator {
         self.output.push("  PLA".to_string());
         self.output.push("  TAX".to_string());
         self.output.push("  PLA".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Math_Div16_Signed: A/X / $00/$01 -> A/X (Quotient), $08/$09 (Remainder)
+        self.output.push("Math_Div16_Signed:".to_string());
+        self.output.push("  STA $06".to_string()); // Save Dividend Low
+        self.output.push("  STX $07".to_string()); // Save Dividend High
+
+        self.output.push("  STX $0B".to_string()); // Save Dividend High (Sign)
+        self.output.push("  LDA $01".to_string());
+        self.output.push("  STA $0C".to_string()); // Save Divisor High (Sign)
+        self.output.push("  EOR $0B".to_string());
+        self.output.push("  STA $0A".to_string()); // Save Quotient Sign (XOR)
+
+        // Restore Dividend to A/X for Abs check
+        self.output.push("  LDA $06".to_string());
+        self.output.push("  LDX $07".to_string());
+
+        // Abs(Dividend)
+        self.output.push("  LDY $0B".to_string()); // Check Sign
+        self.output
+            .push("  BPL Math_DivSigned_AbsDivisor".to_string());
+        // Negate A/X
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #1".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  TXA".to_string());
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  ADC #0".to_string());
+        self.output.push("  TAX".to_string());
+        self.output.push("  PLA".to_string());
+
+        self.output.push("Math_DivSigned_AbsDivisor:".to_string());
+        // Save Abs Dividend to stack, because Negating Divisor uses A
+        self.output.push("  PHA".to_string());
+        self.output.push("  TXA".to_string());
+        self.output.push("  PHA".to_string());
+
+        // Abs(Divisor in $00/$01)
+        self.output.push("  LDA $0C".to_string());
+        self.output.push("  BPL Math_DivSigned_Do".to_string());
+        // Negate $00/$01
+        self.output.push("  LDA $00".to_string());
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #1".to_string());
+        self.output.push("  STA $00".to_string());
+        self.output.push("  LDA $01".to_string());
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  ADC #0".to_string());
+        self.output.push("  STA $01".to_string());
+
+        self.output.push("Math_DivSigned_Do:".to_string());
+        // Restore Abs Dividend from Stack to A/X
+        self.output.push("  PLA".to_string());
+        self.output.push("  TAX".to_string());
+        self.output.push("  PLA".to_string());
+
+        self.output.push("  JSR Math_Div16".to_string());
+
+        // Apply Quotient Sign
+        self.output.push("  LDY $0A".to_string());
+        self.output
+            .push("  BPL Math_DivSigned_CheckRem".to_string());
+        // Negate A/X (Quotient)
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #1".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  TXA".to_string());
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  ADC #0".to_string());
+        self.output.push("  TAX".to_string());
+        self.output.push("  PLA".to_string());
+
+        self.output.push("Math_DivSigned_CheckRem:".to_string());
+        // Apply Remainder Sign (Dividend Sign $0B)
+        self.output.push("  LDY $0B".to_string());
+        self.output.push("  BPL Math_DivSigned_Done".to_string());
+
+        // Save Quotient
+        self.output.push("  PHA".to_string());
+        self.output.push("  TXA".to_string());
+        self.output.push("  PHA".to_string());
+
+        // Negate $08/$09 (Remainder)
+        self.output.push("  LDA $08".to_string());
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #1".to_string());
+        self.output.push("  STA $08".to_string());
+        self.output.push("  LDA $09".to_string());
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  ADC #0".to_string());
+        self.output.push("  STA $09".to_string());
+
+        // Restore Quotient
+        self.output.push("  PLA".to_string());
+        self.output.push("  TAX".to_string());
+        self.output.push("  PLA".to_string());
+
+        self.output.push("Math_DivSigned_Done:".to_string());
         self.output.push("  RTS".to_string());
     }
 
@@ -2210,10 +2313,24 @@ impl CodeGenerator {
                             }
                         }
                         BinaryOperator::Divide => {
-                            self.output.push("  JSR Math_Div16".to_string());
                             if is_signed {
+                                self.output.push("  JSR Math_Div16_Signed".to_string());
                                 Ok(DataType::Int)
                             } else {
+                                self.output.push("  JSR Math_Div16".to_string());
+                                Ok(DataType::Word)
+                            }
+                        }
+                        BinaryOperator::Modulo => {
+                            if is_signed {
+                                self.output.push("  JSR Math_Div16_Signed".to_string());
+                                self.output.push("  LDA $08".to_string());
+                                self.output.push("  LDX $09".to_string());
+                                Ok(DataType::Int)
+                            } else {
+                                self.output.push("  JSR Math_Div16".to_string());
+                                self.output.push("  LDA $08".to_string());
+                                self.output.push("  LDX $09".to_string());
                                 Ok(DataType::Word)
                             }
                         }
@@ -2377,6 +2494,10 @@ impl CodeGenerator {
                         }
                         BinaryOperator::Divide => {
                             self.output.push("  JSR Math_Div8".to_string());
+                        }
+                        BinaryOperator::Modulo => {
+                            self.output.push("  JSR Math_Div8".to_string());
+                            self.output.push("  LDA $01".to_string());
                         }
                         BinaryOperator::And => {
                             self.output.push("  AND $00".to_string());

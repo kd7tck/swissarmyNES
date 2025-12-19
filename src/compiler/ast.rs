@@ -24,6 +24,7 @@ pub enum BinaryOperator {
     GreaterThanOrEqual,
     And,
     Or,
+    Modulo,
 }
 
 #[derive(Debug, PartialEq, Clone)]

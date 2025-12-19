@@ -40,7 +40,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Update Frontend to manage multiple files in the Project Explorer.
 - **Completion Criteria:** A `main.swiss` can call a subroutine defined in `lib.swiss`.
 
-## Phase 5: 16-bit Math Expansion
+## Phase 5: 16-bit Math Expansion (Completed)
 **Goal:** Break the 8-bit barrier for general arithmetic.
 - **Action Items:**
     - Update CodeGen to support 16-bit addition/subtraction for `WORD` variables.

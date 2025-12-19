@@ -52,7 +52,7 @@ mod tests {
                 // Look for 16-bit add sequence
                 assert!(asm.contains("ADC $00"), "Missing Low Add");
                 assert!(asm.contains("ADC $01"), "Missing High Add");
-            },
+            }
             Err(e) => panic!("Codegen failed: {}", e),
         }
     }

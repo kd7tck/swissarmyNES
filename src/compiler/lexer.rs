@@ -41,6 +41,8 @@ pub enum Token {
     Read,
     Restore,
     Include,
+    Select,
+    Case,
 
     // Identifiers
     Identifier(String),
@@ -272,6 +274,8 @@ impl<'a> Lexer<'a> {
             "READ" => Token::Read,
             "RESTORE" => Token::Restore,
             "INCLUDE" => Token::Include,
+            "SELECT" => Token::Select,
+            "CASE" => Token::Case,
             _ => Token::Identifier(ident),
         }
     }

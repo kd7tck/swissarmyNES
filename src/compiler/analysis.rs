@@ -285,6 +285,16 @@ impl SemanticAnalyzer {
                 }
             }
             Statement::Restore(_) => {}
+            Statement::Select(expr, cases, case_else) => {
+                self.analyze_expression(expr);
+                for (val, block) in cases {
+                    self.analyze_expression(val);
+                    self.analyze_block(block);
+                }
+                if let Some(block) = case_else {
+                    self.analyze_block(block);
+                }
+            }
         }
     }
 

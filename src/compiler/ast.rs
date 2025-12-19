@@ -54,6 +54,11 @@ pub enum Statement {
     On(String, String),      // ON NMI DO RoutineName
     Read(Vec<String>),       // READ var1, var2
     Restore(Option<String>), // RESTORE [Label] (reset data pointer)
+    Select(
+        Expression,
+        Vec<(Expression, Vec<Statement>)>,
+        Option<Vec<Statement>>,
+    ), // SELECT CASE expr, cases, case_else
 }
 
 #[derive(Debug, PartialEq, Clone)]

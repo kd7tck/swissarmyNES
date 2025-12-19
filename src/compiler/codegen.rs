@@ -989,7 +989,7 @@ impl CodeGenerator {
                                 self.ram_pointer += 2;
                             }
                             crate::compiler::ast::DataType::Struct(name) => {
-                                if let Some(sym) = self.symbol_table.resolve(&name) {
+                                if let Some(sym) = self.symbol_table.resolve(name) {
                                     if let Some(size) = sym.value {
                                         self.ram_pointer += size as u16;
                                     } else {

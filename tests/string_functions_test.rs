@@ -6,9 +6,11 @@ use swissarmynes::compiler::symbol_table::{SymbolKind, SymbolTable};
 fn test_string_functions_codegen() {
     let mut st = SymbolTable::new();
     // Define a string variable 's' and integer 'i'
-    st.define("s".to_string(), DataType::String, SymbolKind::Variable).unwrap();
+    st.define("s".to_string(), DataType::String, SymbolKind::Variable)
+        .unwrap();
     st.assign_address("s", 0x0300).unwrap();
-    st.define("i".to_string(), DataType::Word, SymbolKind::Variable).unwrap();
+    st.define("i".to_string(), DataType::Word, SymbolKind::Variable)
+        .unwrap();
     st.assign_address("i", 0x0302).unwrap();
 
     // Program:
@@ -53,21 +55,31 @@ fn test_string_functions_codegen() {
             Expression::Identifier("s".to_string()),
             Expression::Call(
                 Box::new(Expression::Identifier("LEFT".to_string())),
-                vec![Expression::Identifier("s".to_string()), Expression::Integer(2)],
+                vec![
+                    Expression::Identifier("s".to_string()),
+                    Expression::Integer(2),
+                ],
             ),
         ),
-         Statement::Let(
+        Statement::Let(
             Expression::Identifier("s".to_string()),
             Expression::Call(
                 Box::new(Expression::Identifier("RIGHT".to_string())),
-                vec![Expression::Identifier("s".to_string()), Expression::Integer(2)],
+                vec![
+                    Expression::Identifier("s".to_string()),
+                    Expression::Integer(2),
+                ],
             ),
         ),
-         Statement::Let(
+        Statement::Let(
             Expression::Identifier("s".to_string()),
             Expression::Call(
                 Box::new(Expression::Identifier("MID".to_string())),
-                vec![Expression::Identifier("s".to_string()), Expression::Integer(2), Expression::Integer(1)],
+                vec![
+                    Expression::Identifier("s".to_string()),
+                    Expression::Integer(2),
+                    Expression::Integer(1),
+                ],
             ),
         ),
     ];

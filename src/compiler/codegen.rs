@@ -756,7 +756,7 @@ impl CodeGenerator {
         self.output.push("  CMP #10".to_string());
         self.output.push("  BCS Val_Done".to_string()); // Not digit
         self.output.push("  PHA".to_string()); // Save digit
-        // Result * 10
+                                               // Result * 10
         self.output.push("  LDA $0A".to_string());
         self.output.push("  LDX $0B".to_string());
         self.output.push("  STA $00".to_string()); // Mul16 expects args in A/X and $00/$01... wait, Mul16 takes A/X * $00/$01
@@ -1014,7 +1014,7 @@ impl CodeGenerator {
         // Pop Start
         self.output.push("  PLA".to_string());
         self.output.push("  STA $0C".to_string()); // Start
-        // Pop Len
+                                                   // Pop Len
         self.output.push("  PLA".to_string());
         self.output.push("  STA $0D".to_string()); // Len
 

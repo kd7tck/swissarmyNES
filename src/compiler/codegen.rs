@@ -358,6 +358,32 @@ impl CodeGenerator {
         self.output.push("  PLA".to_string());
         self.output.push("  RTS".to_string());
 
+        self.output.push("Runtime_StringLen:".to_string());
+        self.output.push("  STA $02".to_string()); // Ptr Low
+        self.output.push("  STX $03".to_string()); // Ptr High
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $06".to_string()); // Len Low
+        self.output.push("  STA $07".to_string()); // Len High
+        self.output.push("  TAY".to_string()); // Y = 0
+        self.output.push("Runtime_StringLen_Loop:".to_string());
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  CMP #0".to_string());
+        self.output.push("  BEQ Runtime_StringLen_Done".to_string());
+        self.output.push("  INC $06".to_string());
+        self.output
+            .push("  BNE Runtime_StringLen_SkipIncHigh".to_string());
+        self.output.push("  INC $07".to_string());
+        self.output
+            .push("Runtime_StringLen_SkipIncHigh:".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  BNE Runtime_StringLen_Loop".to_string());
+        self.output.push("  INC $03".to_string()); // Wrap page
+        self.output.push("  JMP Runtime_StringLen_Loop".to_string());
+        self.output.push("Runtime_StringLen_Done:".to_string());
+        self.output.push("  LDA $06".to_string());
+        self.output.push("  LDX $07".to_string());
+        self.output.push("  RTS".to_string());
+
         self.output.push("SndChUpdate:".to_string());
         self.output.push("  LDA $02E0, X".to_string());
         self.output.push("  BNE SndActive".to_string());
@@ -1558,6 +1584,16 @@ impl CodeGenerator {
     fn generate_expression(&mut self, expr: &Expression) -> Result<DataType, String> {
         match expr {
             Expression::Call(callee, args) => {
+                // Built-in Functions
+                if let Expression::Identifier(name) = &**callee {
+                    if name.eq_ignore_ascii_case("LEN") {
+                        // Generate Arg (String) -> A/X (Address)
+                        self.generate_expression(&args[0])?;
+                        self.output.push("  JSR Runtime_StringLen".to_string());
+                        return Ok(DataType::Word);
+                    }
+                }
+
                 // Determine if Array or Sub
                 if let Some(DataType::Array(_, _)) = self.resolve_type(callee) {
                     // Array Access

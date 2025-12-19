@@ -337,6 +337,25 @@ impl SemanticAnalyzer {
                 }
             }
             Expression::Call(callee, args) => {
+                // Built-ins check first
+                if let Expression::Identifier(name) = &**callee {
+                    if name.eq_ignore_ascii_case("LEN") {
+                        if args.len() != 1 {
+                            self.errors.push("LEN expects 1 argument".to_string());
+                        } else {
+                            // Check argument type
+                            self.analyze_expression(&args[0]);
+                            if let Some(dtype) = self.resolve_type(&args[0]) {
+                                if dtype != DataType::String {
+                                    self.errors
+                                        .push("LEN expects a string argument".to_string());
+                                }
+                            }
+                        }
+                        return;
+                    }
+                }
+
                 // Check if it's Array Access or Function Call
                 self.analyze_expression(callee);
 
@@ -405,6 +424,13 @@ impl SemanticAnalyzer {
                 self.symbol_table.resolve(name).map(|s| s.data_type.clone())
             }
             Expression::Call(callee, _) => {
+                // Built-ins
+                if let Expression::Identifier(name) = &**callee {
+                    if name.eq_ignore_ascii_case("LEN") {
+                        return Some(DataType::Word);
+                    }
+                }
+
                 // If Array, return inner type
                 // If Function, return Word/Byte (Implicit)
                 if let Some(DataType::Array(inner, _)) = self.resolve_type(callee) {

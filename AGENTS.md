@@ -50,17 +50,17 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 4 (Multi-File Projects) is complete.
-- **Implemented**: `INCLUDE` directive, recursive parsing, file management API, and Frontend Project Explorer.
+Phase 5 (16-bit Math Expansion) is complete.
+- **Implemented**: 16-bit addition/subtraction, `WORD` variable assignment updates, and `generate_expression` return type refactor.
 - **Details**:
-    - Backend: `src/server/project.rs` now supports `list_files`, `read_file`, `write_file`, `delete_file`.
-    - API: `GET /api/projects/:name/files`, `POST /files`, etc. `compile` endpoint updated to support project-based compilation (reading files from disk).
-    - Frontend: Project Explorer now lists files. Users can create, switch, and save files.
-    - Compilation: "Run" now saves the current file (and assets) and requests compilation of the project (using `main.swiss` as entry point by default).
+    - `src/compiler/codegen.rs`: `generate_expression` now returns `Result<DataType, String>`.
+    - 16-bit Integer literals are supported.
+    - 8-bit values are automatically zero-extended to 16-bit when operated with 16-bit values.
+    - Result of 8-bit operations ensures `X` register is 0.
 - **Next Steps**:
-    - Phase 5: 16-bit Math Expansion (Update CodeGen for 16-bit operations).
+    - Phase 6: Advanced Math (Mul/Div/Signed).
 - **Pitfalls**:
-    - `TopLevel::Dim` signature changed to include `Option<Expression>`. Any new tests creating AST nodes manually must account for this.
-    - `TopLevel::Include` added. `preprocessor::process_includes` MUST be called before Analysis/Codegen.
-    - The compiler relies on `main.swiss` being the entry point when compiling a project. `INCLUDE`s are resolved relative to the project root.
-    - `save_project` API (legacy) is still used for assets but `source` field in it updates `main.swiss` specifically. New file APIs should be used for source code.
+    - `generate_expression` returning `DataType` means the caller must decide how to handle the result (e.g., if it's in A/X or just A).
+    - `LDX #0` is emitted frequently for safety; peephole optimization (Phase 41) will clean this up later.
+    - 16-bit comparisons are partially implemented; extensive testing for signed vs unsigned comparisons is needed in Phase 6.
+    - `TopLevel::Include` and `preprocessor` usage remains critical for multi-file projects.

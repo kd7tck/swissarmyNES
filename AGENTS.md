@@ -77,16 +77,17 @@ Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are comple
     - **Codegen**: Allocates memory based on sum of member sizes. Resolves member addresses statically relative to base variable.
     - **Limitations**: Structs cannot be used in arithmetic or assigned directly (must assign members). Arrays of structs not yet implemented.
 
-### Phase Refinement: Arrays & Foundation
-- **Implemented**: 1D Arrays, `READ` support for Strings, robust 16-bit/Signed Math fixes.
+### Phase Refinement: Arrays & Foundation & Strings
+- **Implemented**: 1D Arrays, `READ` support for Strings, `LEN` built-in, robust 16-bit/Signed Math fixes.
 - **Details**:
     - **AST**: Added `DataType::Array(Box<DataType>, usize)` and `Expression::Call` (replaces `FunctionCall`). `Statement::Call` uses `Expression`.
     - **Parser**:
         - `DIM x(10) AS BYTE` and `TYPE ... member(5) AS WORD ...` support.
         - Unified `Call` parsing (handles `Func(args)` and `Array(index)` via `Precedence::Call`).
     - **Analysis**:
-        - Resolves `Expression::Call` to Array Access or Function Call based on Symbol Table.
+        - Resolves `Expression::Call` to Array Access, Function Call, or Built-in (`LEN`).
         - Validates array index count (1).
+        - Enforces strict type checking for built-ins (e.g. `LEN` requires String).
     - **Codegen**:
         - `allocate_memory` calculates Array size.
         - `generate_expression` handles `Array` access (address calculation in `$02/$03` using `base + index * size`).
@@ -95,10 +96,11 @@ Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are comple
         - Fixed `INT` sign extension in expressions.
         - Restored Signed Math logic (`is_signed` check) for Division/Modulo/Comparisons.
         - Restored `Statement::Poke` constant optimization.
+        - Implemented `Runtime_StringLen` helper. `Expression::Call` generates code for `LEN`.
 
 - **Next Steps**:
     - Phase 9: Enums & Constants.
-    - String manipulation functions (`LEN`, `LEFT`, etc).
+    - More String manipulation functions (`LEFT`, `RIGHT`, `MID`).
 
 - **Pitfalls**:
     - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value). Use `GOTO` out of the block if early exit is needed, or structure code to fall through.

@@ -1569,13 +1569,24 @@ impl CodeGenerator {
                 }
             }
             _ => {
-                let addr = self.get_static_address(expr)?;
-                let low = (addr & 0xFF) as u8;
-                let high = ((addr >> 8) & 0xFF) as u8;
-                self.output.push(format!("  LDA #${:02X}", low));
-                self.output.push("  STA $02".to_string());
-                self.output.push(format!("  LDA #${:02X}", high));
-                self.output.push("  STA $03".to_string());
+                if let Ok(addr) = self.get_static_address(expr) {
+                    let low = (addr & 0xFF) as u8;
+                    let high = ((addr >> 8) & 0xFF) as u8;
+                    self.output.push(format!("  LDA #${:02X}", low));
+                    self.output.push("  STA $02".to_string());
+                    self.output.push(format!("  LDA #${:02X}", high));
+                    self.output.push("  STA $03".to_string());
+                } else {
+                    // Dynamic address
+                    let dtype = self.generate_expression(expr)?;
+                    self.output.push("  STA $02".to_string());
+                    if dtype == DataType::Word || dtype == DataType::Int {
+                        self.output.push("  STX $03".to_string());
+                    } else {
+                        self.output.push("  LDA #0".to_string());
+                        self.output.push("  STA $03".to_string());
+                    }
+                }
             }
         }
         Ok(())
@@ -1591,6 +1602,104 @@ impl CodeGenerator {
                         self.generate_expression(&args[0])?;
                         self.output.push("  JSR Runtime_StringLen".to_string());
                         return Ok(DataType::Word);
+                    } else if name.eq_ignore_ascii_case("ABS") {
+                        let dtype = self.generate_expression(&args[0])?;
+                        // ABS of A (Byte) or A/X (Word/Int)
+                        if dtype == DataType::Word || dtype == DataType::Int {
+                            // Check High Byte (X) for sign
+                            self.output.push("  CPX #$80".to_string());
+                            let pos_lbl = self.new_label();
+                            self.output.push(format!("  BCC {}", pos_lbl));
+                            // Negate
+                            self.output.push("  EOR #$FF".to_string()); // Low
+                            self.output.push("  CLC".to_string());
+                            self.output.push("  ADC #1".to_string());
+                            self.output.push("  PHA".to_string());
+                            self.output.push("  TXA".to_string());
+                            self.output.push("  EOR #$FF".to_string()); // High
+                            self.output.push("  ADC #0".to_string());
+                            self.output.push("  TAX".to_string());
+                            self.output.push("  PLA".to_string());
+                            self.output.push(format!("{}:", pos_lbl));
+                            return Ok(dtype); // Returns same type (unsigned value)
+                        } else {
+                            // Byte. Treat as signed? "INT" is signed 8-bit.
+                            // If arg is Byte (unsigned 0-255), ABS is itself.
+                            // If arg is INT (-128 to 127), ABS needs negate.
+                            // Assuming INT logic if 8-bit.
+                            // Check bit 7
+                            self.output.push("  CMP #$80".to_string());
+                            let pos_lbl = self.new_label();
+                            self.output.push(format!("  BCC {}", pos_lbl));
+                            // Negate
+                            self.output.push("  EOR #$FF".to_string());
+                            self.output.push("  CLC".to_string());
+                            self.output.push("  ADC #1".to_string());
+                            self.output.push(format!("{}:", pos_lbl));
+                            return Ok(dtype);
+                        }
+                    } else if name.eq_ignore_ascii_case("SGN") {
+                        let dtype = self.generate_expression(&args[0])?;
+                        let pos_lbl = self.new_label();
+                        let done_lbl = self.new_label();
+                        let neg_lbl = self.new_label();
+
+                        if dtype == DataType::Word || dtype == DataType::Int {
+                            // Check High (X)
+                            self.output.push("  CPX #$80".to_string());
+                            self.output.push(format!("  BCS {}", neg_lbl)); // >= $8000 (Negative)
+                                                                            // Positive or Zero. Check if Zero.
+                            self.output.push("  CPX #0".to_string());
+                            self.output.push(format!("  BNE {}", pos_lbl));
+                            self.output.push("  CMP #0".to_string());
+                            self.output.push(format!("  BNE {}", pos_lbl));
+                            // Zero
+                            self.output.push("  LDA #0".to_string());
+                            self.output.push("  LDX #0".to_string());
+                            self.output.push(format!("  JMP {}", done_lbl));
+
+                            self.output.push(format!("{}:", neg_lbl));
+                            self.output.push("  LDA #$FF".to_string()); // -1
+                            self.output.push("  LDX #$FF".to_string());
+                            self.output.push(format!("  JMP {}", done_lbl));
+
+                            self.output.push(format!("{}:", pos_lbl));
+                            self.output.push("  LDA #1".to_string());
+                            self.output.push("  LDX #0".to_string());
+
+                            self.output.push(format!("{}:", done_lbl));
+                            return Ok(DataType::Int);
+                        } else {
+                            // Byte/Int
+                            self.output.push("  CMP #$80".to_string());
+                            self.output.push(format!("  BCS {}", neg_lbl));
+                            self.output.push("  CMP #0".to_string());
+                            self.output.push(format!("  BNE {}", pos_lbl));
+                            // Zero
+                            self.output.push("  LDA #0".to_string());
+                            self.output.push(format!("  JMP {}", done_lbl));
+
+                            self.output.push(format!("{}:", neg_lbl));
+                            self.output.push("  LDA #$FF".to_string()); // -1
+                            self.output.push(format!("  JMP {}", done_lbl));
+
+                            self.output.push(format!("{}:", pos_lbl));
+                            self.output.push("  LDA #1".to_string());
+
+                            self.output.push(format!("{}:", done_lbl));
+                            // Sign extend result to 16-bit
+                            self.output.push("  CMP #$80".to_string()); // Check sign of result
+                            let sign_ext_lbl = self.new_label();
+                            let sign_ext_done = self.new_label();
+                            self.output.push(format!("  BCS {}", sign_ext_lbl));
+                            self.output.push("  LDX #0".to_string());
+                            self.output.push(format!("  JMP {}", sign_ext_done));
+                            self.output.push(format!("{}:", sign_ext_lbl));
+                            self.output.push("  LDX #$FF".to_string());
+                            self.output.push(format!("{}:", sign_ext_done));
+
+                            return Ok(DataType::Int);
+                        }
                     }
                 }
 
@@ -1745,6 +1854,19 @@ impl CodeGenerator {
                             self.output.push("  PHA".to_string());
                             self.output.push("  TXA".to_string());
                             self.output.push("  ADC $01".to_string());
+                            self.output.push("  TAX".to_string());
+                            self.output.push("  PLA".to_string());
+                            if is_signed {
+                                Ok(DataType::Int)
+                            } else {
+                                Ok(DataType::Word)
+                            }
+                        }
+                        BinaryOperator::Xor => {
+                            self.output.push("  EOR $00".to_string());
+                            self.output.push("  PHA".to_string());
+                            self.output.push("  TXA".to_string());
+                            self.output.push("  EOR $01".to_string());
                             self.output.push("  TAX".to_string());
                             self.output.push("  PLA".to_string());
                             if is_signed {
@@ -1931,7 +2053,7 @@ impl CodeGenerator {
                             self.output.push("  LDA #0".to_string());
                             self.output.push(format!("  JMP {}", end_lbl));
                             self.output.push(format!("{}:", true_lbl));
-                            self.output.push("  LDA #1".to_string());
+                            self.output.push("  LDA #$FF".to_string());
                             self.output.push(format!("{}:", end_lbl));
                             self.output.push("  LDX #0".to_string());
                             Ok(DataType::Bool)
@@ -1951,6 +2073,22 @@ impl CodeGenerator {
                         }
                         BinaryOperator::Multiply => {
                             self.output.push("  JSR Math_Mul8".to_string());
+                        }
+                        BinaryOperator::Divide => {
+                            self.output.push("  JSR Math_Div8".to_string());
+                        }
+                        BinaryOperator::Modulo => {
+                            self.output.push("  JSR Math_Div8".to_string());
+                            self.output.push("  LDA $01".to_string()); // Remainder
+                        }
+                        BinaryOperator::And => {
+                            self.output.push("  AND $00".to_string());
+                        }
+                        BinaryOperator::Or => {
+                            self.output.push("  ORA $00".to_string());
+                        }
+                        BinaryOperator::Xor => {
+                            self.output.push("  EOR $00".to_string());
                         }
                         _ => {}
                     }
@@ -1985,7 +2123,81 @@ impl CodeGenerator {
                 }
                 Ok(dtype)
             }
-            _ => Ok(DataType::Byte),
+            Expression::UnaryOp(op, operand) => {
+                let dtype = self.generate_expression(operand)?;
+                match op {
+                    UnaryOperator::Negate => {
+                        // Two's complement
+                        if dtype == DataType::Word || dtype == DataType::Int {
+                            // Negate A/X (Low/High)
+                            self.output.push("  EOR #$FF".to_string()); // Low
+                            self.output.push("  CLC".to_string());
+                            self.output.push("  ADC #1".to_string());
+                            self.output.push("  PHA".to_string()); // Save Low
+                            self.output.push("  TXA".to_string());
+                            self.output.push("  EOR #$FF".to_string()); // High
+                            self.output.push("  ADC #0".to_string()); // Carry
+                            self.output.push("  TAX".to_string());
+                            self.output.push("  PLA".to_string());
+                            Ok(dtype)
+                        } else {
+                            // Byte
+                            self.output.push("  EOR #$FF".to_string());
+                            self.output.push("  CLC".to_string());
+                            self.output.push("  ADC #1".to_string());
+                            // Sign extend to X (Result is Int)
+                            self.output.push("  CMP #$80".to_string());
+                            let sign_lbl = self.new_label();
+                            let done_lbl = self.new_label();
+                            self.output.push(format!("  BCC {}", sign_lbl));
+                            self.output.push("  LDX #$FF".to_string());
+                            self.output.push(format!("  JMP {}", done_lbl));
+                            self.output.push(format!("{}:", sign_lbl));
+                            self.output.push("  LDX #0".to_string());
+                            self.output.push(format!("{}:", done_lbl));
+                            Ok(DataType::Int) // -Byte is Int
+                        }
+                    }
+                    UnaryOperator::Not => {
+                        // One's complement
+                        if dtype == DataType::Word || dtype == DataType::Int {
+                            self.output.push("  EOR #$FF".to_string());
+                            self.output.push("  PHA".to_string());
+                            self.output.push("  TXA".to_string());
+                            self.output.push("  EOR #$FF".to_string());
+                            self.output.push("  TAX".to_string());
+                            self.output.push("  PLA".to_string());
+                            Ok(dtype)
+                        } else {
+                            self.output.push("  EOR #$FF".to_string());
+                            Ok(dtype)
+                        }
+                    }
+                }
+            }
+            Expression::Peek(addr_expr) => {
+                // Optimization: Check for constant address
+                let const_addr = match &**addr_expr {
+                    Expression::Integer(val) => Some(*val as u16),
+                    Expression::Identifier(name) => self
+                        .symbol_table
+                        .resolve(name)
+                        .and_then(|sym| sym.value.map(|val| val as u16)),
+                    _ => None,
+                };
+
+                if let Some(addr) = const_addr {
+                    self.output.push(format!("  LDA ${:04X}", addr));
+                    self.output.push("  LDX #0".to_string());
+                    Ok(DataType::Byte)
+                } else {
+                    self.generate_address_expression(addr_expr)?;
+                    self.output.push("  LDY #0".to_string());
+                    self.output.push("  LDA ($02),Y".to_string());
+                    self.output.push("  LDX #0".to_string());
+                    Ok(DataType::Byte)
+                }
+            }
         }
     }
 }

@@ -78,32 +78,28 @@ Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are comple
     - **Limitations**: Structs cannot be used in arithmetic or assigned directly (must assign members). Arrays of structs not yet implemented.
 
 ### Phase Refinement: Arrays & Foundation & Strings
-- **Implemented**: 1D Arrays, `READ` support for Strings, `LEN` built-in, robust 16-bit/Signed Math fixes.
+- **Implemented**:
+    - **Logic & Math**: XOR operator, Unary Operators (`-`, `NOT`), 8-bit `AND`/`OR` fix, `ABS()`, `SGN()`.
+    - **Memory**: Robust `PEEK` (Static optimization & Dynamic support), `POKE` (Dynamic fix).
+    - **Arrays**: 1D Arrays, `DIM x(N)`.
+    - **Strings**: `READ` support, `LEN()`.
 - **Details**:
-    - **AST**: Added `DataType::Array(Box<DataType>, usize)` and `Expression::Call` (replaces `FunctionCall`). `Statement::Call` uses `Expression`.
-    - **Parser**:
-        - `DIM x(10) AS BYTE` and `TYPE ... member(5) AS WORD ...` support.
-        - Unified `Call` parsing (handles `Func(args)` and `Array(index)` via `Precedence::Call`).
-    - **Analysis**:
-        - Resolves `Expression::Call` to Array Access, Function Call, or Built-in (`LEN`).
-        - Validates array index count (1).
-        - Enforces strict type checking for built-ins (e.g. `LEN` requires String).
+    - **Boolean**: Standardized `True` to `$FF` (All ones) to support Bitwise `NOT` correctly.
     - **Codegen**:
-        - `allocate_memory` calculates Array size.
-        - `generate_expression` handles `Array` access (address calculation in `$02/$03` using `base + index * size`).
-        - `Statement::Let` handles Array assignment (`x(i) = val`).
-        - `Statement::Read` uses `Runtime_ReadString` for `STRING` types (fix).
-        - Fixed `INT` sign extension in expressions.
-        - Restored Signed Math logic (`is_signed` check) for Division/Modulo/Comparisons.
-        - Restored `Statement::Poke` constant optimization.
-        - Implemented `Runtime_StringLen` helper. `Expression::Call` generates code for `LEN`.
+        - Implemented `BinaryOperator::Xor` (8/16-bit).
+        - Fixed `BinaryOperator` for 8-bit `And`/`Or`/`Divide` (was missing).
+        - Implemented `Expression::UnaryOp` (`Negate`, `Not`).
+        - Implemented `Expression::Peek` with constant address optimization.
+        - Updated `generate_address_expression` to handle dynamic address expressions (e.g., `POKE(base + 1, val)`).
+        - Added built-in `ABS` and `SGN` logic in `Expression::Call`.
+    - **Parser/AST**: Added `Xor` token and precedence.
+    - **Analysis**: Added `ABS`, `SGN` to built-in allowlist.
 
 - **Next Steps**:
     - Phase 9: Enums & Constants.
-    - More String manipulation functions (`LEFT`, `RIGHT`, `MID`).
+    - More String manipulation functions (`LEFT`, `RIGHT`, `MID` - requires String Heap strategy).
 
 - **Pitfalls**:
-    - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value). Use `GOTO` out of the block if early exit is needed, or structure code to fall through.
-    - Integer literals returning `Word` means `Byte + Literal` promotes to 16-bit addition. This is safer for overflow but slower.
-    - 16-bit Math helpers use ZP $06-$09. Ensure these don't conflict with future Interrupt usage or other scratchpads.
-    - `Statement::Let` change required updating all tests that manually constructed ASTs. Future AST changes should be mindful of this.
+    - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value).
+    - `True` is now `$FF` (was `1`). Check assumptions in assembly injections if they rely on `1`.
+    - 16-bit Math helpers use ZP $06-$09.

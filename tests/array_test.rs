@@ -35,7 +35,7 @@ mod tests {
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
         let asm_lines = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let _asm_source = asm_lines.join("\n");
 
         // Verify allocation
         // arr @ $0300. Size 10. Next var idx @ $030A.

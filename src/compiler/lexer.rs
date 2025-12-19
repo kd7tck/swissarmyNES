@@ -24,6 +24,7 @@ pub enum Token {
     Dim,
     Byte,
     Word,
+    Int,
     Bool,
     String,
     Peek,
@@ -254,6 +255,7 @@ impl<'a> Lexer<'a> {
             "DIM" => Token::Dim,
             "BYTE" => Token::Byte,
             "WORD" => Token::Word,
+            "INT" => Token::Int,
             "BOOL" => Token::Bool,
             "STRING" => Token::String,
             "PEEK" => Token::Peek,
@@ -413,7 +415,7 @@ mod tests {
 
     #[test]
     fn test_keywords() {
-        let input = "IF THEN ELSE END SUB WHILE WEND DO CONST DIM AS BYTE WORD BOOL PEEK POKE PRINT RETURN CALL AND OR NOT INCLUDE";
+        let input = "IF THEN ELSE END SUB WHILE WEND DO CONST DIM AS BYTE WORD INT BOOL PEEK POKE PRINT RETURN CALL AND OR NOT INCLUDE";
         let tokens = tokenize(input);
 
         let expected = vec![
@@ -430,6 +432,7 @@ mod tests {
             Token::As,
             Token::Byte,
             Token::Word,
+            Token::Int,
             Token::Bool,
             Token::Peek,
             Token::Poke,

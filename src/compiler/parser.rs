@@ -245,6 +245,9 @@ impl Parser {
         if self.match_token(Token::Word) {
             return Ok(DataType::Word);
         }
+        if self.match_token(Token::Int) {
+            return Ok(DataType::Int);
+        }
         if self.match_token(Token::Bool) {
             return Ok(DataType::Bool);
         }

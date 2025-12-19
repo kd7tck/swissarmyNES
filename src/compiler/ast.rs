@@ -73,6 +73,7 @@ pub enum TopLevel {
 pub enum DataType {
     Byte,
     Word,
+    Int,
     Bool,
     String,
 }

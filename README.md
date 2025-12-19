@@ -12,12 +12,12 @@
   - **Explorer**: A sidebar "Project Explorer" to easily switch between projects.
   - **Storage**: Projects are stored as folders in the `projects/` directory in the application root.
 - **SwissBASIC**: A hybrid language combining BASIC syntax with inline 6502 Assembly.
-  - **Variables**: `DIM` (BYTE, WORD), `LET` assignments.
+  - **Variables**: `DIM` (BYTE, WORD, INT), `LET` assignments.
   - **Control Flow**: `IF`, `WHILE`, `FOR...NEXT`, `DO...LOOP`.
     - **Note**: `FOR` loops support both positive and negative `STEP` values (constants).
   - **Math**:
     - Supports `+`, `-`, `*` (multiply), `/` (divide), `AND`, `OR`.
-    - **Note**: Expressions are evaluated as 8-bit unsigned integers (0-255). Division truncates.
+    - **Note**: Math is performed with 16-bit precision. Integer literals are treated as 16-bit to prevent premature overflow. `INT` variables support signed 8-bit arithmetic.
   - **Hardware Access**:
     - `POKE(addr, val)`: Supports constant addresses (16-bit) and dynamic addresses (16-bit via WORD variables).
     - `PEEK(addr)`: Supports constant addresses and dynamic addresses (via WORD variables).
@@ -39,7 +39,6 @@
   - **Map Editor**: Paint 8x8 tiles onto a 32x30 nametable grid (screen) and assign color attributes (palettes).
 
 ## Limitations
-- **8-Bit Math**: Mathematical expressions are evaluated using 8-bit arithmetic (0-255). Overflow wraps around. 16-bit math is limited to simple assignments/copies to `WORD` variables.
 - **Dynamic Addressing**: Use `WORD` variables for `POKE` and `PEEK` to access dynamic addresses. Use `CONST` for hardware registers (e.g. `$2006`).
 
 ## Getting Started

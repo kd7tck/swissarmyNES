@@ -47,7 +47,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Implement carry-handling logic (ADC/SBC with high bytes).
 - **Completion Criteria:** `DIM w AS WORD: LET w = 1000 + 500` results in `1500` at runtime.
 
-## Phase 6: Advanced Math (Mul/Div/Signed)
+## Phase 6: Advanced Math (Mul/Div/Signed) (Completed)
 **Goal:** Support complex game logic calculations.
 - **Action Items:**
     - Implement 16-bit multiplication and division subroutines (in assembly standard lib).

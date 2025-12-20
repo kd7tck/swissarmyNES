@@ -298,6 +298,12 @@ impl CodeGenerator {
         self.output.push("  JSR CallUserNMI".to_string());
         self.output.push("SkipNMI:".to_string());
 
+        self.output.push("  LDA $2002".to_string());
+        self.output.push("  LDA $E0".to_string());
+        self.output.push("  STA $2005".to_string());
+        self.output.push("  LDA $E1".to_string());
+        self.output.push("  STA $2005".to_string());
+
         for i in (0..16).rev() {
             self.output.push("  PLA".to_string());
             self.output.push(format!("  STA ${:02X}", i));
@@ -2516,6 +2522,16 @@ impl CodeGenerator {
                                 self.output.push("  JSR Runtime_Anim_Draw".to_string());
                                 return Ok(());
                             }
+                        } else if base_name.eq_ignore_ascii_case("Scroll")
+                            && member.eq_ignore_ascii_case("Set")
+                        {
+                            // Arg 0: X -> $E0
+                            self.generate_expression(&args[0])?;
+                            self.output.push("  STA $E0".to_string());
+                            // Arg 1: Y -> $E1
+                            self.generate_expression(&args[1])?;
+                            self.output.push("  STA $E1".to_string());
+                            return Ok(());
                         }
                     }
                 }

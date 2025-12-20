@@ -50,56 +50,7 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 6-10 are complete.
-
-### Phase 10: Macros (Completed)
-- **Implemented**: `DEF MACRO` syntax, AST Preprocessor expansion.
-- **Details**:
-    - Macros are AST-based text replacements.
-    - `Statement::Call` is replaced by the macro body with arguments substituted.
-    - Support for nested macros and recursion limit (100).
-    - Macros are defined at Top Level and removed before CodeGen.
-
-### Phase 11: Standard Library - Controller (Completed)
-- **Implemented**: `Controller` module (Read, IsPressed, IsHeld, IsReleased) and `Button` enum.
-- **Details**:
-    - **Parser**: Updated to allow keywords (like `Read`) as member names in dot notation.
-    - **Runtime**: Uses ZP `$10`-`$13` for controller state.
-    - **Analysis**: Pre-registers `Button` enum (A, B, Select, Start, Up, Down, Left, Right).
-
-### Phase 13: Metasprite System (Completed)
-- **Implemented**: `METASPRITE` definition syntax, `Sprite.Draw`, `Sprite.Clear`, `Sprite.SetFlicker`.
-- **Details**:
-    - **Syntax**: `METASPRITE name ... TILE x,y,t,a ... END METASPRITE`.
-    - **Runtime**:
-        - `Sprite.Draw(x, y, meta)`: Reads metasprite data and writes to OAM. Stops filling if 64 sprites drawn.
-        - `Sprite.Clear()`: Resets OAM pointer.
-        - `Sprite.SetFlicker(enable)`: Enables OAM rotation (flickering) to support > 64 sprites or > 8 sprites/line. Uses ZP `$1C` (Enable), `$1A` (Offset), `$1B` (Count).
-    - **Codegen**:
-        - Metasprite data is stored in `USER_DATA` segment.
-        - Format: `Count`, then `X, Y, Tile, Attr` per tile.
-
-### Phase 14: Animation Engine (Completed)
-- **Implemented**: `ANIMATION` definition syntax, `Animation.Play`, `Animation.Update`, `Animation.Draw`, `AnimState` struct.
-- **Details**:
-    - **Syntax**: `ANIMATION Name ... FRAME Metasprite, Duration ... [LOOP] END ANIMATION`.
-    - **Runtime**:
-        - `AnimState` struct: `ptr` (Word), `frame_index` (Byte), `timer` (Byte), `finished` (Byte).
-        - `Animation.Play(state, anim)`: Initializes state.
-        - `Animation.Update(state)`: Updates timer and frame index. Handles looping.
-        - `Animation.Draw(x, y, state)`: Draws current frame's metasprite.
-    - **Codegen**:
-        - Animation data format: `Count`, `Loop`, then `FramePtr (Word)`, `Duration` per frame.
-        - `rs6502` compatibility: Uses explicit unique labels for frame pointers to support `WORD` directive.
-
-### Phase 15: Object Pooling (Completed)
-- **Implemented**: `Pool` static namespace.
-- **Details**:
-    - `Pool.Spawn(array)`: Scans array for an inactive slot (first byte == 0). Returns index or -1 (if full). Marks as active (1).
-    - `Pool.Despawn(array, index)`: Marks the slot at `index` as inactive (0).
-    - **Codegen**:
-        - Implemented `Runtime_Pool_Spawn` and `Runtime_Pool_Despawn`.
-        - Uses stride calculation based on array type size.
+Phase 1-17 are complete. Phase 18 is In Progress.
 
 ### Phase 16: Collision - AABB (Completed)
 - **Implemented**: `Collision` static namespace with `Rect` method.
@@ -108,6 +59,26 @@ Phase 6-10 are complete.
     - **Runtime**:
         - `Runtime_Collision_Rect`: Expects 8 arguments (16 bytes, promoted to WORD) on the stack.
         - Uses 16-bit unsigned arithmetic for comparison to support larger coordinate spaces.
+
+### Phase 17: Collision - Point & Tile (Completed)
+- **Implemented**: `Collision.Point` and `Collision.Tile`.
+- **Details**:
+    - `Collision.Point(px, py, rx, ry, rw, rh)`: Checks if point is inside rect.
+    - `Collision.Tile(x, y)`: Returns tile index at pixel coordinates (reading from $D500).
+    - **Verified**: `tests/collision_test.rs` confirms assembly generation and structure.
+
+### Phase 18: Scrolling - Horizontal (In Progress)
+- **Implemented**: `Scroll.Set(x, y)` API.
+- **Details**:
+    - **Runtime**:
+        - Uses ZP `$E0` (Scroll X) and `$E1` (Scroll Y).
+        - `TrampolineNMI` writes `$E0` and `$E1` to PPU `$2005` at the end of VBlank (after User NMI).
+    - **Analysis**:
+        - Added `Scroll` namespace to Semantic Analyzer.
+    - **Tests**: `tests/scroll_test.rs` verifies codegen for `Scroll.Set` and NMI update.
+- **Pending**:
+    - Seam update logic (Map engine).
+    - Attribute table handling for scrolling.
 
 ### Miscellaneous Fixes
 - **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
@@ -120,10 +91,12 @@ Phase 6-10 are complete.
 - **RAM Overflow Check**: Added explicit check in `allocate_memory` to error if user variables exceed `$07FF`.
 
 - **Next Steps**:
-    - Phase 17: Collision - Point & Tile.
+    - Continue Phase 18: Implement dynamic map loading/seam updates.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page (Variables, Pointers, Math Helpers, Sprite State).
+    - `$E0`: Scroll X
+    - `$E1`: Scroll Y
 - **$0100-$01FF**: Stack.
 - **$0200-$02FF**: OAM (Shadow Sprites).
 - **$0300-$031F**: Sound Engine State.
@@ -135,3 +108,4 @@ Phase 6-10 are complete.
     - `True` is `$FF`. Check assumptions in assembly injections if they rely on `1`.
     - 16-bit Math helpers use ZP $06-$09 (now safe in NMI/IRQ due to context saving).
     - **OAM Overflow**: `Sprite.Draw` drops sprites if 64 limit reached. Enable `Sprite.SetFlicker(1)` to mitigate limits via cycling.
+    - **Scrolling**: `Scroll.Set` updates shadow registers which are applied in the next NMI. Ensure `Scroll.Set` is called before VBlank if immediate effect is needed (though it applies next frame).

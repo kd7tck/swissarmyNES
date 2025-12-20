@@ -534,6 +534,23 @@ impl SemanticAnalyzer {
                                     .push(format!("Unknown Pool command '{}'", member));
                                 return;
                             }
+                        } else if base_name.eq_ignore_ascii_case("Scroll") {
+                            if member.eq_ignore_ascii_case("Set") {
+                                if args.len() != 2 {
+                                    self.errors
+                                        .push("Scroll.Set expects 2 arguments (x, y)".to_string());
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                }
+                                return;
+                            } else {
+                                self.errors.push(format!(
+                                    "Unknown Scroll command '{}' (did you mean Set?)",
+                                    member
+                                ));
+                                return;
+                            }
                         }
                     }
                 }
@@ -685,6 +702,9 @@ impl SemanticAnalyzer {
                         return;
                     }
                     if base_name.eq_ignore_ascii_case("Collision") {
+                        return;
+                    }
+                    if base_name.eq_ignore_ascii_case("Scroll") {
                         return;
                     }
                 }
@@ -1061,6 +1081,9 @@ impl SemanticAnalyzer {
                         return None;
                     }
                     if base_name.eq_ignore_ascii_case("Collision") {
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("Scroll") {
                         return None;
                     }
                 }

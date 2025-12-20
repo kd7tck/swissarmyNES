@@ -122,21 +122,21 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Methods: `Spawn()`, `Despawn()`.
 - **Completion Criteria:** Can spawn 10 enemies, kill one, and spawn a new one in its slot.
 
-## Phase 16: Collision - AABB
+## Phase 16: Collision - AABB (Completed)
 **Goal:** Basic box collision.
 - **Action Items:**
     - `CheckCollision(obj1, obj2)` function.
     - Optimized 8-bit or 16-bit comparison logic in ASM.
 - **Completion Criteria:** Returns true when two defined rectangles overlap.
 
-## Phase 17: Collision - Point & Tile
+## Phase 17: Collision - Point & Tile (Completed)
 **Goal:** Wall/Floor collisions.
 - **Action Items:**
     - `GetTileAt(pixel_x, pixel_y)` function.
     - Map pixel coordinates to Nametable indices.
 - **Completion Criteria:** Player stops when walking into a "solid" tile ID.
 
-## Phase 18: Scrolling - Horizontal
+## Phase 18: Scrolling - Horizontal (In Progress)
 **Goal:** Enable side-scrollers.
 - **Action Items:**
     - Implement camera variable logic.

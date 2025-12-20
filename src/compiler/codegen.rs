@@ -2234,31 +2234,36 @@ impl CodeGenerator {
                                 self.output.push("  STA $1C".to_string());
                                 return Ok(());
                             }
-                        } else if base_name.eq_ignore_ascii_case("Pool") {
-                            if member.eq_ignore_ascii_case("Despawn") {
-                                self.generate_address_expression(&args[0])?;
+                        } else if base_name.eq_ignore_ascii_case("Pool")
+                            && member.eq_ignore_ascii_case("Despawn")
+                        {
+                            self.generate_address_expression(&args[0])?;
 
-                                let dtype = self.resolve_type(&args[0]).unwrap();
-                                let stride = if let DataType::Array(inner, _) = dtype {
-                                    self.get_type_size(&inner)
-                                } else { 1 };
-                                self.output.push(format!("  LDA #{}", stride));
-                                self.output.push("  STA $06".to_string());
+                            let dtype = self.resolve_type(&args[0]).unwrap();
+                            let stride = if let DataType::Array(inner, _) = dtype {
+                                self.get_type_size(&inner)
+                            } else {
+                                1
+                            };
+                            self.output.push(format!("  LDA #{}", stride));
+                            self.output.push("  STA $06".to_string());
 
-                                let idx_type = self.generate_expression(&args[1])?;
-                                if idx_type == DataType::Byte || idx_type == DataType::Bool || idx_type == DataType::Int {
-                                    self.output.push("  PHA".to_string()); // Low
-                                    self.output.push("  LDA #0".to_string());
-                                    self.output.push("  PHA".to_string()); // High
-                                } else {
-                                    self.output.push("  PHA".to_string()); // Low
-                                    self.output.push("  TXA".to_string());
-                                    self.output.push("  PHA".to_string()); // High
-                                }
-
-                                self.output.push("  JSR Runtime_Pool_Despawn".to_string());
-                                return Ok(());
+                            let idx_type = self.generate_expression(&args[1])?;
+                            if idx_type == DataType::Byte
+                                || idx_type == DataType::Bool
+                                || idx_type == DataType::Int
+                            {
+                                self.output.push("  PHA".to_string()); // Low
+                                self.output.push("  LDA #0".to_string());
+                                self.output.push("  PHA".to_string()); // High
+                            } else {
+                                self.output.push("  PHA".to_string()); // Low
+                                self.output.push("  TXA".to_string());
+                                self.output.push("  PHA".to_string()); // High
                             }
+
+                            self.output.push("  JSR Runtime_Pool_Despawn".to_string());
+                            return Ok(());
                         } else if base_name.eq_ignore_ascii_case("Animation") {
                             if member.eq_ignore_ascii_case("Play") {
                                 // Arg 0: State (Address)
@@ -2899,26 +2904,32 @@ impl CodeGenerator {
                 // Controller Logic
                 if let Expression::MemberAccess(base, member) = &**callee {
                     if let Expression::Identifier(base_name) = &**base {
-                        if base_name.eq_ignore_ascii_case("Pool") {
-                            if member.eq_ignore_ascii_case("Spawn") {
-                                self.generate_address_expression(&args[0])?;
+                        if base_name.eq_ignore_ascii_case("Pool")
+                            && member.eq_ignore_ascii_case("Spawn")
+                        {
+                            self.generate_address_expression(&args[0])?;
 
-                                let dtype = self.resolve_type(&args[0]).unwrap();
-                                let (count, stride) = if let DataType::Array(inner, size) = dtype {
-                                    (size, self.get_type_size(&inner))
-                                } else { (0, 0) };
+                            let dtype = self.resolve_type(&args[0]).unwrap();
+                            let (count, stride) = if let DataType::Array(inner, size) = dtype {
+                                (size, self.get_type_size(&inner))
+                            } else {
+                                (0, 0)
+                            };
 
-                                self.output.push(format!("  LDA #${:02X}", (count & 0xFF) as u8));
-                                self.output.push("  STA $04".to_string());
-                                self.output.push(format!("  LDA #${:02X}", ((count >> 8) & 0xFF) as u8));
-                                self.output.push("  STA $05".to_string());
+                            self.output
+                                .push(format!("  LDA #${:02X}", (count & 0xFF) as u8));
+                            self.output.push("  STA $04".to_string());
+                            self.output.push(format!(
+                                "  LDA #${:02X}",
+                                ((count >> 8) & 0xFF) as u8
+                            ));
+                            self.output.push("  STA $05".to_string());
 
-                                self.output.push(format!("  LDA #{}", stride));
-                                self.output.push("  STA $06".to_string());
+                            self.output.push(format!("  LDA #{}", stride));
+                            self.output.push("  STA $06".to_string());
 
-                                self.output.push("  JSR Runtime_Pool_Spawn".to_string());
-                                return Ok(DataType::Int);
-                            }
+                            self.output.push("  JSR Runtime_Pool_Spawn".to_string());
+                            return Ok(DataType::Int);
                         }
                         if base_name.eq_ignore_ascii_case("Controller") {
                             self.generate_expression(&args[0])?;

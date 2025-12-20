@@ -2666,17 +2666,6 @@ impl CodeGenerator {
                                 self.output.push("  STA $2001".to_string());
                                 return Ok(());
                             }
-                        } else if base_name.eq_ignore_ascii_case("PPU") {
-                            if member.eq_ignore_ascii_case("Ctrl") {
-                                self.generate_expression(&args[0])?;
-                                self.output.push("  STA $F8".to_string()); // Shadow
-                                self.output.push("  STA $2000".to_string());
-                                return Ok(());
-                            } else if member.eq_ignore_ascii_case("Mask") {
-                                self.generate_expression(&args[0])?;
-                                self.output.push("  STA $2001".to_string());
-                                return Ok(());
-                            }
                         }
                     }
                 }

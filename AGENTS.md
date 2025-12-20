@@ -50,24 +50,9 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-17 are complete. Phase 18 is In Progress.
+Phase 1-18 are complete. Phase 19 is Next.
 
-### Phase 16: Collision - AABB (Completed)
-- **Implemented**: `Collision` static namespace with `Rect` method.
-- **Details**:
-    - `Collision.Rect(x1, y1, w1, h1, x2, y2, w2, h2)`: Returns `True` ($FF) if rectangles overlap, else `False` ($00).
-    - **Runtime**:
-        - `Runtime_Collision_Rect`: Expects 8 arguments (16 bytes, promoted to WORD) on the stack.
-        - Uses 16-bit unsigned arithmetic for comparison to support larger coordinate spaces.
-
-### Phase 17: Collision - Point & Tile (Completed)
-- **Implemented**: `Collision.Point` and `Collision.Tile`.
-- **Details**:
-    - `Collision.Point(px, py, rx, ry, rw, rh)`: Checks if point is inside rect.
-    - `Collision.Tile(x, y)`: Returns tile index at pixel coordinates (reading from $D500).
-    - **Verified**: `tests/collision_test.rs` confirms assembly generation and structure.
-
-### Phase 18: Scrolling - Horizontal (In Progress)
+### Phase 18: Scrolling - Horizontal (Completed)
 - **Implemented**: `Scroll` and `PPU` modules.
 - **Details**:
     - **Scroll**:
@@ -82,8 +67,7 @@ Phase 1-17 are complete. Phase 18 is In Progress.
         - `TrampolineNMI` handles OAM DMA, VBlank Buffer, Sound, User NMI, and Scroll.
     - **Memory Map**:
         - User Variables moved to `$0460`.
-- **Pending**:
-    - Attribute table helper (though `PPU` access allows manual handling).
+    - **Verified**: `tests/scroll_test.rs` and `tests/scroll_column_test.rs`.
 
 ### Miscellaneous Fixes
 - **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
@@ -96,7 +80,7 @@ Phase 1-17 are complete. Phase 18 is In Progress.
 - **RAM Overflow Check**: Added explicit check in `allocate_memory` to error if user variables exceed `$07FF`.
 
 - **Next Steps**:
-    - Continue Phase 18: Implement dynamic map loading/seam updates.
+    - Start Phase 19: Vertical Scrolling. This will build upon the existing Scroll/PPU architecture.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.

@@ -14,10 +14,27 @@ impl Default for SemanticAnalyzer {
 
 impl SemanticAnalyzer {
     pub fn new() -> Self {
-        Self {
+        let mut analyzer = Self {
             symbol_table: SymbolTable::new(),
             errors: Vec::new(),
-        }
+        };
+        analyzer.register_stdlib();
+        analyzer
+    }
+
+    fn register_stdlib(&mut self) {
+        // Button Enum
+        let buttons = vec![
+            ("A".to_string(), 0x80),
+            ("B".to_string(), 0x40),
+            ("Select".to_string(), 0x20),
+            ("Start".to_string(), 0x10),
+            ("Up".to_string(), 0x08),
+            ("Down".to_string(), 0x04),
+            ("Left".to_string(), 0x02),
+            ("Right".to_string(), 0x01),
+        ];
+        let _ = self.symbol_table.define_enum("Button".to_string(), buttons);
     }
 
     pub fn analyze(&mut self, program: &Program) -> Result<(), Vec<String>> {
@@ -239,6 +256,27 @@ impl SemanticAnalyzer {
                 self.analyze_expression(expr);
             }
             Statement::Call(target, args) => {
+                // Check for Controller.Read()
+                if let Expression::MemberAccess(base, member) = target {
+                    if let Expression::Identifier(base_name) = &**base {
+                        if base_name.eq_ignore_ascii_case("Controller") {
+                            if member.eq_ignore_ascii_case("Read") {
+                                if !args.is_empty() {
+                                    self.errors
+                                        .push("Controller.Read expects 0 arguments".to_string());
+                                }
+                                return;
+                            } else {
+                                self.errors.push(format!(
+                                    "Unknown Controller command '{}' (did you mean Read?)",
+                                    member
+                                ));
+                                return;
+                            }
+                        }
+                    }
+                }
+
                 // Should resolve to Sub
                 // If target is Identifier, check if Sub exists
                 if let Expression::Identifier(name) = target {
@@ -350,6 +388,14 @@ impl SemanticAnalyzer {
                 }
             }
             Expression::MemberAccess(base, member) => {
+                // Check for Controller
+                if let Expression::Identifier(base_name) = &**base {
+                    if base_name.eq_ignore_ascii_case("Controller") {
+                        // We do not analyze 'base' because 'Controller' is not in symbol table
+                        return;
+                    }
+                }
+
                 self.analyze_expression(base);
                 let base_type = self.resolve_type(base);
                 match base_type {
@@ -513,6 +559,30 @@ impl SemanticAnalyzer {
                     }
                 }
 
+                // Controller Methods
+                if let Expression::MemberAccess(base, member) = &**callee {
+                    if let Expression::Identifier(base_name) = &**base {
+                        if base_name.eq_ignore_ascii_case("Controller") {
+                            if member.eq_ignore_ascii_case("IsPressed")
+                                || member.eq_ignore_ascii_case("IsHeld")
+                                || member.eq_ignore_ascii_case("IsReleased")
+                            {
+                                if args.len() != 1 {
+                                    self.errors
+                                        .push(format!("Controller.{} expects 1 argument", member));
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                }
+                                return;
+                            } else {
+                                self.errors
+                                    .push(format!("Unknown Controller function '{}'", member));
+                                return;
+                            }
+                        }
+                    }
+                }
+
                 // Check if it's Array Access or Function Call
                 self.analyze_expression(callee);
 
@@ -604,6 +674,19 @@ impl SemanticAnalyzer {
                     }
                 }
 
+                // Controller
+                if let Expression::MemberAccess(base, member) = &**callee {
+                    if let Expression::Identifier(base_name) = &**base {
+                        if base_name.eq_ignore_ascii_case("Controller")
+                            && (member.eq_ignore_ascii_case("IsPressed")
+                                || member.eq_ignore_ascii_case("IsHeld")
+                                || member.eq_ignore_ascii_case("IsReleased"))
+                        {
+                            return Some(DataType::Bool);
+                        }
+                    }
+                }
+
                 // If Array, return inner type
                 // If Function, return Word/Byte (Implicit)
                 if let Some(DataType::Array(inner, _)) = self.resolve_type(callee) {
@@ -612,6 +695,13 @@ impl SemanticAnalyzer {
                 Some(DataType::Word) // Default function return
             }
             Expression::MemberAccess(base, member) => {
+                // Controller check (unlikely to be used as raw expr but good for safety)
+                if let Expression::Identifier(base_name) = &**base {
+                    if base_name.eq_ignore_ascii_case("Controller") {
+                        return None; // No direct member access
+                    }
+                }
+
                 let base_type = self.resolve_type(base)?;
                 match base_type {
                     DataType::Struct(name) => {

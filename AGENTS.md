@@ -60,6 +60,13 @@ Phase 6-10 are complete.
     - Support for nested macros and recursion limit (100).
     - Macros are defined at Top Level and removed before CodeGen.
 
+### Phase 11: Standard Library - Controller (Completed)
+- **Implemented**: `Controller` module (Read, IsPressed, IsHeld, IsReleased) and `Button` enum.
+- **Details**:
+    - **Parser**: Updated to allow keywords (like `Read`) as member names in dot notation.
+    - **Runtime**: Uses ZP `$10`-`$13` for controller state.
+    - **Analysis**: Pre-registers `Button` enum (A, B, Select, Start, Up, Down, Left, Right).
+
 ### Phase Refinement: Arrays & Foundation & Strings
 - **Implemented**:
     - **Logic & Math**: XOR operator, Unary Operators (`-`, `NOT`), 8-bit `AND`/`OR` fix, `ABS()`, `SGN()`, Bitwise Shifts (`<<`, `>>`).
@@ -79,7 +86,7 @@ Phase 6-10 are complete.
     - **Parser/AST**: Added `ShiftLeft`/`ShiftRight` tokens and precedence.
 
 - **Next Steps**:
-    - Phase 11: Standard Library - Controller.
+    - Phase 12: Standard Library - Text Engine.
 
 - **Pitfalls**:
     - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value).

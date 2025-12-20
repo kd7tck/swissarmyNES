@@ -677,10 +677,17 @@ impl Parser {
 
             if op == Token::Dot {
                 self.advance();
-                let member = if let Token::Identifier(n) = self.advance().clone() {
-                    n
-                } else {
-                    return Err("Expected member name after '.'".to_string());
+                let token = self.peek().clone();
+                let member = match token {
+                    Token::Identifier(n) => {
+                        self.advance();
+                        n
+                    }
+                    Token::Read => {
+                        self.advance();
+                        "Read".to_string()
+                    }
+                    _ => return Err("Expected member name after '.'".to_string()),
                 };
                 left = Expression::MemberAccess(Box::new(left), member);
             } else if op == Token::LParen {

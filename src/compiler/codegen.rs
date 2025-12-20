@@ -50,6 +50,7 @@ impl CodeGenerator {
         self.generate_math_helpers();
         self.generate_string_helpers();
         self.generate_string_data();
+        self.generate_controller_helpers();
         self.generate_user_data(program)?;
         self.generate_data_tables(program)?;
         self.generate_vectors(program)?;
@@ -1201,6 +1202,38 @@ impl CodeGenerator {
         Ok(())
     }
 
+    fn generate_controller_helpers(&mut self) {
+        self.output.push("; --- Controller Helpers ---".to_string());
+        self.output.push("Runtime_Controller_Read:".to_string());
+        self.output.push("  LDA #$01".to_string());
+        self.output.push("  STA $4016".to_string());
+        self.output.push("  LDA #$00".to_string());
+        self.output.push("  STA $4016".to_string());
+        self.output.push("  LDA $10".to_string()); // Load old held
+        self.output.push("  STA $11".to_string()); // Save to last
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $10".to_string()); // Clear held
+        self.output.push("  LDX #8".to_string());
+        self.output.push("Controller_ReadLoop:".to_string());
+        self.output.push("  LDA $4016".to_string());
+        self.output.push("  LSR".to_string()); // Bit0 -> Carry
+        self.output.push("  ROL $10".to_string()); // Carry -> Bit0 of Held
+        self.output.push("  DEX".to_string());
+        self.output.push("  BNE Controller_ReadLoop".to_string());
+        // Pressed = New & !Last
+        self.output.push("  LDA $11".to_string());
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  AND $10".to_string());
+        self.output.push("  STA $12".to_string());
+        // Released = !New & Last
+        self.output.push("  LDA $10".to_string());
+        self.output.push("  EOR #$FF".to_string());
+        self.output.push("  AND $11".to_string());
+        self.output.push("  STA $13".to_string());
+        self.output.push("  RTS".to_string());
+        self.output.push("".to_string());
+    }
+
     fn collect_all_strings(&mut self, program: &Program) {
         for decl in &program.declarations {
             match decl {
@@ -1481,6 +1514,18 @@ impl CodeGenerator {
                 }
             }
             Statement::Call(target, args) => {
+                if let Expression::MemberAccess(base, member) = target {
+                    if let Expression::Identifier(base_name) = &**base {
+                        if base_name.eq_ignore_ascii_case("Controller")
+                            && member.eq_ignore_ascii_case("Read")
+                        {
+                            self.output
+                                .push("  JSR Runtime_Controller_Read".to_string());
+                            return Ok(());
+                        }
+                    }
+                }
+
                 if let Expression::Identifier(name) = target {
                     let params = if let Some(p) = self.sub_signatures.get(name) {
                         p.clone()
@@ -2011,6 +2056,35 @@ impl CodeGenerator {
     fn generate_expression(&mut self, expr: &Expression) -> Result<DataType, String> {
         match expr {
             Expression::Call(callee, args) => {
+                // Controller Logic
+                if let Expression::MemberAccess(base, member) = &**callee {
+                    if let Expression::Identifier(base_name) = &**base {
+                        if base_name.eq_ignore_ascii_case("Controller") {
+                            self.generate_expression(&args[0])?;
+                            self.output.push("  STA $00".to_string());
+                            if member.eq_ignore_ascii_case("IsPressed") {
+                                self.output.push("  LDA $12".to_string());
+                            } else if member.eq_ignore_ascii_case("IsHeld") {
+                                self.output.push("  LDA $10".to_string());
+                            } else if member.eq_ignore_ascii_case("IsReleased") {
+                                self.output.push("  LDA $13".to_string());
+                            }
+                            self.output.push("  AND $00".to_string());
+                            self.output.push("  CMP #0".to_string());
+                            let true_lbl = self.new_label();
+                            let end_lbl = self.new_label();
+                            self.output.push(format!("  BNE {}", true_lbl));
+                            self.output.push("  LDA #0".to_string());
+                            self.output.push(format!("  JMP {}", end_lbl));
+                            self.output.push(format!("{}:", true_lbl));
+                            self.output.push("  LDA #$FF".to_string());
+                            self.output.push(format!("{}:", end_lbl));
+                            self.output.push("  LDX #0".to_string());
+                            return Ok(DataType::Bool);
+                        }
+                    }
+                }
+
                 // Built-in Functions
                 if let Expression::Identifier(name) = &**callee {
                     if name.eq_ignore_ascii_case("LEN") {

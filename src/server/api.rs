@@ -57,7 +57,7 @@ pub async fn compile(Json(payload): Json<CompileRequest>) -> impl IntoResponse {
     }
 }
 
-fn compile_source(
+pub fn compile_source(
     source: Option<String>,
     project_name: Option<String>,
     assets: Option<ProjectAssets>,

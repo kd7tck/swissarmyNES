@@ -93,7 +93,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Methods: `Read()`, `IsPressed(btn)`, `IsHeld(btn)`, `IsReleased(btn)`.
 - **Completion Criteria:** User code: `IF Controller.IsPressed(Start) THEN ...`.
 
-## Phase 12: Standard Library - Text Engine
+## Phase 12: Standard Library - Text Engine (Completed)
 **Goal:** Easy string rendering to screen.
 - **Action Items:**
     - `Print(x, y, string)` routine.

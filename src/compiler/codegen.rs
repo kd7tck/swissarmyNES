@@ -51,6 +51,7 @@ impl CodeGenerator {
         self.generate_string_helpers();
         self.generate_string_data();
         self.generate_controller_helpers();
+        self.generate_text_helpers();
         self.generate_user_data(program)?;
         self.generate_data_tables(program)?;
         self.generate_vectors(program)?;
@@ -104,6 +105,9 @@ impl CodeGenerator {
         self.output.push("  STA $0200,x".to_string());
         self.output.push("  INX".to_string());
         self.output.push("  BNE clrmem".to_string());
+
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $18".to_string()); // Init Text Offset
 
         self.output.push("vblankwait2:".to_string());
         self.output.push("  BIT $2002".to_string());
@@ -1234,6 +1238,60 @@ impl CodeGenerator {
         self.output.push("".to_string());
     }
 
+    fn generate_text_helpers(&mut self) {
+        self.output.push("; --- Text Helpers ---".to_string());
+        // Runtime_Text_Print
+        // Inputs: $14 (X), $15 (Y), $16/$17 (Str Ptr), $18 (Offset)
+        // Writes to PPU $2006/$2007
+        // Addr = $2000 + Y*32 + X
+        // Y*32 = (Y << 5)
+        self.output.push("Runtime_Text_Print:".to_string());
+        self.output.push("  LDA $2002".to_string()); // Reset latch
+
+        // Calc Addr
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $01".to_string()); // High Byte of offset
+        self.output.push("  LDA $15".to_string()); // Y
+        self.output.push("  ASL".to_string());
+        self.output.push("  ROL $01".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ROL $01".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ROL $01".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ROL $01".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ROL $01".to_string());
+        // A now has Low Byte of Y*32, $01 has High Byte
+
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $14".to_string()); // + X
+        self.output.push("  STA $00".to_string()); // Low Addr
+        self.output.push("  LDA $01".to_string());
+        self.output.push("  ADC #$20".to_string()); // + Base $2000 (High Byte $20)
+        self.output.push("  STA $01".to_string()); // High Addr
+
+        // Set PPU Addr
+        self.output.push("  LDA $01".to_string());
+        self.output.push("  STA $2006".to_string());
+        self.output.push("  LDA $00".to_string());
+        self.output.push("  STA $2006".to_string());
+
+        // Loop Chars
+        self.output.push("  LDY #0".to_string());
+        self.output.push("Text_Loop:".to_string());
+        self.output.push("  LDA ($16),Y".to_string());
+        self.output.push("  BEQ Text_Done".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $18".to_string()); // Add Offset
+        self.output.push("  STA $2007".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  BNE Text_Loop".to_string());
+        self.output.push("Text_Done:".to_string());
+        self.output.push("  RTS".to_string());
+        self.output.push("".to_string());
+    }
+
     fn collect_all_strings(&mut self, program: &Program) {
         for decl in &program.declarations {
             match decl {
@@ -1522,6 +1580,28 @@ impl CodeGenerator {
                             self.output
                                 .push("  JSR Runtime_Controller_Read".to_string());
                             return Ok(());
+                        } else if base_name.eq_ignore_ascii_case("Text") {
+                            if member.eq_ignore_ascii_case("Print") {
+                                // Arg 0: X -> $14
+                                self.generate_expression(&args[0])?;
+                                self.output.push("  STA $14".to_string());
+                                // Arg 1: Y -> $15
+                                self.generate_expression(&args[1])?;
+                                self.output.push("  STA $15".to_string());
+                                // Arg 2: Str -> $16/$17
+                                let dtype = self.generate_expression(&args[2])?;
+                                if dtype == DataType::String {
+                                    self.output.push("  STA $16".to_string());
+                                    self.output.push("  STX $17".to_string());
+                                }
+                                self.output.push("  JSR Runtime_Text_Print".to_string());
+                                return Ok(());
+                            } else if member.eq_ignore_ascii_case("SetOffset") {
+                                // Arg 0: Offset -> $18
+                                self.generate_expression(&args[0])?;
+                                self.output.push("  STA $18".to_string());
+                                return Ok(());
+                            }
                         }
                     }
                 }

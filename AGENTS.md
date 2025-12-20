@@ -86,9 +86,10 @@ Phase 6-10 are complete.
     - **Parser/AST**: Added `ShiftLeft`/`ShiftRight` tokens and precedence.
 
 - **Next Steps**:
-    - Phase 12: Standard Library - Text Engine.
+    - Phase 13: Metasprite System.
 
 - **Pitfalls**:
+    - `Text.Print` writes directly to the PPU ($2006/$2007). This is fast but must be done when rendering is disabled or during VBlank to avoid visual glitches.
     - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value).
     - `True` is now `$FF` (was `1`). Check assumptions in assembly injections if they rely on `1`.
     - 16-bit Math helpers use ZP $06-$09.

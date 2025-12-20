@@ -9,11 +9,13 @@ mod tests {
     fn test_collision_point_generation() {
         let source = "
             DIM result AS BYTE
-            IF Collision.Point(10, 10, 0, 0, 20, 20) THEN
-                result = 1
-            ELSE
-                result = 0
-            END IF
+            SUB Main()
+                IF Collision.Point(10, 10, 0, 0, 20, 20) THEN
+                    result = 1
+                ELSE
+                    result = 0
+                END IF
+            END SUB
         ";
 
         let mut lexer = Lexer::new(source);
@@ -44,7 +46,9 @@ mod tests {
     fn test_collision_tile_generation() {
         let source = "
             DIM t AS BYTE
-            t = Collision.Tile(100, 50)
+            SUB Main()
+                t = Collision.Tile(100, 50)
+            END SUB
         ";
 
         let mut lexer = Lexer::new(source);

@@ -3304,7 +3304,7 @@ impl CodeGenerator {
         self.output.push("  CMP $010A, X".to_string()); // rx_Low
         self.output.push("  LDA $010D, X".to_string()); // px_High
         self.output.push("  SBC $0109, X".to_string()); // rx_High
-        self.output.push("  BCC Collision_False".to_string());
+        self.output.push("  BCC Collision_Point_False".to_string());
 
         // Check 2: px < rx + rw
         self.output.push("  CLC".to_string());
@@ -3319,14 +3319,14 @@ impl CodeGenerator {
         self.output.push("  CMP $00".to_string());
         self.output.push("  LDA $010D, X".to_string()); // px_High
         self.output.push("  SBC $01".to_string());
-        self.output.push("  BCS Collision_False".to_string());
+        self.output.push("  BCS Collision_Point_False".to_string());
 
         // Check 3: py >= ry
         self.output.push("  LDA $010C, X".to_string()); // py_Low
         self.output.push("  CMP $0108, X".to_string()); // ry_Low
         self.output.push("  LDA $010B, X".to_string()); // py_High
         self.output.push("  SBC $0107, X".to_string()); // ry_High
-        self.output.push("  BCC Collision_False".to_string());
+        self.output.push("  BCC Collision_Point_False".to_string());
 
         // Check 4: py < ry + rh
         self.output.push("  CLC".to_string());
@@ -3341,9 +3341,14 @@ impl CodeGenerator {
         self.output.push("  CMP $00".to_string());
         self.output.push("  LDA $010B, X".to_string()); // py_High
         self.output.push("  SBC $01".to_string());
-        self.output.push("  BCS Collision_False".to_string());
+        self.output.push("  BCS Collision_Point_False".to_string());
 
         self.output.push("  LDA #$FF".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("Collision_Point_False:".to_string());
+        self.output.push("  LDA #0".to_string());
         self.output.push("  LDX #0".to_string());
         self.output.push("  RTS".to_string());
 
@@ -3374,14 +3379,6 @@ impl CodeGenerator {
 
         // Offset = Row * 32 + Col
         // Row * 32 = Row << 5
-        self.output.push("  LDA $01".to_string());
-        self.output.push("  ASL".to_string());
-        self.output.push("  ASL".to_string()); // << 2
-        self.output.push("  STA $02".to_string()); // High byte of Row*32 (Row >> 3) ... Wait.
-        // Row is 0-30. Row * 32 is up to 960.
-        // 960 = $03C0.
-        // So we need 16-bit math for offset.
-        // Row * 32:
         // Low Byte: (Row << 5) & 0xFF.
         // High Byte: (Row >> 3).
 

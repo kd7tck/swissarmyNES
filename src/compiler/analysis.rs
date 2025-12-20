@@ -501,11 +501,13 @@ impl SemanticAnalyzer {
                                     );
                                 } else {
                                     self.analyze_expression(&args[0]);
-                                    if let Some(DataType::Array(_, _)) = self.resolve_type(&args[0]) {
+                                    if let Some(DataType::Array(_, _)) = self.resolve_type(&args[0])
+                                    {
                                         // OK
                                     } else {
                                         self.errors.push(
-                                            "Pool.Despawn first argument must be an array".to_string(),
+                                            "Pool.Despawn first argument must be an array"
+                                                .to_string(),
                                         );
                                     }
                                     self.analyze_expression(&args[1]);
@@ -513,10 +515,12 @@ impl SemanticAnalyzer {
                                 return;
                             } else if member.eq_ignore_ascii_case("Spawn") {
                                 if args.len() != 1 {
-                                    self.errors.push("Pool.Spawn expects 1 argument (array)".to_string());
+                                    self.errors
+                                        .push("Pool.Spawn expects 1 argument (array)".to_string());
                                 } else {
                                     self.analyze_expression(&args[0]);
-                                    if let Some(DataType::Array(_, _)) = self.resolve_type(&args[0]) {
+                                    if let Some(DataType::Array(_, _)) = self.resolve_type(&args[0])
+                                    {
                                         // OK
                                     } else {
                                         self.errors.push(
@@ -526,7 +530,8 @@ impl SemanticAnalyzer {
                                 }
                                 return;
                             } else {
-                                self.errors.push(format!("Unknown Pool command '{}'", member));
+                                self.errors
+                                    .push(format!("Unknown Pool command '{}'", member));
                                 return;
                             }
                         }

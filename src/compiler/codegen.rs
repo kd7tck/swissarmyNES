@@ -2152,7 +2152,8 @@ impl CodeGenerator {
                     // 1. Calculate Value
                     let rtype = self.generate_expression(expr)?;
                     // Save Value to Stack
-                    if rtype == DataType::Byte || rtype == DataType::Bool || rtype == DataType::Int {
+                    if rtype == DataType::Byte || rtype == DataType::Bool || rtype == DataType::Int
+                    {
                         self.output.push("  PHA".to_string());
                     } else {
                         self.output.push("  PHA".to_string()); // Low
@@ -2164,7 +2165,8 @@ impl CodeGenerator {
                     self.generate_address_expression(target)?;
 
                     // 3. Restore Value and Store
-                    if rtype == DataType::Byte || rtype == DataType::Bool || rtype == DataType::Int {
+                    if rtype == DataType::Byte || rtype == DataType::Bool || rtype == DataType::Int
+                    {
                         self.output.push("  PLA".to_string());
                         self.output.push("  LDY #0".to_string());
                         self.output.push("  STA ($02),Y".to_string());
@@ -2919,10 +2921,8 @@ impl CodeGenerator {
                             self.output
                                 .push(format!("  LDA #${:02X}", (count & 0xFF) as u8));
                             self.output.push("  STA $04".to_string());
-                            self.output.push(format!(
-                                "  LDA #${:02X}",
-                                ((count >> 8) & 0xFF) as u8
-                            ));
+                            self.output
+                                .push(format!("  LDA #${:02X}", ((count >> 8) & 0xFF) as u8));
                             self.output.push("  STA $05".to_string());
 
                             self.output.push(format!("  LDA #{}", stride));

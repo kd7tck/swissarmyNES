@@ -1584,6 +1584,7 @@ impl CodeGenerator {
                 TopLevel::Metasprite(name, _) => {
                     self.data_table_offsets
                         .insert(name.clone(), data_table_addr);
+                    self.symbol_table.assign_address(name, data_table_addr)?;
                     data_table_addr += 2;
                 }
                 _ => {}

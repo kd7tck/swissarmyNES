@@ -27,20 +27,40 @@ END SUB
 
     let mut codegen = CodeGenerator::new(analyzer.symbol_table);
     let asm = codegen.generate(&program).expect("Failed generation");
+    let asm_source = asm.join("\n");
 
     let assembler = Assembler::new();
-    let rom = assembler.assemble(&asm.join("\n"), None, vec![]).expect("Failed assembly");
+    let rom = assembler.assemble(&asm_source, None, vec![]).expect("Failed assembly");
 
-    // Verify Metasprite Data
+    // Verify ASM generation first
+    if !asm_source.contains("Player:") {
+        println!("{}", asm_source);
+        panic!("ASM: Player label not found");
+    }
+    // Check for data bytes in ASM (approximate check)
+    // db $02
+    // db $00, $00, $10, $00
+    // db $08, $00, $11, $01
+    if !asm_source.contains("db $02") {
+         println!("{}", asm_source);
+         panic!("ASM: Count not found");
+    }
+    if !asm_source.contains("$00, $00, $10, $00") {
+         println!("{}", asm_source);
+         panic!("ASM: Tile 1 not found");
+    }
+
+    // Verify Metasprite Data in ROM
     // Count: 2 ($02)
     // Tile 1: 0, 0, $10, $00 -> 00 00 10 00
     // Tile 2: 8, 0, $11, $01 -> 08 00 11 01
     let data_pattern = vec![0x02, 0x00, 0x00, 0x10, 0x00, 0x08, 0x00, 0x11, 0x01];
-    // Note: CodeGen might put label before it.
-    // And USER_DATA_START is at end of ROM (or near it? No, in PRG).
-    // The data is emitted in `generate_user_data`.
 
-    assert!(rom.windows(data_pattern.len()).any(|w| w == data_pattern), "Metasprite data not found");
+    if !rom.windows(data_pattern.len()).any(|w| w == data_pattern) {
+        // Dump some ROM to see what happened?
+        println!("ASM Source:\n{}", asm_source);
+        panic!("Metasprite data not found in ROM");
+    }
 
     // Verify Sprite.Draw Call Setup
     // LDA #100 (0x64) -> A9 64

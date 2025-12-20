@@ -11,6 +11,7 @@ pub enum SymbolKind {
     Struct,     // Struct definition
     Enum,       // Enum definition
     Metasprite, // Metasprite definition
+    Animation,  // Animation definition
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -110,6 +111,18 @@ impl SymbolTable {
             name,
             DataType::Word, // Metasprite is referenced as a 16-bit address
             SymbolKind::Metasprite,
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+
+    pub fn define_animation(&mut self, name: String) -> Result<(), String> {
+        self.define_full(
+            name,
+            DataType::Word, // Animation is referenced as a 16-bit address
+            SymbolKind::Animation,
             None,
             None,
             None,

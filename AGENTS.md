@@ -79,8 +79,21 @@ Phase 6-10 are complete.
         - Format: `Count`, then `X, Y, Tile, Attr` per tile.
         - Constants in TILE definition are resolved at compile time.
 
+### Phase 14: Animation Engine (Completed)
+- **Implemented**: `ANIMATION` definition syntax, `Animation.Play`, `Animation.Update`, `Animation.Draw`, `AnimState` struct.
+- **Details**:
+    - **Syntax**: `ANIMATION Name ... FRAME Metasprite, Duration ... [LOOP] END ANIMATION`.
+    - **Runtime**:
+        - `AnimState` struct: `ptr` (Word), `frame_index` (Byte), `timer` (Byte), `finished` (Byte).
+        - `Animation.Play(state, anim)`: Initializes state.
+        - `Animation.Update(state)`: Updates timer and frame index. Handles looping.
+        - `Animation.Draw(x, y, state)`: Draws current frame's metasprite.
+    - **Codegen**:
+        - Animation data format: `Count`, `Loop`, then `FramePtr (Word)`, `Duration` per frame.
+        - `rs6502` compatibility: Uses explicit unique labels for frame pointers to support `WORD` directive.
+
 - **Next Steps**:
-    - Phase 14: Animation Engine.
+    - Phase 15: Object Pooling.
 
 - **Pitfalls**:
     - `Text.Print` writes directly to the PPU ($2006/$2007). This is fast but must be done when rendering is disabled or during VBlank to avoid visual glitches.

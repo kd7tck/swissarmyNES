@@ -1,6 +1,6 @@
 use super::ast::{
-    BinaryOperator, DataType, Expression, MetaspriteTile, Program, Statement, TopLevel,
-    UnaryOperator,
+    AnimationFrame, BinaryOperator, DataType, Expression, MetaspriteTile, Program, Statement,
+    TopLevel, UnaryOperator,
 };
 use super::lexer::Token;
 
@@ -306,6 +306,64 @@ impl Parser {
             return Ok(TopLevel::Macro(name, params, body));
         }
 
+        if self.match_token(Token::Animation) {
+            let name = if let Token::Identifier(n) = self.advance().clone() {
+                n
+            } else {
+                return Err("Expected identifier after ANIMATION".to_string());
+            };
+            self.consume(Token::Newline, "Expected newline after ANIMATION name")?;
+
+            let mut frames = Vec::new();
+            let mut loops = false;
+
+            while !self.check(Token::End) && !self.is_at_end() {
+                if self.match_token(Token::Newline) {
+                    continue;
+                }
+
+                if self.match_token(Token::Frame) {
+                    let metasprite = if let Token::Identifier(n) = self.advance().clone() {
+                        n
+                    } else {
+                        return Err("Expected metasprite name after FRAME".to_string());
+                    };
+                    self.consume(Token::Comma, "Expected ',' after metasprite name")?;
+                    let duration_expr = self.parse_expression()?;
+                    let duration = if let Expression::Integer(val) = duration_expr {
+                        if !(0..=255).contains(&val) {
+                            return Err("Duration must be 0-255".to_string());
+                        }
+                        val as u8
+                    } else {
+                        return Err("Duration must be an integer literal".to_string());
+                    };
+                    frames.push(AnimationFrame {
+                        metasprite,
+                        duration,
+                    });
+                    self.consume(Token::Newline, "Expected newline after FRAME definition")?;
+                    continue;
+                }
+
+                if self.match_token(Token::Loop) {
+                    loops = true;
+                    self.consume(Token::Newline, "Expected newline after LOOP")?;
+                    continue;
+                }
+
+                return Err(format!(
+                    "Expected FRAME, LOOP or END ANIMATION, found {:?}",
+                    self.peek()
+                ));
+            }
+
+            self.consume(Token::End, "Expected END ANIMATION")?;
+            self.consume(Token::Animation, "Expected ANIMATION after END")?;
+
+            return Ok(TopLevel::Animation(name, frames, loops));
+        }
+
         if self.match_token(Token::Metasprite) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
@@ -572,7 +630,10 @@ impl Parser {
         }
 
         // Implicit Let or Call
-        if matches!(self.peek(), Token::Identifier(_)) {
+        if matches!(
+            self.peek(),
+            Token::Identifier(_) | Token::Animation | Token::Frame
+        ) {
             let expr = self.parse_precedence(Precedence::Comparison)?;
 
             if self.match_token(Token::Equal) {
@@ -787,6 +848,8 @@ impl Parser {
             Token::Integer(val) => Ok(Expression::Integer(val)),
             Token::StringLiteral(val) => Ok(Expression::StringLiteral(val)),
             Token::Identifier(name) => Ok(Expression::Identifier(name)),
+            Token::Animation => Ok(Expression::Identifier("Animation".to_string())),
+            Token::Frame => Ok(Expression::Identifier("Frame".to_string())),
             Token::Peek => {
                 self.consume(Token::LParen, "Expected '(' after PEEK")?;
                 let expr = self.parse_expression()?;

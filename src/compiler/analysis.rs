@@ -35,6 +35,17 @@ impl SemanticAnalyzer {
             ("Right".to_string(), 0x01),
         ];
         let _ = self.symbol_table.define_enum("Button".to_string(), buttons);
+
+        // AnimState Struct
+        let anim_state_members = vec![
+            ("ptr".to_string(), DataType::Word, 0),
+            ("frame_index".to_string(), DataType::Byte, 2),
+            ("timer".to_string(), DataType::Byte, 3),
+            ("finished".to_string(), DataType::Byte, 4),
+        ];
+        let _ = self
+            .symbol_table
+            .define_struct("AnimState".to_string(), anim_state_members, 5);
     }
 
     pub fn analyze(&mut self, program: &Program) -> Result<(), Vec<String>> {
@@ -87,6 +98,11 @@ impl SemanticAnalyzer {
                         SymbolKind::Sub,
                         Some(param_types),
                     ) {
+                        self.errors.push(e);
+                    }
+                }
+                TopLevel::Animation(name, _, _) => {
+                    if let Err(e) = self.symbol_table.define_animation(name.clone()) {
                         self.errors.push(e);
                     }
                 }
@@ -173,6 +189,23 @@ impl SemanticAnalyzer {
                     self.symbol_table.enter_scope();
                     self.analyze_block(body);
                     self.symbol_table.exit_scope();
+                }
+                TopLevel::Animation(name, frames, _) => {
+                    for frame in frames {
+                        if let Some(sym) = self.symbol_table.resolve(&frame.metasprite) {
+                            if sym.kind != SymbolKind::Metasprite {
+                                self.errors.push(format!(
+                                    "Animation '{}' frame references '{}' which is not a metasprite",
+                                    name, frame.metasprite
+                                ));
+                            }
+                        } else {
+                            self.errors.push(format!(
+                                "Animation '{}' references undefined metasprite '{}'",
+                                name, frame.metasprite
+                            ));
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -358,6 +391,96 @@ impl SemanticAnalyzer {
                                 ));
                                 return;
                             }
+                        } else if base_name.eq_ignore_ascii_case("Animation") {
+                            if member.eq_ignore_ascii_case("Play") {
+                                if args.len() != 2 {
+                                    self.errors.push(
+                                        "Animation.Play expects 2 arguments (state, animation)"
+                                            .to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    // Arg 0 must be AnimState
+                                    if let Some(DataType::Struct(name)) =
+                                        self.resolve_type(&args[0])
+                                    {
+                                        if name != "AnimState" {
+                                            self.errors.push(
+                                                "Animation.Play first argument must be AnimState"
+                                                    .to_string(),
+                                            );
+                                        }
+                                    } else {
+                                        self.errors.push(
+                                            "Animation.Play first argument must be AnimState"
+                                                .to_string(),
+                                        );
+                                    }
+                                    // Arg 1 must be Animation
+                                    if let Expression::Identifier(name) = &args[1] {
+                                        if let Some(sym) = self.symbol_table.resolve(name) {
+                                            if sym.kind != SymbolKind::Animation {
+                                                self.errors.push(format!(
+                                                    "Animation.Play expects an Animation, got '{}'",
+                                                    name
+                                                ));
+                                            }
+                                        } else {
+                                            self.errors
+                                                .push(format!("Undefined symbol '{}'", name));
+                                        }
+                                    } else {
+                                        // Could be dynamic? Assume ok if expr
+                                        self.analyze_expression(&args[1]);
+                                    }
+                                }
+                                return;
+                            } else if member.eq_ignore_ascii_case("Update") {
+                                if args.len() != 1 {
+                                    self.errors.push(
+                                        "Animation.Update expects 1 argument (state)".to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    if let Some(DataType::Struct(name)) =
+                                        self.resolve_type(&args[0])
+                                    {
+                                        if name != "AnimState" {
+                                            self.errors.push(
+                                                "Animation.Update argument must be AnimState"
+                                                    .to_string(),
+                                            );
+                                        }
+                                    }
+                                }
+                                return;
+                            } else if member.eq_ignore_ascii_case("Draw") {
+                                if args.len() != 3 {
+                                    self.errors.push(
+                                        "Animation.Draw expects 3 arguments (x, y, state)"
+                                            .to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                    self.analyze_expression(&args[2]);
+                                    if let Some(DataType::Struct(name)) =
+                                        self.resolve_type(&args[2])
+                                    {
+                                        if name != "AnimState" {
+                                            self.errors.push(
+                                                "Animation.Draw 3rd argument must be AnimState"
+                                                    .to_string(),
+                                            );
+                                        }
+                                    }
+                                }
+                                return;
+                            } else {
+                                self.errors
+                                    .push(format!("Unknown Animation command '{}'", member));
+                                return;
+                            }
                         }
                     }
                 }
@@ -482,6 +605,9 @@ impl SemanticAnalyzer {
                         return;
                     }
                     if base_name.eq_ignore_ascii_case("Sprite") {
+                        return;
+                    }
+                    if base_name.eq_ignore_ascii_case("Animation") {
                         return;
                     }
                 }
@@ -794,6 +920,9 @@ impl SemanticAnalyzer {
                         return None;
                     }
                     if base_name.eq_ignore_ascii_case("Sprite") {
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("Animation") {
                         return None;
                     }
                 }

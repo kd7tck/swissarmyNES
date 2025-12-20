@@ -74,6 +74,7 @@ pub enum TopLevel {
     Asm(Vec<String>),                                     // Top-level ASM block
     Data(Option<String>, Vec<Expression>),                // [Label:] DATA 1, 2, 3
     Include(String),                                      // INCLUDE "filename"
+    Enum(String, Vec<(String, Option<i32>)>), // ENUM Name, Members(Name, Optional Value)
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -84,6 +85,7 @@ pub enum DataType {
     Bool,
     String,
     Struct(String),
+    Enum(String),
     Array(Box<DataType>, usize), // Array of Type, Size
 }
 

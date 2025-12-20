@@ -70,7 +70,7 @@ Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are comple
     - **Parser/AST**: Added `ShiftLeft`/`ShiftRight` tokens and precedence.
 
 - **Next Steps**:
-    - Phase 9: Enums & Constants.
+    - Phase 10: Macros.
 
 - **Pitfalls**:
     - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value).

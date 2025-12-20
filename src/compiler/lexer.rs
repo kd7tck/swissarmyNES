@@ -46,6 +46,7 @@ pub enum Token {
     Include,
     Select,
     Case,
+    Enum,
 
     // Identifiers
     Identifier(String),
@@ -287,6 +288,7 @@ impl<'a> Lexer<'a> {
             "INCLUDE" => Token::Include,
             "SELECT" => Token::Select,
             "CASE" => Token::Case,
+            "ENUM" => Token::Enum,
             _ => Token::Identifier(ident),
         }
     }

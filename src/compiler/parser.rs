@@ -164,6 +164,56 @@ impl Parser {
             return Ok(TopLevel::TypeDecl(name, members));
         }
 
+        if self.match_token(Token::Enum) {
+            let name = if let Token::Identifier(n) = self.advance().clone() {
+                n
+            } else {
+                return Err("Expected identifier after ENUM".to_string());
+            };
+            self.consume(Token::Newline, "Expected newline after ENUM name")?;
+
+            let mut variants = Vec::new();
+            while !self.check(Token::End) && !self.is_at_end() {
+                if self.match_token(Token::Newline) {
+                    continue;
+                }
+
+                let variant_name = if let Token::Identifier(n) = self.advance().clone() {
+                    n
+                } else {
+                    return Err("Expected variant name in ENUM definition".to_string());
+                };
+
+                let mut val = None;
+                if self.match_token(Token::Equal) {
+                    let val_expr = self.parse_expression()?;
+                    match val_expr {
+                        Expression::Integer(v) => val = Some(v),
+                        Expression::UnaryOp(UnaryOperator::Negate, sub) => {
+                            if let Expression::Integer(v) = *sub {
+                                val = Some(-v);
+                            } else {
+                                return Err(
+                                    "Enum variant value must be an integer literal".to_string()
+                                );
+                            }
+                        }
+                        _ => {
+                            return Err("Enum variant value must be an integer literal".to_string());
+                        }
+                    }
+                }
+
+                variants.push((variant_name, val));
+                self.consume(Token::Newline, "Expected newline after variant definition")?;
+            }
+
+            self.consume(Token::End, "Expected END ENUM")?;
+            self.consume(Token::Enum, "Expected ENUM after END")?;
+
+            return Ok(TopLevel::Enum(name, variants));
+        }
+
         if self.match_token(Token::Sub) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n

@@ -59,7 +59,7 @@ impl CodeGenerator {
 
     fn get_type_size(&self, dt: &DataType) -> u16 {
         match dt {
-            DataType::Byte | DataType::Int | DataType::Bool => 1,
+            DataType::Byte | DataType::Int | DataType::Bool | DataType::Enum(_) => 1,
             DataType::Word | DataType::String => 2,
             DataType::Struct(name) => {
                 if let Some(sym) = self.symbol_table.resolve(name) {
@@ -1672,7 +1672,7 @@ impl CodeGenerator {
 
                 // 2. Push to Stack
                 match expr_type {
-                    DataType::Byte | DataType::Bool | DataType::Int => {
+                    DataType::Byte | DataType::Bool | DataType::Int | DataType::Enum(_) => {
                         self.output.push("  PHA".to_string());
                     }
                     DataType::Word | DataType::String => {
@@ -1696,7 +1696,7 @@ impl CodeGenerator {
                     self.output.push("  TSX".to_string());
 
                     match expr_type {
-                        DataType::Byte | DataType::Bool | DataType::Int => {
+                        DataType::Byte | DataType::Bool | DataType::Int | DataType::Enum(_) => {
                             // A has Case Val. Stack has Select Val at $0101,X
                             self.output.push("  CMP $0101, X".to_string());
                             self.output.push(format!("  BNE {}", next_case));
@@ -1733,7 +1733,7 @@ impl CodeGenerator {
 
                 // 4. Pop Stack
                 match expr_type {
-                    DataType::Byte | DataType::Bool | DataType::Int => {
+                    DataType::Byte | DataType::Bool | DataType::Int | DataType::Enum(_) => {
                         self.output.push("  PLA".to_string());
                     }
                     _ => {
@@ -1782,20 +1782,24 @@ impl CodeGenerator {
                 .and_then(|s| s.address)
                 .ok_or_else(|| format!("Symbol '{}' has no address", name)),
             Expression::MemberAccess(base, member) => {
-                let base_addr = self.get_static_address(base)?;
                 let base_type = self.resolve_type(base).ok_or("Unknown base type")?;
-                if let DataType::Struct(s_name) = base_type {
-                    if let Some(sym) = self.symbol_table.resolve(&s_name) {
-                        if let Some(members) = &sym.members {
-                            for (m_name, _, offset) in members {
-                                if m_name == member {
-                                    return Ok(base_addr + offset);
+                match base_type {
+                    DataType::Struct(s_name) => {
+                        let base_addr = self.get_static_address(base)?;
+                        if let Some(sym) = self.symbol_table.resolve(&s_name) {
+                            if let Some(members) = &sym.members {
+                                for (m_name, _, offset) in members {
+                                    if m_name == member {
+                                        return Ok(base_addr + offset);
+                                    }
                                 }
                             }
                         }
+                        Err("Struct Member error".to_string())
                     }
+                    DataType::Enum(_) => Err("Cannot take address of enum member".to_string()),
+                    _ => Err("Member access on non-struct/enum".to_string()),
                 }
-                Err("Member error".to_string())
             }
             _ => Err("Not static".to_string()),
         }
@@ -1808,16 +1812,30 @@ impl CodeGenerator {
             }
             Expression::MemberAccess(base, member) => {
                 let base_type = self.resolve_type(base)?;
-                if let DataType::Struct(struct_name) = base_type {
-                    if let Some(sym) = self.symbol_table.resolve(&struct_name) {
-                        if let Some(members) = &sym.members {
-                            for (m, t, _) in members {
-                                if m == member {
-                                    return Some(t.clone());
+                match base_type {
+                    DataType::Struct(struct_name) => {
+                        if let Some(sym) = self.symbol_table.resolve(&struct_name) {
+                            if let Some(members) = &sym.members {
+                                for (m, t, _) in members {
+                                    if m == member {
+                                        return Some(t.clone());
+                                    }
                                 }
                             }
                         }
                     }
+                    DataType::Enum(enum_name) => {
+                        if let Some(sym) = self.symbol_table.resolve(&enum_name) {
+                            if let Some(variants) = &sym.variants {
+                                for (v_name, _) in variants {
+                                    if v_name == member {
+                                        return Some(DataType::Int);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
                 }
                 None
             }
@@ -2528,7 +2546,28 @@ impl CodeGenerator {
                     Ok(DataType::Byte)
                 }
             }
-            Expression::MemberAccess(_base, _member) => {
+            Expression::MemberAccess(base, member) => {
+                let base_type = self.resolve_type(base).ok_or("Unknown base type")?;
+                if let DataType::Enum(enum_name) = base_type {
+                    // Enum Member Access -> Constant
+                    if let Some(sym) = self.symbol_table.resolve(&enum_name) {
+                        if let Some(variants) = &sym.variants {
+                            for (v_name, val) in variants {
+                                if v_name == member {
+                                    // Found variant
+                                    let low = (val & 0xFF) as u8;
+                                    let high = ((val >> 8) & 0xFF) as u8;
+                                    self.output.push(format!("  LDA #${:02X}", low));
+                                    self.output.push(format!("  LDX #${:02X}", high));
+                                    return Ok(DataType::Int);
+                                }
+                            }
+                        }
+                    }
+                    return Err(format!("Unknown enum variant {}.{}", enum_name, member));
+                }
+
+                // Struct Member Access
                 let addr = self.get_static_address(expr)?;
                 let dtype = self.resolve_type(expr).unwrap();
                 match dtype {

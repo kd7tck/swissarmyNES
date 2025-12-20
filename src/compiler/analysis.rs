@@ -108,6 +108,24 @@ impl SemanticAnalyzer {
                         }
                     }
                 }
+                TopLevel::Enum(name, variants) => {
+                    let mut variant_defs = Vec::new();
+                    let mut current_val = 0;
+                    for (v_name, v_val) in variants {
+                        let val = if let Some(v) = v_val {
+                            current_val = *v + 1;
+                            *v
+                        } else {
+                            let v = current_val;
+                            current_val += 1;
+                            v
+                        };
+                        variant_defs.push((v_name.clone(), val));
+                    }
+                    if let Err(e) = self.symbol_table.define_enum(name.clone(), variant_defs) {
+                        self.errors.push(e);
+                    }
+                }
                 _ => {}
             }
         }
@@ -173,20 +191,29 @@ impl SemanticAnalyzer {
                     Expression::MemberAccess(base, member) => {
                         self.analyze_expression(base);
                         let base_type = self.resolve_type(base);
-                        if let Some(DataType::Struct(struct_name)) = base_type {
-                            if let Some(sym) = self.symbol_table.resolve(&struct_name) {
-                                if let Some(members) = &sym.members {
-                                    if !members.iter().any(|(n, _, _)| n == member) {
-                                        self.errors.push(format!(
-                                            "Struct '{}' has no member '{}'",
-                                            struct_name, member
-                                        ));
+                        match base_type {
+                            Some(DataType::Struct(struct_name)) => {
+                                if let Some(sym) = self.symbol_table.resolve(&struct_name) {
+                                    if let Some(members) = &sym.members {
+                                        if !members.iter().any(|(n, _, _)| n == member) {
+                                            self.errors.push(format!(
+                                                "Struct '{}' has no member '{}'",
+                                                struct_name, member
+                                            ));
+                                        }
                                     }
+                                } else {
+                                    self.errors
+                                        .push(format!("Undefined struct type '{}'", struct_name));
                                 }
-                            } else {
-                                self.errors
-                                    .push(format!("Undefined struct type '{}'", struct_name));
                             }
+                            Some(DataType::Enum(enum_name)) => {
+                                self.errors.push(format!(
+                                    "Cannot assign to enum member '{}.{}'",
+                                    enum_name, member
+                                ));
+                            }
+                            _ => {}
                         }
                     }
                     Expression::Call(callee, _args) => {
@@ -325,15 +352,32 @@ impl SemanticAnalyzer {
             Expression::MemberAccess(base, member) => {
                 self.analyze_expression(base);
                 let base_type = self.resolve_type(base);
-                if let Some(DataType::Struct(name)) = base_type {
-                    if let Some(sym) = self.symbol_table.resolve(&name) {
-                        if let Some(members) = &sym.members {
-                            if !members.iter().any(|(n, _, _)| n == member) {
-                                self.errors
-                                    .push(format!("Struct '{}' has no member '{}'", name, member));
+                match base_type {
+                    Some(DataType::Struct(name)) => {
+                        if let Some(sym) = self.symbol_table.resolve(&name) {
+                            if let Some(members) = &sym.members {
+                                if !members.iter().any(|(n, _, _)| n == member) {
+                                    self.errors.push(format!(
+                                        "Struct '{}' has no member '{}'",
+                                        name, member
+                                    ));
+                                }
                             }
                         }
                     }
+                    Some(DataType::Enum(name)) => {
+                        if let Some(sym) = self.symbol_table.resolve(&name) {
+                            if let Some(variants) = &sym.variants {
+                                if !variants.iter().any(|(n, _)| n == member) {
+                                    self.errors.push(format!(
+                                        "Enum '{}' has no variant '{}'",
+                                        name, member
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
             Expression::Call(callee, args) => {
@@ -569,16 +613,31 @@ impl SemanticAnalyzer {
             }
             Expression::MemberAccess(base, member) => {
                 let base_type = self.resolve_type(base)?;
-                if let DataType::Struct(name) = base_type {
-                    if let Some(sym) = self.symbol_table.resolve(&name) {
-                        if let Some(members) = &sym.members {
-                            for (m_name, m_type, _) in members {
-                                if m_name == member {
-                                    return Some(m_type.clone());
+                match base_type {
+                    DataType::Struct(name) => {
+                        if let Some(sym) = self.symbol_table.resolve(&name) {
+                            if let Some(members) = &sym.members {
+                                for (m_name, m_type, _) in members {
+                                    if m_name == member {
+                                        return Some(m_type.clone());
+                                    }
                                 }
                             }
                         }
                     }
+                    DataType::Enum(name) => {
+                        // Check if variant exists
+                        if let Some(sym) = self.symbol_table.resolve(&name) {
+                            if let Some(variants) = &sym.variants {
+                                for (v_name, _) in variants {
+                                    if v_name == member {
+                                        return Some(DataType::Int); // Enums resolve to Int
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
                 }
                 None
             }
@@ -592,7 +651,7 @@ impl SemanticAnalyzer {
 
     fn get_type_size(&self, dt: &DataType) -> u16 {
         match dt {
-            DataType::Byte | DataType::Int | DataType::Bool => 1,
+            DataType::Byte | DataType::Int | DataType::Bool | DataType::Enum(_) => 1,
             DataType::Word | DataType::String => 2,
             DataType::Struct(name) => {
                 if let Some(sym) = self.symbol_table.resolve(name) {

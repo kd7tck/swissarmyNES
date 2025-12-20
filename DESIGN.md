@@ -70,7 +70,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Symbol Table tracks struct layout and offsets.
 - **Completion Criteria:** `DIM p AS Player` allocates correct total bytes.
 
-## Phase 9: Enums & Constants
+## Phase 9: Enums & Constants (Completed)
 **Goal:** Eliminate magic numbers.
 - **Action Items:**
     - Implement `ENUM` block syntax.

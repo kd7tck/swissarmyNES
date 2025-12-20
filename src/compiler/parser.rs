@@ -1,5 +1,6 @@
 use super::ast::{
-    BinaryOperator, DataType, Expression, Program, Statement, TopLevel, UnaryOperator,
+    BinaryOperator, DataType, Expression, MetaspriteTile, Program, Statement, TopLevel,
+    UnaryOperator,
 };
 use super::lexer::Token;
 
@@ -303,6 +304,49 @@ impl Parser {
             self.consume(Token::Macro, "Expected MACRO after END")?;
 
             return Ok(TopLevel::Macro(name, params, body));
+        }
+
+        if self.match_token(Token::Metasprite) {
+            let name = if let Token::Identifier(n) = self.advance().clone() {
+                n
+            } else {
+                return Err("Expected identifier after METASPRITE".to_string());
+            };
+            self.consume(Token::Newline, "Expected newline after METASPRITE name")?;
+
+            let mut tiles = Vec::new();
+            while !self.check(Token::End) && !self.is_at_end() {
+                if self.match_token(Token::Newline) {
+                    continue;
+                }
+
+                self.consume(Token::Tile, "Expected TILE definition inside METASPRITE")?;
+
+                let x = self.parse_expression()?;
+                self.consume(Token::Comma, "Expected ',' after x")?;
+
+                let y = self.parse_expression()?;
+                self.consume(Token::Comma, "Expected ',' after y")?;
+
+                let tile_index = self.parse_expression()?;
+                self.consume(Token::Comma, "Expected ',' after tile index")?;
+
+                let attr = self.parse_expression()?;
+
+                tiles.push(MetaspriteTile {
+                    x,
+                    y,
+                    tile: tile_index,
+                    attr,
+                });
+
+                self.consume(Token::Newline, "Expected newline after TILE definition")?;
+            }
+
+            self.consume(Token::End, "Expected END METASPRITE")?;
+            self.consume(Token::Metasprite, "Expected METASPRITE after END")?;
+
+            return Ok(TopLevel::Metasprite(name, tiles));
         }
 
         let mut data_label = None;

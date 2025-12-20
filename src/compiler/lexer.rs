@@ -49,6 +49,8 @@ pub enum Token {
     Enum,
     Def,
     Macro,
+    Metasprite,
+    Tile,
 
     // Identifiers
     Identifier(String),
@@ -293,6 +295,8 @@ impl<'a> Lexer<'a> {
             "ENUM" => Token::Enum,
             "DEF" => Token::Def,
             "MACRO" => Token::Macro,
+            "METASPRITE" => Token::Metasprite,
+            "TILE" => Token::Tile,
             _ => Token::Identifier(ident),
         }
     }

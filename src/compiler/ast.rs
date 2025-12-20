@@ -65,6 +65,14 @@ pub enum Statement {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct MetaspriteTile {
+    pub x: Expression,
+    pub y: Expression,
+    pub tile: Expression,
+    pub attr: Expression,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum TopLevel {
     Sub(String, Vec<(String, DataType)>, Vec<Statement>), // Name, Params, Body
     TypeDecl(String, Vec<(String, DataType)>),            // TYPE Name ... END TYPE
@@ -76,6 +84,7 @@ pub enum TopLevel {
     Include(String),                                      // INCLUDE "filename"
     Enum(String, Vec<(String, Option<i32>)>), // ENUM Name, Members(Name, Optional Value)
     Macro(String, Vec<String>, Vec<Statement>), // MACRO Name, Params, Body
+    Metasprite(String, Vec<MetaspriteTile>),  // METASPRITE Name, Tiles
 }
 
 #[derive(Debug, PartialEq, Clone)]

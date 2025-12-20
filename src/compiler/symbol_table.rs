@@ -3,13 +3,14 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SymbolKind {
-    Variable, // Declared with DIM
-    Constant, // Declared with CONST
-    Sub,      // SUB definition
-    Param,    // SUB parameter
-    Local,    // Local variable (implicit or explicit in FOR/LET)
-    Struct,   // Struct definition
-    Enum,     // Enum definition
+    Variable,   // Declared with DIM
+    Constant,   // Declared with CONST
+    Sub,        // SUB definition
+    Param,      // SUB parameter
+    Local,      // Local variable (implicit or explicit in FOR/LET)
+    Struct,     // Struct definition
+    Enum,       // Enum definition
+    Metasprite, // Metasprite definition
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -101,6 +102,18 @@ impl SymbolTable {
             None,
             None,
             Some(variants),
+        )
+    }
+
+    pub fn define_metasprite(&mut self, name: String) -> Result<(), String> {
+        self.define_full(
+            name,
+            DataType::Word, // Metasprite is referenced as a 16-bit address
+            SymbolKind::Metasprite,
+            None,
+            None,
+            None,
+            None,
         )
     }
 

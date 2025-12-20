@@ -100,7 +100,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Support for custom font mappings (ASCII to Tile Index).
 - **Completion Criteria:** "Hello World" printed to nametable at (10, 10).
 
-## Phase 13: Metasprite System
+## Phase 13: Metasprite System (Completed)
 **Goal:** Handle sprites larger than 8x8.
 - **Action Items:**
     - Define `Metasprite` data structure (list of relative x, y, tile, attr).

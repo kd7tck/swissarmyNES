@@ -143,6 +143,11 @@ impl SemanticAnalyzer {
                         self.errors.push(e);
                     }
                 }
+                TopLevel::Metasprite(name, _) => {
+                    if let Err(e) = self.symbol_table.define_metasprite(name.clone()) {
+                        self.errors.push(e);
+                    }
+                }
                 _ => {}
             }
         }
@@ -309,6 +314,50 @@ impl SemanticAnalyzer {
                                 ));
                                 return;
                             }
+                        } else if base_name.eq_ignore_ascii_case("Sprite") {
+                            if member.eq_ignore_ascii_case("Draw") {
+                                if args.len() != 3 {
+                                    self.errors.push(
+                                        "Sprite.Draw expects 3 arguments (x, y, metasprite)"
+                                            .to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                    // 3rd arg is metasprite name, but we can't easily validate type here
+                                    // if it's passed as a variable (pointer).
+                                    // If it's an identifier, we can check if it's a metasprite.
+                                    if let Expression::Identifier(name) = &args[2] {
+                                        if let Some(sym) = self.symbol_table.resolve(name) {
+                                            if sym.kind != SymbolKind::Metasprite {
+                                                self.errors.push(format!(
+                                                    "Sprite.Draw expects a Metasprite, got '{}'",
+                                                    name
+                                                ));
+                                            }
+                                        } else {
+                                            self.errors
+                                                .push(format!("Undefined symbol '{}'", name));
+                                        }
+                                    } else {
+                                        // Could be an expression returning a pointer?
+                                        self.analyze_expression(&args[2]);
+                                    }
+                                }
+                                return;
+                            } else if member.eq_ignore_ascii_case("Clear") {
+                                if !args.is_empty() {
+                                    self.errors
+                                        .push("Sprite.Clear expects 0 arguments".to_string());
+                                }
+                                return;
+                            } else {
+                                self.errors.push(format!(
+                                    "Unknown Sprite command '{}' (Draw, Clear)",
+                                    member
+                                ));
+                                return;
+                            }
                         }
                     }
                 }
@@ -424,12 +473,15 @@ impl SemanticAnalyzer {
                 }
             }
             Expression::MemberAccess(base, member) => {
-                // Check for Controller or Text
+                // Check for Controller or Text or Sprite
                 if let Expression::Identifier(base_name) = &**base {
                     if base_name.eq_ignore_ascii_case("Controller") {
                         return; // No direct member access check needed here, already safe
                     }
                     if base_name.eq_ignore_ascii_case("Text") {
+                        return;
+                    }
+                    if base_name.eq_ignore_ascii_case("Sprite") {
                         return;
                     }
                 }
@@ -739,6 +791,9 @@ impl SemanticAnalyzer {
                         return None;
                     }
                     if base_name.eq_ignore_ascii_case("Text") {
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("Sprite") {
                         return None;
                     }
                 }

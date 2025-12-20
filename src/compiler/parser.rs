@@ -687,6 +687,10 @@ impl Parser {
                         self.advance();
                         "Read".to_string()
                     }
+                    Token::Print => {
+                        self.advance();
+                        "Print".to_string()
+                    }
                     _ => return Err("Expected member name after '.'".to_string()),
                 };
                 left = Expression::MemberAccess(Box::new(left), member);

@@ -256,7 +256,7 @@ impl SemanticAnalyzer {
                 self.analyze_expression(expr);
             }
             Statement::Call(target, args) => {
-                // Check for Controller.Read()
+                // Check for Member Access Call (Controller, Text)
                 if let Expression::MemberAccess(base, member) = target {
                     if let Expression::Identifier(base_name) = &**base {
                         if base_name.eq_ignore_ascii_case("Controller") {
@@ -269,6 +269,42 @@ impl SemanticAnalyzer {
                             } else {
                                 self.errors.push(format!(
                                     "Unknown Controller command '{}' (did you mean Read?)",
+                                    member
+                                ));
+                                return;
+                            }
+                        } else if base_name.eq_ignore_ascii_case("Text") {
+                            if member.eq_ignore_ascii_case("Print") {
+                                if args.len() != 3 {
+                                    self.errors.push(
+                                        "Text.Print expects 3 arguments (x, y, string)".to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                    self.analyze_expression(&args[2]);
+                                    if let Some(dtype) = self.resolve_type(&args[2]) {
+                                        if dtype != DataType::String {
+                                            self.errors.push(
+                                                "Text.Print expects string as 3rd argument"
+                                                    .to_string(),
+                                            );
+                                        }
+                                    }
+                                }
+                                return;
+                            } else if member.eq_ignore_ascii_case("SetOffset") {
+                                if args.len() != 1 {
+                                    self.errors.push(
+                                        "Text.SetOffset expects 1 argument (offset)".to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                }
+                                return;
+                            } else {
+                                self.errors.push(format!(
+                                    "Unknown Text command '{}' (Print, SetOffset)",
                                     member
                                 ));
                                 return;
@@ -388,10 +424,12 @@ impl SemanticAnalyzer {
                 }
             }
             Expression::MemberAccess(base, member) => {
-                // Check for Controller
+                // Check for Controller or Text
                 if let Expression::Identifier(base_name) = &**base {
                     if base_name.eq_ignore_ascii_case("Controller") {
-                        // We do not analyze 'base' because 'Controller' is not in symbol table
+                        return; // No direct member access check needed here, already safe
+                    }
+                    if base_name.eq_ignore_ascii_case("Text") {
                         return;
                     }
                 }
@@ -695,10 +733,13 @@ impl SemanticAnalyzer {
                 Some(DataType::Word) // Default function return
             }
             Expression::MemberAccess(base, member) => {
-                // Controller check (unlikely to be used as raw expr but good for safety)
+                // Controller check
                 if let Expression::Identifier(base_name) = &**base {
                     if base_name.eq_ignore_ascii_case("Controller") {
-                        return None; // No direct member access
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("Text") {
+                        return None;
                     }
                 }
 

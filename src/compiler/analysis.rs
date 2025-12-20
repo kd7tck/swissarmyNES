@@ -282,6 +282,32 @@ impl SemanticAnalyzer {
                                 ));
                                 return;
                             }
+                        } else if base_name.eq_ignore_ascii_case("Sprite") {
+                            if member.eq_ignore_ascii_case("Draw") {
+                                if args.len() != 3 {
+                                    self.errors.push(
+                                        "Sprite.Draw expects 3 arguments (x, y, metasprite)"
+                                            .to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                    self.analyze_expression(&args[2]);
+                                }
+                                return;
+                            } else if member.eq_ignore_ascii_case("Clear") {
+                                if !args.is_empty() {
+                                    self.errors
+                                        .push("Sprite.Clear expects 0 arguments".to_string());
+                                }
+                                return;
+                            } else {
+                                self.errors.push(format!(
+                                    "Unknown Sprite command '{}' (Draw, Clear)",
+                                    member
+                                ));
+                                return;
+                            }
                         } else if base_name.eq_ignore_ascii_case("Text") {
                             if member.eq_ignore_ascii_case("Print") {
                                 if args.len() != 3 {
@@ -439,6 +465,9 @@ impl SemanticAnalyzer {
                         return; // No direct member access check needed here, already safe
                     }
                     if base_name.eq_ignore_ascii_case("Text") {
+                        return;
+                    }
+                    if base_name.eq_ignore_ascii_case("Sprite") {
                         return;
                     }
                 }
@@ -748,6 +777,9 @@ impl SemanticAnalyzer {
                         return None;
                     }
                     if base_name.eq_ignore_ascii_case("Text") {
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("Sprite") {
                         return None;
                     }
                 }

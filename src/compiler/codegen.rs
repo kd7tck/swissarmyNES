@@ -306,16 +306,37 @@ impl CodeGenerator {
         self.output.push("  STA $2006".to_string());
         self.output.push("  LDA $0423".to_string());
         self.output.push("  STA $2006".to_string());
+        // Check Type ($0421)
+        self.output.push("  LDA $0421".to_string());
+        self.output.push("  BNE VBlankBufferRow".to_string());
+
+        // Type 0: Column (Inc 32, Len 30)
         self.output.push("  LDA $F8".to_string());
-        self.output.push("  ORA #$04".to_string());
+        self.output.push("  ORA #$04".to_string()); // Inc 32
         self.output.push("  STA $2000".to_string());
         self.output.push("  LDX #0".to_string());
-        self.output.push("VBlankBufferLoop:".to_string());
+        self.output.push("VBlankBufferColLoop:".to_string());
         self.output.push("  LDA $0424, X".to_string());
         self.output.push("  STA $2007".to_string());
         self.output.push("  INX".to_string());
         self.output.push("  CPX #30".to_string());
-        self.output.push("  BNE VBlankBufferLoop".to_string());
+        self.output.push("  BNE VBlankBufferColLoop".to_string());
+        self.output.push("  JMP VBlankBufferDone".to_string());
+
+        self.output.push("VBlankBufferRow:".to_string());
+        // Type 1: Row (Inc 1, Len 32)
+        self.output.push("  LDA $F8".to_string());
+        self.output.push("  AND #$FB".to_string()); // Inc 1 (Clear Bit 2)
+        self.output.push("  STA $2000".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("VBlankBufferRowLoop:".to_string());
+        self.output.push("  LDA $0424, X".to_string());
+        self.output.push("  STA $2007".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  CPX #32".to_string());
+        self.output.push("  BNE VBlankBufferRowLoop".to_string());
+
+        self.output.push("VBlankBufferDone:".to_string());
         self.output.push("  LDA $F8".to_string());
         self.output.push("  STA $2000".to_string());
         self.output.push("  LDA #0".to_string());
@@ -1203,6 +1224,78 @@ impl CodeGenerator {
         self.output.push("  STA $0420".to_string());
 
         self.output.push("Scroll_LoadColumn_Done:".to_string());
+        self.output.push("  RTS".to_string());
+        self.output.push("".to_string());
+
+        self.output.push("Runtime_Scroll_LoadRow:".to_string());
+
+        // Check Buffer
+        self.output.push("  LDA $0420".to_string());
+        self.output.push("  BNE Scroll_LoadRow_Done".to_string());
+
+        // Save Data Ptr (A/X) -> $00/$01
+        self.output.push("  STA $00".to_string());
+        self.output.push("  STX $01".to_string());
+
+        // Pop Virtual Y -> $02/$03
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $03".to_string()); // High
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $02".to_string()); // Low
+
+        // Calculate Target High ($05)
+        // (Y Low / 64) -> High Offset
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  STA $06".to_string()); // Temp High Offset
+
+        // Base $20 or $28 based on Y High Bit 0
+        self.output.push("  LDA $03".to_string());
+        self.output.push("  AND #1".to_string());
+        self.output.push("  BEQ Scroll_RowBase2000".to_string());
+        self.output.push("  LDA #$28".to_string());
+        self.output.push("  JMP Scroll_RowBaseStore".to_string());
+        self.output.push("Scroll_RowBase2000:".to_string());
+        self.output.push("  LDA #$20".to_string());
+        self.output.push("Scroll_RowBaseStore:".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $06".to_string());
+        self.output.push("  STA $05".to_string());
+
+        // Calculate Target Low ($04) = (Y Low & F8) << 2
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  AND #$F8".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  STA $04".to_string());
+
+        // Write Header
+        self.output.push("  LDA #1".to_string()); // Type 1 (Row)
+        self.output.push("  STA $0421".to_string()); // Type
+        self.output.push("  LDA $05".to_string());
+        self.output.push("  STA $0422".to_string()); // High
+        self.output.push("  LDA $04".to_string());
+        self.output.push("  STA $0423".to_string()); // Low
+
+        // Copy Data
+        self.output.push("  LDY #0".to_string());
+        self.output.push("Scroll_RowCopyLoop:".to_string());
+        self.output.push("  LDA ($00), Y".to_string());
+        self.output.push("  STA $0424, Y".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  CPY #32".to_string()); // 32 tiles for row
+        self.output.push("  BNE Scroll_RowCopyLoop".to_string());
+
+        // Set Flag
+        self.output.push("  LDA #1".to_string());
+        self.output.push("  STA $0420".to_string());
+
+        self.output.push("Scroll_LoadRow_Done:".to_string());
         self.output.push("  RTS".to_string());
         self.output.push("".to_string());
     }
@@ -2636,7 +2729,7 @@ impl CodeGenerator {
                                 // Arg 0: X (Value)
                                 let x_type = self.generate_expression(&args[0])?;
                                 // Push to Stack (Low, High)
-                                if x_type == DataType::Byte || x_type == DataType::Int {
+                                if x_type == DataType::Byte {
                                     self.output.push("  PHA".to_string()); // Low
                                     self.output.push("  LDA #0".to_string());
                                     self.output.push("  PHA".to_string()); // High
@@ -2653,6 +2746,28 @@ impl CodeGenerator {
 
                                 self.output
                                     .push("  JSR Runtime_Scroll_LoadColumn".to_string());
+                                return Ok(());
+                            } else if member.eq_ignore_ascii_case("LoadRow") {
+                                // Arg 0: Y (Value)
+                                let y_type = self.generate_expression(&args[0])?;
+                                // Push to Stack (Low, High)
+                                if y_type == DataType::Byte {
+                                    self.output.push("  PHA".to_string()); // Low
+                                    self.output.push("  LDA #0".to_string());
+                                    self.output.push("  PHA".to_string()); // High
+                                } else {
+                                    self.output.push("  PHA".to_string()); // Low
+                                    self.output.push("  TXA".to_string());
+                                    self.output.push("  PHA".to_string()); // High
+                                }
+
+                                // Arg 1: Array (Address)
+                                self.generate_address_expression(&args[1])?; // $02/$03
+                                self.output.push("  LDA $02".to_string());
+                                self.output.push("  LDX $03".to_string());
+
+                                self.output
+                                    .push("  JSR Runtime_Scroll_LoadRow".to_string());
                                 return Ok(());
                             }
                         } else if base_name.eq_ignore_ascii_case("PPU") {

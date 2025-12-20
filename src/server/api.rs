@@ -112,6 +112,10 @@ fn compile_source(
     let program = preprocessor::process_includes(program, &provider)
         .map_err(|e| format!("Preprocessor Error: {}", e))?;
 
+    // 2c. Preprocessing (Macros)
+    let program = preprocessor::expand_macros(program)
+        .map_err(|e| format!("Macro Expansion Error: {}", e))?;
+
     // 3. Analysis
     let mut analyzer = SemanticAnalyzer::new();
     analyzer

@@ -75,6 +75,7 @@ pub enum TopLevel {
     Data(Option<String>, Vec<Expression>),                // [Label:] DATA 1, 2, 3
     Include(String),                                      // INCLUDE "filename"
     Enum(String, Vec<(String, Option<i32>)>), // ENUM Name, Members(Name, Optional Value)
+    Macro(String, Vec<String>, Vec<Statement>), // MACRO Name, Params, Body
 }
 
 #[derive(Debug, PartialEq, Clone)]

@@ -271,6 +271,40 @@ impl Parser {
             return Ok(TopLevel::Interrupt(name, body));
         }
 
+        if self.match_token(Token::Def) {
+            self.consume(Token::Macro, "Expected MACRO after DEF")?;
+            let name = if let Token::Identifier(n) = self.advance().clone() {
+                n
+            } else {
+                return Err("Expected macro name".to_string());
+            };
+
+            self.consume(Token::LParen, "Expected '(' after macro name")?;
+            let mut params = Vec::new();
+            if !self.check(Token::RParen) {
+                loop {
+                    let param_name = if let Token::Identifier(n) = self.advance().clone() {
+                        n
+                    } else {
+                        return Err("Expected parameter name".to_string());
+                    };
+                    params.push(param_name);
+                    if !self.match_token(Token::Comma) {
+                        break;
+                    }
+                }
+            }
+            self.consume(Token::RParen, "Expected ')' after parameters")?;
+            self.consume(Token::Newline, "Expected newline after macro definition")?;
+
+            let body = self.parse_block()?;
+
+            self.consume(Token::End, "Expected END MACRO")?;
+            self.consume(Token::Macro, "Expected MACRO after END")?;
+
+            return Ok(TopLevel::Macro(name, params, body));
+        }
+
         let mut data_label = None;
         if let Token::Identifier(name) = self.peek().clone() {
             if self.position + 1 < self.tokens.len()

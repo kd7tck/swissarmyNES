@@ -59,6 +59,7 @@ impl CodeGenerator {
         self.generate_text_helpers();
         self.generate_sprite_helpers();
         self.generate_animation_helpers();
+        self.generate_pool_helpers();
         self.generate_user_data(program)?;
         self.generate_data_tables(program)?;
         self.generate_vectors(program)?;
@@ -910,6 +911,92 @@ impl CodeGenerator {
         self.output.push("  JSR Runtime_SpriteDraw".to_string());
         self.output.push("  RTS".to_string());
 
+        self.output.push("".to_string());
+    }
+
+    fn generate_pool_helpers(&mut self) {
+        self.output.push("; --- Pool Helpers ---".to_string());
+
+        self.output.push("Runtime_Pool_Spawn:".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $08".to_string());
+        self.output.push("  STA $09".to_string());
+
+        self.output.push("Pool_Spawn_Loop:".to_string());
+        self.output.push("  LDA $08".to_string());
+        self.output.push("  CMP $04".to_string());
+        self.output.push("  LDA $09".to_string());
+        self.output.push("  SBC $05".to_string());
+        self.output.push("  BCS Pool_Full".to_string());
+
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  BEQ Pool_Found".to_string());
+
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $06".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  LDA $03".to_string());
+        self.output.push("  ADC #0".to_string());
+        self.output.push("  STA $03".to_string());
+
+        self.output.push("  INC $08".to_string());
+        self.output.push("  BNE Pool_Inc_Skip".to_string());
+        self.output.push("  INC $09".to_string());
+        self.output.push("Pool_Inc_Skip:".to_string());
+        self.output.push("  JMP Pool_Spawn_Loop".to_string());
+
+        self.output.push("Pool_Found:".to_string());
+        self.output.push("  LDA #1".to_string());
+        self.output.push("  STA ($02), Y".to_string());
+        self.output.push("  LDA $08".to_string());
+        self.output.push("  LDX $09".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("Pool_Full:".to_string());
+        self.output.push("  LDA #$FF".to_string());
+        self.output.push("  LDX #$FF".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("Runtime_Pool_Despawn:".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0A".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0B".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $09".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $08".to_string());
+        self.output.push("  LDA $0B".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  LDA $0A".to_string());
+        self.output.push("  PHA".to_string());
+
+        self.output.push("  LDA $08".to_string());
+        self.output.push("  LDX $09".to_string());
+
+        self.output.push("  PHA".to_string());
+        self.output.push("  LDA $06".to_string());
+        self.output.push("  STA $00".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $01".to_string());
+        self.output.push("  PLA".to_string());
+
+        self.output.push("  JSR Math_Mul16".to_string());
+
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $02".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  TXA".to_string());
+        self.output.push("  ADC $03".to_string());
+        self.output.push("  STA $03".to_string());
+
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  STA ($02), Y".to_string());
+
+        self.output.push("  RTS".to_string());
         self.output.push("".to_string());
     }
 
@@ -2031,9 +2118,37 @@ impl CodeGenerator {
     fn generate_statement(&mut self, stmt: &Statement) -> Result<(), String> {
         match stmt {
             Statement::Let(target, expr) => {
-                // If target is Array Access, we need special handling
-                if let Expression::Call(callee, args) = target {
-                    // Array Assignment
+                // Optimization: Try static address first
+                if let Ok(addr) = self.get_static_address(target) {
+                    let target_type = self.resolve_type(target).ok_or("Unknown target type")?;
+                    match target_type {
+                        DataType::Word => match expr {
+                            Expression::Integer(val) => {
+                                let low = (val & 0xFF) as u8;
+                                let high = ((val >> 8) & 0xFF) as u8;
+                                self.output.push(format!("  LDA #${:02X}", low));
+                                self.output.push(format!("  STA ${:04X}", addr));
+                                self.output.push(format!("  LDA #${:02X}", high));
+                                self.output.push(format!("  STA ${:04X}", addr + 1));
+                            }
+                            _ => {
+                                let rtype = self.generate_expression(expr)?;
+                                self.output.push(format!("  STA ${:04X}", addr));
+                                if rtype == DataType::Word || rtype == DataType::Int {
+                                    self.output.push(format!("  STX ${:04X}", addr + 1));
+                                } else {
+                                    self.output.push("  LDA #0".to_string());
+                                    self.output.push(format!("  STA ${:04X}", addr + 1));
+                                }
+                            }
+                        },
+                        _ => {
+                            self.generate_expression(expr)?;
+                            self.output.push(format!("  STA ${:04X}", addr));
+                        }
+                    }
+                } else {
+                    // Dynamic L-Value (Array or Dynamic Member Access)
                     // 1. Calculate Value
                     let rtype = self.generate_expression(expr)?;
                     // Save Value to Stack
@@ -2047,7 +2162,7 @@ impl CodeGenerator {
                     }
 
                     // 2. Calculate Address -> $02/$03
-                    self.generate_array_address(callee, &args[0])?;
+                    self.generate_address_expression(target)?;
 
                     // 3. Restore Value and Store
                     if rtype == DataType::Byte || rtype == DataType::Bool || rtype == DataType::Int
@@ -2065,37 +2180,6 @@ impl CodeGenerator {
                         self.output.push("  TXA".to_string());
                         self.output.push("  INY".to_string());
                         self.output.push("  STA ($02),Y".to_string());
-                    }
-                    return Ok(());
-                }
-
-                let addr = self.get_static_address(target)?;
-                let target_type = self.resolve_type(target).ok_or("Unknown target type")?;
-
-                match target_type {
-                    DataType::Word => match expr {
-                        Expression::Integer(val) => {
-                            let low = (val & 0xFF) as u8;
-                            let high = ((val >> 8) & 0xFF) as u8;
-                            self.output.push(format!("  LDA #${:02X}", low));
-                            self.output.push(format!("  STA ${:04X}", addr));
-                            self.output.push(format!("  LDA #${:02X}", high));
-                            self.output.push(format!("  STA ${:04X}", addr + 1));
-                        }
-                        _ => {
-                            let rtype = self.generate_expression(expr)?;
-                            self.output.push(format!("  STA ${:04X}", addr));
-                            if rtype == DataType::Word || rtype == DataType::Int {
-                                self.output.push(format!("  STX ${:04X}", addr + 1));
-                            } else {
-                                self.output.push("  LDA #0".to_string());
-                                self.output.push(format!("  STA ${:04X}", addr + 1));
-                            }
-                        }
-                    },
-                    _ => {
-                        self.generate_expression(expr)?;
-                        self.output.push(format!("  STA ${:04X}", addr));
                     }
                 }
             }
@@ -2152,6 +2236,36 @@ impl CodeGenerator {
                                 self.output.push("  STA $1C".to_string());
                                 return Ok(());
                             }
+                        } else if base_name.eq_ignore_ascii_case("Pool")
+                            && member.eq_ignore_ascii_case("Despawn")
+                        {
+                            self.generate_address_expression(&args[0])?;
+
+                            let dtype = self.resolve_type(&args[0]).unwrap();
+                            let stride = if let DataType::Array(inner, _) = dtype {
+                                self.get_type_size(&inner)
+                            } else {
+                                1
+                            };
+                            self.output.push(format!("  LDA #{}", stride));
+                            self.output.push("  STA $06".to_string());
+
+                            let idx_type = self.generate_expression(&args[1])?;
+                            if idx_type == DataType::Byte
+                                || idx_type == DataType::Bool
+                                || idx_type == DataType::Int
+                            {
+                                self.output.push("  PHA".to_string()); // Low
+                                self.output.push("  LDA #0".to_string());
+                                self.output.push("  PHA".to_string()); // High
+                            } else {
+                                self.output.push("  PHA".to_string()); // Low
+                                self.output.push("  TXA".to_string());
+                                self.output.push("  PHA".to_string()); // High
+                            }
+
+                            self.output.push("  JSR Runtime_Pool_Despawn".to_string());
+                            return Ok(());
                         } else if base_name.eq_ignore_ascii_case("Animation") {
                             if member.eq_ignore_ascii_case("Play") {
                                 // Arg 0: State (Address)
@@ -2687,6 +2801,38 @@ impl CodeGenerator {
             Expression::Call(callee, args) => {
                 self.generate_array_address(callee, &args[0])?;
             }
+            Expression::MemberAccess(base, member) => {
+                if let Ok(addr) = self.get_static_address(expr) {
+                    let low = (addr & 0xFF) as u8;
+                    let high = ((addr >> 8) & 0xFF) as u8;
+                    self.output.push(format!("  LDA #${:02X}", low));
+                    self.output.push("  STA $02".to_string());
+                    self.output.push(format!("  LDA #${:02X}", high));
+                    self.output.push("  STA $03".to_string());
+                } else {
+                    self.generate_address_expression(base)?;
+                    let base_type = self.resolve_type(base).ok_or("Unknown base type")?;
+                    if let DataType::Struct(s_name) = base_type {
+                        if let Some(sym) = self.symbol_table.resolve(&s_name) {
+                            if let Some(members) = &sym.members {
+                                for (m_name, _, offset) in members {
+                                    if m_name == member {
+                                        self.output.push(format!("  LDA #${:02X}", offset));
+                                        self.output.push("  CLC".to_string());
+                                        self.output.push("  ADC $02".to_string());
+                                        self.output.push("  STA $02".to_string());
+                                        self.output.push("  LDA #0".to_string());
+                                        self.output.push("  ADC $03".to_string());
+                                        self.output.push("  STA $03".to_string());
+                                        return Ok(());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return Err("Member access on non-struct".to_string());
+                }
+            }
             Expression::Integer(val) => {
                 let low = (val & 0xFF) as u8;
                 let high = ((val >> 8) & 0xFF) as u8;
@@ -2760,6 +2906,31 @@ impl CodeGenerator {
                 // Controller Logic
                 if let Expression::MemberAccess(base, member) = &**callee {
                     if let Expression::Identifier(base_name) = &**base {
+                        if base_name.eq_ignore_ascii_case("Pool")
+                            && member.eq_ignore_ascii_case("Spawn")
+                        {
+                            self.generate_address_expression(&args[0])?;
+
+                            let dtype = self.resolve_type(&args[0]).unwrap();
+                            let (count, stride) = if let DataType::Array(inner, size) = dtype {
+                                (size, self.get_type_size(&inner))
+                            } else {
+                                (0, 0)
+                            };
+
+                            self.output
+                                .push(format!("  LDA #${:02X}", (count & 0xFF) as u8));
+                            self.output.push("  STA $04".to_string());
+                            self.output
+                                .push(format!("  LDA #${:02X}", ((count >> 8) & 0xFF) as u8));
+                            self.output.push("  STA $05".to_string());
+
+                            self.output.push(format!("  LDA #{}", stride));
+                            self.output.push("  STA $06".to_string());
+
+                            self.output.push("  JSR Runtime_Pool_Spawn".to_string());
+                            return Ok(DataType::Int);
+                        }
                         if base_name.eq_ignore_ascii_case("Controller") {
                             self.generate_expression(&args[0])?;
                             self.output.push("  STA $00".to_string());
@@ -3366,12 +3537,10 @@ impl CodeGenerator {
             Expression::MemberAccess(base, member) => {
                 let base_type = self.resolve_type(base).ok_or("Unknown base type")?;
                 if let DataType::Enum(enum_name) = base_type {
-                    // Enum Member Access -> Constant
                     if let Some(sym) = self.symbol_table.resolve(&enum_name) {
                         if let Some(variants) = &sym.variants {
                             for (v_name, val) in variants {
                                 if v_name == member {
-                                    // Found variant
                                     let low = (val & 0xFF) as u8;
                                     let high = ((val >> 8) & 0xFF) as u8;
                                     self.output.push(format!("  LDA #${:02X}", low));
@@ -3384,32 +3553,63 @@ impl CodeGenerator {
                     return Err(format!("Unknown enum variant {}.{}", enum_name, member));
                 }
 
-                // Struct Member Access
-                let addr = self.get_static_address(expr)?;
-                let dtype = self.resolve_type(expr).unwrap();
-                match dtype {
-                    DataType::Word => {
-                        self.output.push(format!("  LDA ${:04X}", addr));
-                        self.output.push(format!("  LDX ${:04X}", addr + 1));
+                if let Ok(addr) = self.get_static_address(expr) {
+                    let dtype = self.resolve_type(expr).unwrap();
+                    match dtype {
+                        DataType::Word => {
+                            self.output.push(format!("  LDA ${:04X}", addr));
+                            self.output.push(format!("  LDX ${:04X}", addr + 1));
+                        }
+                        DataType::Int => {
+                            self.output.push(format!("  LDA ${:04X}", addr));
+                            self.output.push("  CMP #$80".to_string());
+                            let pos_lbl = self.new_label();
+                            let done_lbl = self.new_label();
+                            self.output.push(format!("  BCC {}", pos_lbl));
+                            self.output.push("  LDX #$FF".to_string());
+                            self.output.push(format!("  JMP {}", done_lbl));
+                            self.output.push(format!("{}:", pos_lbl));
+                            self.output.push("  LDX #0".to_string());
+                            self.output.push(format!("{}:", done_lbl));
+                        }
+                        _ => {
+                            self.output.push(format!("  LDA ${:04X}", addr));
+                            self.output.push("  LDX #0".to_string());
+                        }
                     }
-                    DataType::Int => {
-                        self.output.push(format!("  LDA ${:04X}", addr));
-                        self.output.push("  CMP #$80".to_string());
-                        let pos_lbl = self.new_label();
-                        let done_lbl = self.new_label();
-                        self.output.push(format!("  BCC {}", pos_lbl));
-                        self.output.push("  LDX #$FF".to_string());
-                        self.output.push(format!("  JMP {}", done_lbl));
-                        self.output.push(format!("{}:", pos_lbl));
-                        self.output.push("  LDX #0".to_string());
-                        self.output.push(format!("{}:", done_lbl));
+                    Ok(dtype)
+                } else {
+                    self.generate_address_expression(expr)?;
+                    let dtype = self.resolve_type(expr).unwrap();
+                    self.output.push("  LDY #0".to_string());
+                    match dtype {
+                        DataType::Word => {
+                            self.output.push("  LDA ($02),Y".to_string());
+                            self.output.push("  PHA".to_string());
+                            self.output.push("  INY".to_string());
+                            self.output.push("  LDA ($02),Y".to_string());
+                            self.output.push("  TAX".to_string());
+                            self.output.push("  PLA".to_string());
+                        }
+                        DataType::Int => {
+                            self.output.push("  LDA ($02),Y".to_string());
+                            self.output.push("  CMP #$80".to_string());
+                            let pos_lbl = self.new_label();
+                            let done_lbl = self.new_label();
+                            self.output.push(format!("  BCC {}", pos_lbl));
+                            self.output.push("  LDX #$FF".to_string());
+                            self.output.push(format!("  JMP {}", done_lbl));
+                            self.output.push(format!("{}:", pos_lbl));
+                            self.output.push("  LDX #0".to_string());
+                            self.output.push(format!("{}:", done_lbl));
+                        }
+                        _ => {
+                            self.output.push("  LDA ($02),Y".to_string());
+                            self.output.push("  LDX #0".to_string());
+                        }
                     }
-                    _ => {
-                        self.output.push(format!("  LDA ${:04X}", addr));
-                        self.output.push("  LDX #0".to_string());
-                    }
+                    Ok(dtype)
                 }
-                Ok(dtype)
             }
             Expression::UnaryOp(op, operand) => {
                 let dtype = self.generate_expression(operand)?;

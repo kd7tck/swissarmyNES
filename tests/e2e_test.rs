@@ -68,7 +68,7 @@ mod tests {
         //   PLA       -> 68
         //   CLC       -> 18
         //   ADC $00   -> 65 00 (or 6D 00 00)
-        //   STA x     -> 8D 00 03 (x @ $0300)
+        //   STA x     -> 8D 00 03 (x @ $03A0)
 
         // It won't find LDA #43 because constant folding isn't implemented in AST/Codegen yet!
         // It generates code to calculate 42 + 1 at runtime.

@@ -5,6 +5,9 @@ use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 use std::collections::HashMap;
 
 pub const NAMETABLE_ADDR: u16 = 0xD500;
+const SOUND_RAM_START: u16 = 0x0300;
+const STRING_HEAP_START: u16 = 0x0320;
+const VAR_START_RAM: u16 = 0x03A0;
 
 pub struct CodeGenerator {
     symbol_table: SymbolTable,
@@ -14,6 +17,7 @@ pub struct CodeGenerator {
     data_table_offsets: HashMap<String, u16>,
     sub_signatures: HashMap<String, Vec<(u16, DataType)>>,
     string_literals: HashMap<String, String>,
+    select_stack_depth: usize,
 }
 
 impl CodeGenerator {
@@ -26,6 +30,7 @@ impl CodeGenerator {
             data_table_offsets: HashMap::new(),
             sub_signatures: HashMap::new(),
             string_literals: HashMap::new(),
+            select_stack_depth: 0,
         }
     }
 
@@ -296,7 +301,7 @@ impl CodeGenerator {
         self.output.push("  LDX #$00".to_string());
         self.output.push("  LDA #$00".to_string());
         self.output.push("SndClear:".to_string());
-        self.output.push("  STA $02E0, X".to_string());
+        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START));
         self.output.push("  INX".to_string());
         self.output.push("  CPX #$10".to_string());
         self.output.push("  BNE SndClear".to_string());
@@ -335,15 +340,15 @@ impl CodeGenerator {
         self.output.push("  TAX".to_string());
         self.output.push("  LDY $F2".to_string());
         self.output.push("  LDA $F3".to_string());
-        self.output.push("  STA $02F0, Y".to_string());
+        self.output.push(format!("  STA ${:04X}, Y", SOUND_RAM_START + 0x10));
         self.output.push("  LDA #$01".to_string());
-        self.output.push("  STA $02E0, X".to_string());
+        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START));
         self.output.push("  LDA #$01".to_string());
-        self.output.push("  STA $02E1, X".to_string());
+        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 1));
         self.output.push("  LDA $F0".to_string());
-        self.output.push("  STA $02E2, X".to_string());
+        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 2));
         self.output.push("  LDA $F1".to_string());
-        self.output.push("  STA $02E3, X".to_string());
+        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 3));
         self.output.push("SndPlayEnd:".to_string());
         self.output.push("  RTS".to_string());
 
@@ -393,23 +398,23 @@ impl CodeGenerator {
         self.output.push("  RTS".to_string());
 
         self.output.push("SndChUpdate:".to_string());
-        self.output.push("  LDA $02E0, X".to_string());
+        self.output.push(format!("  LDA ${:04X}, X", SOUND_RAM_START));
         self.output.push("  BNE SndActive".to_string());
         self.output.push("  RTS".to_string());
         self.output.push("SndActive:".to_string());
-        self.output.push("  DEC $02E1, X".to_string());
+        self.output.push(format!("  DEC ${:04X}, X", SOUND_RAM_START + 1));
         self.output.push("  BEQ SndTimerExpired".to_string());
         self.output.push("  RTS".to_string());
         self.output.push("SndTimerExpired:".to_string());
-        self.output.push("  LDA $02E2, X".to_string());
+        self.output.push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 2));
         self.output.push("  STA $F4".to_string());
-        self.output.push("  LDA $02E3, X".to_string());
+        self.output.push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 3));
         self.output.push("  STA $F5".to_string());
         self.output.push("  LDY #$00".to_string());
         self.output.push("  LDA ($F4), Y".to_string());
         self.output.push("  CMP #$00".to_string());
         self.output.push("  BNE SndNextNote".to_string());
-        self.output.push("  STA $02E0, X".to_string());
+        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START));
         self.output.push("  CPX #$00".to_string());
         self.output.push("  BEQ SilenceP1".to_string());
         self.output.push("  CPX #$04".to_string());
@@ -430,7 +435,7 @@ impl CodeGenerator {
         self.output.push("  STA $4008".to_string());
         self.output.push("  JMP SndChEnd".to_string());
         self.output.push("SndNextNote:".to_string());
-        self.output.push("  STA $02E1, X".to_string());
+        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 1));
         self.output.push("  INC $F4".to_string());
         self.output.push("  BNE SndPtrInc3".to_string());
         self.output.push("  INC $F5".to_string());
@@ -460,7 +465,7 @@ impl CodeGenerator {
         self.output.push("  BEQ SilenceTri".to_string());
         self.output.push("  JMP SndAdvance".to_string());
         self.output.push("PlayP1:".to_string());
-        self.output.push("  LDA $02F0".to_string());
+        self.output.push(format!("  LDA ${:04X}", SOUND_RAM_START + 0x10));
         self.output.push("  STA $4000".to_string());
         self.output.push("  LDA $F6".to_string());
         self.output.push("  STA $4002".to_string());
@@ -468,7 +473,7 @@ impl CodeGenerator {
         self.output.push("  STA $4003".to_string());
         self.output.push("  JMP SndAdvance".to_string());
         self.output.push("PlayP2:".to_string());
-        self.output.push("  LDA $02F1".to_string());
+        self.output.push(format!("  LDA ${:04X}", SOUND_RAM_START + 0x11));
         self.output.push("  STA $4004".to_string());
         self.output.push("  LDA $F6".to_string());
         self.output.push("  STA $4006".to_string());
@@ -488,9 +493,9 @@ impl CodeGenerator {
         self.output.push("  INC $F5".to_string());
         self.output.push("SndPtrInc3:".to_string());
         self.output.push("  LDA $F4".to_string());
-        self.output.push("  STA $02E2, X".to_string());
+        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 2));
         self.output.push("  LDA $F5".to_string());
-        self.output.push("  STA $02E3, X".to_string());
+        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 3));
         self.output.push("SndChEnd:".to_string());
         self.output.push("  RTS".to_string());
     }
@@ -844,7 +849,7 @@ impl CodeGenerator {
         self.output.push("Runtime_GetHeapSlot:".to_string());
         self.output.push("  INC $0E".to_string());
         self.output.push("  LDA $0E".to_string());
-        self.output.push("  AND #$03".to_string());
+        self.output.push("  AND #$07".to_string());
         self.output.push("  STA $0E".to_string());
         self.output.push("  TAX".to_string()); // Slot Index
         self.output.push("  LDA #0".to_string()); // Offset = Index * 16
@@ -857,8 +862,12 @@ impl CodeGenerator {
         self.output.push("  BNE Heap_Loop".to_string());
         self.output.push("Heap_OffsetCalc:".to_string());
         self.output.push("  CLC".to_string());
-        self.output.push("  ADC #$A0".to_string()); // Base $02A0
-        self.output.push("  LDX #$02".to_string()); // High Byte
+        self.output
+            .push(format!("  ADC #${:02X}", (STRING_HEAP_START & 0xFF) as u8));
+        self.output.push(format!(
+            "  LDX #${:02X}",
+            ((STRING_HEAP_START >> 8) & 0xFF) as u8
+        ));
         self.output.push("  RTS".to_string());
 
         // Runtime_Asc
@@ -1689,7 +1698,7 @@ impl CodeGenerator {
 
     fn allocate_memory(&mut self, program: &Program) -> Result<(), String> {
         self.collect_all_strings(program);
-        self.ram_pointer = 0x0300;
+        self.ram_pointer = VAR_START_RAM;
         let mut data_table_addr = 0xFF00;
         data_table_addr += 2; // InitDefaultRTI
         self.data_table_offsets
@@ -1770,6 +1779,7 @@ impl CodeGenerator {
     }
 
     fn generate_top_level(&mut self, decl: &TopLevel) -> Result<(), String> {
+        self.select_stack_depth = 0;
         match decl {
             TopLevel::Sub(name, _, body) => {
                 self.output.push(format!("{}:", name));
@@ -2112,6 +2122,9 @@ impl CodeGenerator {
                 if let Some(e) = expr {
                     self.generate_expression(e)?;
                 }
+                for _ in 0..self.select_stack_depth {
+                    self.output.push("  PLA".to_string());
+                }
                 self.output.push("  RTS".to_string());
             }
             Statement::Asm(lines) => {
@@ -2191,19 +2204,22 @@ impl CodeGenerator {
                 let expr_type = self.generate_expression(expr)?;
 
                 // 2. Push to Stack
-                match expr_type {
+                let pushed_bytes = match expr_type {
                     DataType::Byte | DataType::Bool | DataType::Int | DataType::Enum(_) => {
                         self.output.push("  PHA".to_string());
+                        1
                     }
                     DataType::Word | DataType::String => {
                         self.output.push("  PHA".to_string()); // Low
                         self.output.push("  TXA".to_string());
                         self.output.push("  PHA".to_string()); // High
+                        2
                     }
                     DataType::Struct(_) | DataType::Array(_, _) => {
                         return Err("Cannot SELECT on struct/array".to_string());
                     }
-                }
+                };
+                self.select_stack_depth += pushed_bytes;
 
                 // 3. Generate Checks
                 for (case_val, case_body) in cases {
@@ -2252,15 +2268,10 @@ impl CodeGenerator {
                 self.output.push(format!("{}:", end_select_label));
 
                 // 4. Pop Stack
-                match expr_type {
-                    DataType::Byte | DataType::Bool | DataType::Int | DataType::Enum(_) => {
-                        self.output.push("  PLA".to_string());
-                    }
-                    _ => {
-                        self.output.push("  PLA".to_string());
-                        self.output.push("  PLA".to_string());
-                    }
+                for _ in 0..pushed_bytes {
+                    self.output.push("  PLA".to_string());
                 }
+                self.select_stack_depth -= pushed_bytes;
             }
             _ => {}
         }

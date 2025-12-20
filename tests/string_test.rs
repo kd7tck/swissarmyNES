@@ -21,8 +21,8 @@ fn test_string_compilation() {
     let code = cg.generate(&program).expect("Codegen failed");
 
     // Check RAM allocation
-    // s @ $0300 (2 bytes)
-    assert!(code.iter().any(|line| line.contains("s @ $0300")));
+    // s @ $03A0 (2 bytes)
+    assert!(code.iter().any(|line| line.contains("s @ $03A0")));
 
     // Check String Data
     // GEN_L1: db ..., ...
@@ -36,8 +36,8 @@ fn test_string_compilation() {
     assert!(code.iter().any(|line| line.contains("WORD GEN_L1")));
 
     // Check Initialization
-    // LDA $FFxx, STA $0300
-    // LDA $FFxx+1, STA $0301
+    // LDA $FFxx, STA $03A0
+    // LDA $FFxx+1, STA $03A1
     // We don't know exact address but we can check pattern
     assert!(code.iter().any(|line| line.contains("Init String 's'")));
 }

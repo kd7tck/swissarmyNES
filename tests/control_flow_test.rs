@@ -120,6 +120,6 @@ fn test_codegen_for_statement() {
     let code_str = code.join("\n");
 
     // Loop logic verification
-    assert!(code_str.contains("STA $0300")); // Init i
+    assert!(code_str.contains("STA $03A0")); // Init i
     assert!(code_str.contains("CMP $00")); // Compare with Limit (temp)
 }

@@ -95,10 +95,16 @@ Phase 6-10 are complete.
 - **Next Steps**:
     - Phase 15: Object Pooling.
 
+### Memory Map
+- **$0000-$00FF**: Zero Page (Variables, Pointers, Math Helpers).
+- **$0100-$01FF**: Stack.
+- **$0200-$02FF**: OAM (Shadow Sprites).
+- **$0300-$031F**: Sound Engine State.
+- **$0320-$039F**: String Heap (8 slots * 16 bytes).
+- **$03A0-$07FF**: User Variables (DIM).
+
 - **Pitfalls**:
     - `Text.Print` writes directly to the PPU ($2006/$2007). This is fast but must be done when rendering is disabled or during VBlank to avoid visual glitches.
-    - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value).
     - `True` is now `$FF` (was `1`). Check assumptions in assembly injections if they rely on `1`.
     - 16-bit Math helpers use ZP $06-$09.
-    - **String Concatenation Limit**: The circular string heap has 4 slots.
     - **OAM Overflow**: `Sprite.Draw` stops filling if OAM wraps (64 sprites). It does not currently implement sprite cycling/flickering.

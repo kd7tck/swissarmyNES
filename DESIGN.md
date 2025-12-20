@@ -108,7 +108,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - OAM cycling/flickering logic to handle > 8 sprites per line.
 - **Completion Criteria:** Rendering a 16x32 character composed of 8 sprites.
 
-## Phase 14: Animation Engine
+## Phase 14: Animation Engine (Completed)
 **Goal:** Animate Metasprites easily.
 - **Action Items:**
     - Define `Animation` structure (frames, duration, loop).

@@ -99,6 +99,8 @@ Phase 6-10 are complete.
 - **Interrupts**: `INTERRUPT` declarations now compile to `RTS` to support the NMI/IRQ Trampoline wrapper which calls them via `JSR`.
 - **String Heap**: Expanded to 16 slots (256 bytes) at `$0320`.
 - **Safety**: Semantic Analyzer bans `RETURN` inside loops (`FOR`, `WHILE`, `DO`, `SELECT`) to prevent stack corruption.
+- **Signed Assignment Bug**: Fixed `Statement::Let` to correctly sign-extend `INT` values when assigning to `WORD` variables (using `STX` instead of zero-filling).
+- **RAM Overflow Check**: Added explicit check in `allocate_memory` to error if user variables exceed `$07FF`.
 
 - **Next Steps**:
     - Phase 15: Object Pooling.

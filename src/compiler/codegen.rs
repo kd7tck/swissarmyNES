@@ -2085,7 +2085,7 @@ impl CodeGenerator {
                         _ => {
                             let rtype = self.generate_expression(expr)?;
                             self.output.push(format!("  STA ${:04X}", addr));
-                            if rtype == DataType::Word {
+                            if rtype == DataType::Word || rtype == DataType::Int {
                                 self.output.push(format!("  STX ${:04X}", addr + 1));
                             } else {
                                 self.output.push("  LDA #0".to_string());

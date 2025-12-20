@@ -60,6 +60,7 @@ impl CodeGenerator {
         self.generate_sprite_helpers();
         self.generate_animation_helpers();
         self.generate_pool_helpers();
+        self.generate_collision_helpers();
         self.generate_user_data(program)?;
         self.generate_data_tables(program)?;
         self.generate_vectors(program)?;
@@ -911,6 +912,83 @@ impl CodeGenerator {
         self.output.push("  JSR Runtime_SpriteDraw".to_string());
         self.output.push("  RTS".to_string());
 
+        self.output.push("".to_string());
+    }
+
+    fn generate_collision_helpers(&mut self) {
+        self.output.push("; --- Collision Helpers ---".to_string());
+
+        self.output.push("Runtime_Collision_Rect:".to_string());
+        self.output.push("  TSX".to_string());
+
+        // Check 1: x1 < x2 + w2
+        self.output.push("  CLC".to_string());
+        self.output.push("  LDA $010A, X".to_string()); // X2_Low
+        self.output.push("  ADC $0106, X".to_string()); // W2_Low
+        self.output.push("  STA $00".to_string());
+        self.output.push("  LDA $0109, X".to_string()); // X2_High
+        self.output.push("  ADC $0105, X".to_string()); // W2_High
+        self.output.push("  STA $01".to_string());
+
+        self.output.push("  LDA $0112, X".to_string()); // X1_Low
+        self.output.push("  CMP $00".to_string());
+        self.output.push("  LDA $0111, X".to_string()); // X1_High
+        self.output.push("  SBC $01".to_string());
+        self.output.push("  BCS Collision_False".to_string());
+
+        // Check 2: x1 + w1 > x2
+        self.output.push("  CLC".to_string());
+        self.output.push("  LDA $0112, X".to_string()); // X1_Low
+        self.output.push("  ADC $010E, X".to_string()); // W1_Low
+        self.output.push("  STA $00".to_string());
+        self.output.push("  LDA $0111, X".to_string()); // X1_High
+        self.output.push("  ADC $010D, X".to_string()); // W1_High
+        self.output.push("  STA $01".to_string());
+
+        self.output.push("  LDA $010A, X".to_string()); // X2_Low
+        self.output.push("  CMP $00".to_string());
+        self.output.push("  LDA $0109, X".to_string()); // X2_High
+        self.output.push("  SBC $01".to_string());
+        self.output.push("  BCS Collision_False".to_string());
+
+        // Check 3: y1 < y2 + h2
+        self.output.push("  CLC".to_string());
+        self.output.push("  LDA $0108, X".to_string()); // Y2_Low
+        self.output.push("  ADC $0104, X".to_string()); // H2_Low
+        self.output.push("  STA $00".to_string());
+        self.output.push("  LDA $0107, X".to_string()); // Y2_High
+        self.output.push("  ADC $0103, X".to_string()); // H2_High
+        self.output.push("  STA $01".to_string());
+
+        self.output.push("  LDA $0110, X".to_string()); // Y1_Low
+        self.output.push("  CMP $00".to_string());
+        self.output.push("  LDA $010F, X".to_string()); // Y1_High
+        self.output.push("  SBC $01".to_string());
+        self.output.push("  BCS Collision_False".to_string());
+
+        // Check 4: y1 + h1 > y2
+        self.output.push("  CLC".to_string());
+        self.output.push("  LDA $0110, X".to_string()); // Y1_Low
+        self.output.push("  ADC $010C, X".to_string()); // H1_Low
+        self.output.push("  STA $00".to_string());
+        self.output.push("  LDA $010F, X".to_string()); // Y1_High
+        self.output.push("  ADC $010B, X".to_string()); // H1_High
+        self.output.push("  STA $01".to_string());
+
+        self.output.push("  LDA $0108, X".to_string()); // Y2_Low
+        self.output.push("  CMP $00".to_string());
+        self.output.push("  LDA $0107, X".to_string()); // Y2_High
+        self.output.push("  SBC $01".to_string());
+        self.output.push("  BCS Collision_False".to_string());
+
+        self.output.push("  LDA #$FF".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("Collision_False:".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("  RTS".to_string());
         self.output.push("".to_string());
     }
 
@@ -2930,6 +3008,35 @@ impl CodeGenerator {
 
                             self.output.push("  JSR Runtime_Pool_Spawn".to_string());
                             return Ok(DataType::Int);
+                        }
+                        if base_name.eq_ignore_ascii_case("Collision")
+                            && member.eq_ignore_ascii_case("Rect")
+                        {
+                            for arg in args {
+                                let dtype = self.generate_expression(arg)?;
+                                if dtype == DataType::Word
+                                    || dtype == DataType::Int
+                                    || dtype == DataType::String
+                                {
+                                    self.output.push("  PHA".to_string()); // Low
+                                    self.output.push("  TXA".to_string());
+                                    self.output.push("  PHA".to_string()); // High
+                                } else {
+                                    self.output.push("  PHA".to_string()); // Low
+                                    self.output.push("  LDA #0".to_string());
+                                    self.output.push("  PHA".to_string()); // High
+                                }
+                            }
+                            self.output.push("  JSR Runtime_Collision_Rect".to_string());
+                            // Clean up stack (16 bytes)
+                            self.output.push("  TSX".to_string());
+                            self.output.push("  TXA".to_string());
+                            self.output.push("  CLC".to_string());
+                            self.output.push("  ADC #16".to_string());
+                            self.output.push("  TAX".to_string());
+                            self.output.push("  TXS".to_string());
+                            self.output.push("  LDX #0".to_string());
+                            return Ok(DataType::Bool);
                         }
                         if base_name.eq_ignore_ascii_case("Controller") {
                             self.generate_expression(&args[0])?;

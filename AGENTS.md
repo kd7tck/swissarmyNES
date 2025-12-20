@@ -92,6 +92,23 @@ Phase 6-10 are complete.
         - Animation data format: `Count`, `Loop`, then `FramePtr (Word)`, `Duration` per frame.
         - `rs6502` compatibility: Uses explicit unique labels for frame pointers to support `WORD` directive.
 
+### Phase 15: Object Pooling (Completed)
+- **Implemented**: `Pool` static namespace.
+- **Details**:
+    - `Pool.Spawn(array)`: Scans array for an inactive slot (first byte == 0). Returns index or -1 (if full). Marks as active (1).
+    - `Pool.Despawn(array, index)`: Marks the slot at `index` as inactive (0).
+    - **Codegen**:
+        - Implemented `Runtime_Pool_Spawn` and `Runtime_Pool_Despawn`.
+        - Uses stride calculation based on array type size.
+
+### Phase 16: Collision - AABB (Completed)
+- **Implemented**: `Collision` static namespace with `Rect` method.
+- **Details**:
+    - `Collision.Rect(x1, y1, w1, h1, x2, y2, w2, h2)`: Returns `True` ($FF) if rectangles overlap, else `False` ($00).
+    - **Runtime**:
+        - `Runtime_Collision_Rect`: Expects 8 arguments (16 bytes, promoted to WORD) on the stack.
+        - Uses 16-bit unsigned arithmetic for comparison to support larger coordinate spaces.
+
 ### Miscellaneous Fixes
 - **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
 - **Boolean Logic**: Fixed `Animation.finished` to set `$FF` (True) instead of `1`, ensuring `NOT` works correctly.
@@ -103,7 +120,7 @@ Phase 6-10 are complete.
 - **RAM Overflow Check**: Added explicit check in `allocate_memory` to error if user variables exceed `$07FF`.
 
 - **Next Steps**:
-    - Phase 15: Object Pooling.
+    - Phase 17: Collision - Point & Tile.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page (Variables, Pointers, Math Helpers, Sprite State).

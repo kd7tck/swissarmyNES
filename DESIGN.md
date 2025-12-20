@@ -3,7 +3,7 @@
 **Vision Statement**
 SwissArmyNES aims to be the definitive, all-in-one web-based development environment for the Nintendo Entertainment System. It will democratize retro game development by providing a zero-setup, integrated workflow that covers every aspect of the pipeline: from code to assets, audio, debugging, and final ROM generation. The goal is to allow a user to open a browser and have a complete, professional-grade studio at their fingertips.
 
-This document outlines the step-by-step path to achieving that vision, broken down into distinct, testable phases.
+This document outlines the step-by-step path to achieving that vision, broken down into distinct, testable phases. Before starting a phase check how much of that phase might already be implemented, also when making huge changes to codebase make sure to update other components that might have become broken due to changes.
 
 ---
 Before starting, Read AGENTS.MD and adhrere to it in a strict manner.

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 pub const NAMETABLE_ADDR: u16 = 0xD500;
 const SOUND_RAM_START: u16 = 0x0300;
 const STRING_HEAP_START: u16 = 0x0320;
-const VAR_START_RAM: u16 = 0x03A0;
+const VAR_START_RAM: u16 = 0x0420;
 
 pub struct CodeGenerator {
     symbol_table: SymbolTable,
@@ -276,12 +276,69 @@ impl CodeGenerator {
         self.output.push("  JMP forever".to_string());
         self.output.push("".to_string());
         self.output.push("DefaultRTI:".to_string());
-        self.output.push("  RTI".to_string());
+        self.output.push("  RTS".to_string());
         self.output.push("".to_string());
         self.output.push("TrampolineNMI:".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  TXA".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  TYA".to_string());
+        self.output.push("  PHA".to_string());
+        for i in 0..16 {
+            self.output.push(format!("  LDA ${:02X}", i));
+            self.output.push("  PHA".to_string());
+        }
+
         self.output.push("  JSR Sound_Update".to_string());
+        self.output.push("  LDA $03FA".to_string());
+        self.output.push("  ORA $03FB".to_string());
+        self.output.push("  BEQ SkipNMI".to_string());
+        self.output.push("  JSR CallUserNMI".to_string());
+        self.output.push("SkipNMI:".to_string());
+
+        for i in (0..16).rev() {
+            self.output.push("  PLA".to_string());
+            self.output.push(format!("  STA ${:02X}", i));
+        }
+        self.output.push("  PLA".to_string());
+        self.output.push("  TAY".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  TAX".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  RTI".to_string());
+
+        self.output.push("CallUserNMI:".to_string());
         self.output.push("  JMP ($03FA)".to_string());
+
         self.output.push("TrampolineIRQ:".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  TXA".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  TYA".to_string());
+        self.output.push("  PHA".to_string());
+        for i in 0..16 {
+            self.output.push(format!("  LDA ${:02X}", i));
+            self.output.push("  PHA".to_string());
+        }
+
+        self.output.push("  LDA $03FC".to_string());
+        self.output.push("  ORA $03FD".to_string());
+        self.output.push("  BEQ SkipIRQ".to_string());
+        self.output.push("  JSR CallUserIRQ".to_string());
+        self.output.push("SkipIRQ:".to_string());
+
+        for i in (0..16).rev() {
+            self.output.push("  PLA".to_string());
+            self.output.push(format!("  STA ${:02X}", i));
+        }
+        self.output.push("  PLA".to_string());
+        self.output.push("  TAY".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  TAX".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  RTI".to_string());
+
+        self.output.push("CallUserIRQ:".to_string());
         self.output.push("  JMP ($03FC)".to_string());
         self.output.push("".to_string());
 
@@ -865,7 +922,7 @@ impl CodeGenerator {
         self.output.push("Runtime_GetHeapSlot:".to_string());
         self.output.push("  INC $0E".to_string());
         self.output.push("  LDA $0E".to_string());
-        self.output.push("  AND #$07".to_string());
+        self.output.push("  AND #$0F".to_string());
         self.output.push("  STA $0E".to_string());
         self.output.push("  TAX".to_string()); // Slot Index
         self.output.push("  LDA #0".to_string()); // Offset = Index * 16
@@ -1951,7 +2008,7 @@ impl CodeGenerator {
                 self.symbol_table.enter_scope();
                 self.generate_block(body)?;
                 self.symbol_table.exit_scope();
-                self.output.push("  RTI".to_string());
+                self.output.push("  RTS".to_string());
                 self.output.push("".to_string());
             }
             TopLevel::Asm(lines) => {

@@ -4,6 +4,7 @@ use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 pub struct SemanticAnalyzer {
     pub symbol_table: SymbolTable,
     errors: Vec<String>,
+    unsafe_return_depth: usize,
 }
 
 impl Default for SemanticAnalyzer {
@@ -17,6 +18,7 @@ impl SemanticAnalyzer {
         let mut analyzer = Self {
             symbol_table: SymbolTable::new(),
             errors: Vec::new(),
+            unsafe_return_depth: 0,
         };
         analyzer.register_stdlib();
         analyzer
@@ -537,10 +539,14 @@ impl SemanticAnalyzer {
             }
             Statement::While(cond, body) => {
                 self.analyze_expression(cond);
+                self.unsafe_return_depth += 1;
                 self.analyze_block(body);
+                self.unsafe_return_depth -= 1;
             }
             Statement::DoWhile(body, cond) => {
+                self.unsafe_return_depth += 1;
                 self.analyze_block(body);
+                self.unsafe_return_depth -= 1;
                 self.analyze_expression(cond);
             }
             Statement::For(var, start, end, step, body) => {
@@ -554,12 +560,21 @@ impl SemanticAnalyzer {
                 if let Some(s) = step {
                     self.analyze_expression(s);
                 }
+                self.unsafe_return_depth += 1;
                 self.analyze_block(body);
+                self.unsafe_return_depth -= 1;
             }
             Statement::Return(Some(expr)) => {
+                if self.unsafe_return_depth > 0 {
+                    self.errors.push("Cannot RETURN from inside a loop or SELECT CASE block".to_string());
+                }
                 self.analyze_expression(expr);
             }
-            Statement::Return(None) => {}
+            Statement::Return(None) => {
+                 if self.unsafe_return_depth > 0 {
+                    self.errors.push("Cannot RETURN from inside a loop or SELECT CASE block".to_string());
+                }
+            }
             Statement::Poke(addr, val) => {
                 self.analyze_expression(addr);
                 self.analyze_expression(val);
@@ -585,6 +600,7 @@ impl SemanticAnalyzer {
             }
             Statement::Select(expr, cases, case_else) => {
                 self.analyze_expression(expr);
+                self.unsafe_return_depth += 1;
                 for (val, block) in cases {
                     self.analyze_expression(val);
                     self.analyze_block(block);
@@ -592,6 +608,7 @@ impl SemanticAnalyzer {
                 if let Some(b) = case_else {
                     self.analyze_block(b);
                 }
+                self.unsafe_return_depth -= 1;
             }
             Statement::WaitVBlank => {}
             _ => {}

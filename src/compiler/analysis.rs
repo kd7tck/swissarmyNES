@@ -384,9 +384,18 @@ impl SemanticAnalyzer {
                                         .push("Sprite.Clear expects 0 arguments".to_string());
                                 }
                                 return;
+                            } else if member.eq_ignore_ascii_case("SetFlicker") {
+                                if args.len() != 1 {
+                                    self.errors.push(
+                                        "Sprite.SetFlicker expects 1 argument (enable)".to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                }
+                                return;
                             } else {
                                 self.errors.push(format!(
-                                    "Unknown Sprite command '{}' (Draw, Clear)",
+                                    "Unknown Sprite command '{}' (Draw, Clear, SetFlicker)",
                                     member
                                 ));
                                 return;
@@ -584,6 +593,7 @@ impl SemanticAnalyzer {
                     self.analyze_block(b);
                 }
             }
+            Statement::WaitVBlank => {}
             _ => {}
         }
     }

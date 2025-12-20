@@ -777,9 +777,9 @@ impl CodeGenerator {
         self.output.push("  LDY #2".to_string());
         self.output.push("  STA ($02), Y".to_string()); // Store Last Index
 
-        self.output.push("  LDA #1".to_string());
+        self.output.push("  LDA #$FF".to_string());
         self.output.push("  LDY #4".to_string());
-        self.output.push("  STA ($02), Y".to_string()); // Finished = 1
+        self.output.push("  STA ($02), Y".to_string()); // Finished = $FF (True)
         self.output.push("  JMP Anim_Ret".to_string());
 
         self.output.push("Anim_Loop:".to_string());
@@ -1463,9 +1463,25 @@ impl CodeGenerator {
 
         // Runtime_SpriteClear
         // Resets $19 (OAM Ptr) and fills OAM with $FF (Offscreen)
+        // Implements OAM Cycling (Flicker) if $1C is set.
+        // Uses $1A (OAM Base Offset), $1B (Sprites Drawn Count), $1C (Flicker Enable)
         self.output.push("Runtime_SpriteClear:".to_string());
+        self.output.push("  LDA $1C".to_string());
+        self.output.push("  BEQ SpriteClear_NoShuffle".to_string());
+        self.output.push("  LDA $1A".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #44".to_string()); // 11 slots
+        self.output.push("  STA $1A".to_string());
+        self.output.push("  JMP SpriteClear_SetPtr".to_string());
+        self.output.push("SpriteClear_NoShuffle:".to_string());
         self.output.push("  LDA #0".to_string());
-        self.output.push("  STA $19".to_string()); // Reset Ptr
+        self.output.push("  STA $1A".to_string());
+        self.output.push("SpriteClear_SetPtr:".to_string());
+        self.output.push("  LDA $1A".to_string());
+        self.output.push("  STA $19".to_string()); // Set Ptr to Base
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $1B".to_string()); // Reset Count
+
         self.output.push("  LDA #$FF".to_string());
         self.output.push("  LDX #0".to_string());
         self.output.push("SpriteClear_Loop:".to_string());
@@ -1476,7 +1492,7 @@ impl CodeGenerator {
 
         // Runtime_SpriteDraw
         // Args: X ($14), Y ($15), MetaPtr ($16/$17)
-        // Uses: $02/$03 (Ptr), $04 (Count), $05 (Temp X), $06 (Temp Y), $19 (OAM Offset)
+        // Uses: $02/$03 (Ptr), $04 (Count), $05 (Temp X), $06 (Temp Y), $19 (OAM Offset), $1B (Total Count)
         self.output.push("Runtime_SpriteDraw:".to_string());
         self.output.push("  LDA $16".to_string());
         self.output.push("  STA $02".to_string());
@@ -1495,6 +1511,11 @@ impl CodeGenerator {
         self.output.push("  LDA $04".to_string());
         self.output.push("  BEQ SpriteDraw_Done".to_string());
         self.output.push("  DEC $04".to_string());
+
+        // Check Limit (64 sprites)
+        self.output.push("  LDA $1B".to_string());
+        self.output.push("  CMP #64".to_string());
+        self.output.push("  BCS SpriteDraw_Full".to_string());
 
         // Read Rel X
         self.output.push("  LDA ($02), Y".to_string());
@@ -1541,16 +1562,19 @@ impl CodeGenerator {
         self.output.push("  INX".to_string()); // X -> Base+4 (Next Sprite Base)
         self.output.push("  STX $19".to_string()); // Save OAM Ptr
 
-        self.output.push("  CPX #0".to_string()); // Check if wrapped to 0
-        self.output.push("  BEQ SpriteDraw_Done".to_string());
+        self.output.push("  INC $1B".to_string()); // Increment Global Sprite Count
 
         self.output.push("  JMP SpriteDraw_Loop".to_string());
 
+        self.output.push("SpriteDraw_Full:".to_string());
+        // Skip input data (4 bytes per tile) to stay in sync
+        self.output.push("  TYA".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #4".to_string());
+        self.output.push("  TAY".to_string());
+        self.output.push("  JMP SpriteDraw_Loop".to_string());
+
         self.output.push("SpriteDraw_Done:".to_string());
-        // If we broke early due to wrap, stack might be dirty if we were in middle of push?
-        // No, we only check wrap at end of loop iteration where stack is empty.
-        // Wait, if we 'BEQ SpriteDraw_Done' at start (Count=0), stack is clean.
-        // If we break at CPX #0, stack is clean.
         self.output.push("  RTS".to_string());
         self.output.push("".to_string());
     }
@@ -1949,6 +1973,10 @@ impl CodeGenerator {
                             } else if member.eq_ignore_ascii_case("Clear") {
                                 self.output.push("  JSR Runtime_SpriteClear".to_string());
                                 return Ok(());
+                            } else if member.eq_ignore_ascii_case("SetFlicker") {
+                                self.generate_expression(&args[0])?;
+                                self.output.push("  STA $1C".to_string());
+                                return Ok(());
                             }
                         } else if base_name.eq_ignore_ascii_case("Animation") {
                             if member.eq_ignore_ascii_case("Play") {
@@ -2212,6 +2240,12 @@ impl CodeGenerator {
                     self.output.push(format!("  LDA ${:04X}", addr + 1));
                     self.output.push("  STA $05".to_string());
                 }
+            }
+            Statement::WaitVBlank => {
+                let lbl = self.new_label();
+                self.output.push(format!("{}:", lbl));
+                self.output.push("  BIT $2002".to_string());
+                self.output.push(format!("  BPL {}", lbl));
             }
             Statement::Select(expr, cases, case_else) => {
                 let end_select_label = self.new_label();

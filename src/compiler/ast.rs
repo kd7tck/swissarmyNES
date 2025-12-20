@@ -62,6 +62,7 @@ pub enum Statement {
         Vec<(Expression, Vec<Statement>)>,
         Option<Vec<Statement>>,
     ), // SELECT CASE expr, cases, case_else
+    WaitVBlank,
 }
 
 #[derive(Debug, PartialEq, Clone)]

@@ -629,6 +629,10 @@ impl Parser {
             return Ok(Statement::On(vector, routine));
         }
 
+        if self.match_token(Token::WaitVBlank) {
+            return Ok(Statement::WaitVBlank);
+        }
+
         // Implicit Let or Call
         if matches!(
             self.peek(),

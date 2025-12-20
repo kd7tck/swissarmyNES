@@ -68,17 +68,22 @@ Phase 1-17 are complete. Phase 18 is In Progress.
     - **Verified**: `tests/collision_test.rs` confirms assembly generation and structure.
 
 ### Phase 18: Scrolling - Horizontal (In Progress)
-- **Implemented**: `Scroll.Set(x, y)` API.
+- **Implemented**: `Scroll` and `PPU` modules.
 - **Details**:
+    - **Scroll**:
+        - `Scroll.Set(x, y)`: Updates shadow registers.
+        - `Scroll.LoadColumn(x, array)`: Queues column data for VBlank transfer.
+    - **PPU**:
+        - `PPU.Ctrl(val)`: Updates `$2000` and shadow `$F8`.
+        - `PPU.Mask(val)`: Updates `$2001`.
     - **Runtime**:
-        - Uses ZP `$E0` (Scroll X) and `$E1` (Scroll Y).
-        - `TrampolineNMI` writes `$E0` and `$E1` to PPU `$2005` at the end of VBlank (after User NMI).
-    - **Analysis**:
-        - Added `Scroll` namespace to Semantic Analyzer.
-    - **Tests**: `tests/scroll_test.rs` verifies codegen for `Scroll.Set` and NMI update.
+        - Uses ZP `$E0` (Scroll X) and `$E1` (Scroll Y), `$F8` (PPU Ctrl Shadow).
+        - VBlank Buffer at `$0420-$045F`.
+        - `TrampolineNMI` handles OAM DMA, VBlank Buffer, Sound, User NMI, and Scroll.
+    - **Memory Map**:
+        - User Variables moved to `$0460`.
 - **Pending**:
-    - Seam update logic (Map engine).
-    - Attribute table handling for scrolling.
+    - Attribute table helper (though `PPU` access allows manual handling).
 
 ### Miscellaneous Fixes
 - **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
@@ -94,14 +99,15 @@ Phase 1-17 are complete. Phase 18 is In Progress.
     - Continue Phase 18: Implement dynamic map loading/seam updates.
 
 ### Memory Map
-- **$0000-$00FF**: Zero Page (Variables, Pointers, Math Helpers, Sprite State).
-    - `$E0`: Scroll X
-    - `$E1`: Scroll Y
+- **$0000-$00FF**: Zero Page.
+    - `$E0`: Scroll X, `$E1`: Scroll Y.
+    - `$F8`: PPU Ctrl Shadow.
 - **$0100-$01FF**: Stack.
 - **$0200-$02FF**: OAM (Shadow Sprites).
 - **$0300-$031F**: Sound Engine State.
-- **$0320-$041F**: String Heap (16 slots * 16 bytes).
-- **$0420-$07FF**: User Variables (DIM).
+- **$0320-$041F**: String Heap.
+- **$0420-$045F**: VBlank Buffer (Internal).
+- **$0460-$07FF**: User Variables (DIM).
 
 - **Pitfalls**:
     - `Text.Print` writes directly to the PPU ($2006/$2007). Use `WAIT_VBLANK` before calling this to avoid visual glitches.

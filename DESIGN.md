@@ -136,12 +136,12 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Map pixel coordinates to Nametable indices.
 - **Completion Criteria:** Player stops when walking into a "solid" tile ID.
 
-## Phase 18: Scrolling - Horizontal (In Progress)
+## Phase 18: Scrolling - Horizontal (Completed)
 **Goal:** Enable side-scrollers.
 - **Action Items:**
-    - Implement camera variable logic.
-    - "Seam" update logic (writing new columns to Nametable as camera moves).
-    - Attribute table handling for scrolling (tricky 2-bit logic).
+    - Implement camera variable logic (`Scroll` module).
+    - "Seam" update logic (via `Scroll.LoadColumn` VBlank buffer).
+    - Attribute table handling (via `PPU` control).
 - **Completion Criteria:** Map scrolls infinitely to the right without artifacts.
 
 ## Phase 19: Scrolling - Vertical

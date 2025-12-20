@@ -492,6 +492,43 @@ impl SemanticAnalyzer {
                                     .push(format!("Unknown Animation command '{}'", member));
                                 return;
                             }
+                        } else if base_name.eq_ignore_ascii_case("Pool") {
+                            if member.eq_ignore_ascii_case("Despawn") {
+                                if args.len() != 2 {
+                                    self.errors.push(
+                                        "Pool.Despawn expects 2 arguments (array, index)"
+                                            .to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    if let Some(DataType::Array(_, _)) = self.resolve_type(&args[0]) {
+                                        // OK
+                                    } else {
+                                        self.errors.push(
+                                            "Pool.Despawn first argument must be an array".to_string(),
+                                        );
+                                    }
+                                    self.analyze_expression(&args[1]);
+                                }
+                                return;
+                            } else if member.eq_ignore_ascii_case("Spawn") {
+                                if args.len() != 1 {
+                                    self.errors.push("Pool.Spawn expects 1 argument (array)".to_string());
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    if let Some(DataType::Array(_, _)) = self.resolve_type(&args[0]) {
+                                        // OK
+                                    } else {
+                                        self.errors.push(
+                                            "Pool.Spawn argument must be an array".to_string(),
+                                        );
+                                    }
+                                }
+                                return;
+                            } else {
+                                self.errors.push(format!("Unknown Pool command '{}'", member));
+                                return;
+                            }
                         }
                     }
                 }
@@ -637,6 +674,9 @@ impl SemanticAnalyzer {
                         return;
                     }
                     if base_name.eq_ignore_ascii_case("Animation") {
+                        return;
+                    }
+                    if base_name.eq_ignore_ascii_case("Pool") {
                         return;
                     }
                 }
@@ -929,6 +969,11 @@ impl SemanticAnalyzer {
                         {
                             return Some(DataType::Bool);
                         }
+                        if base_name.eq_ignore_ascii_case("Pool")
+                            && member.eq_ignore_ascii_case("Spawn")
+                        {
+                            return Some(DataType::Int);
+                        }
                     }
                 }
 
@@ -952,6 +997,9 @@ impl SemanticAnalyzer {
                         return None;
                     }
                     if base_name.eq_ignore_ascii_case("Animation") {
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("Pool") {
                         return None;
                     }
                 }

@@ -38,18 +38,13 @@ mod tests {
         let _asm_source = asm_lines.join("\n");
 
         // Verify allocation
-        // arr @ $03A0. Size 10. Next var idx @ $03AA.
-        assert!(asm_lines.iter().any(|line| line.contains("arr @ $03A0")));
-        assert!(asm_lines.iter().any(|line| line.contains("idx @ $03AA"))); // 300 + 10 = 30A
+        // arr @ $0420. Size 10. Next var idx @ $042A.
+        assert!(asm_lines.iter().any(|line| line.contains("arr @ $0420")));
+        assert!(asm_lines.iter().any(|line| line.contains("idx @ $042A"))); // 420 + 10 = 42A
 
         // Verify assignment arr(0) = 5
-        // Should calculate address $03A0 + 0 = $03A0.
+        // Should calculate address $0420 + 0 = $0420.
         // STA ($02),Y or similar.
-        // Or constant optimization if implemented (I didn't implement const array access optimization yet).
-        // It uses `generate_array_address`.
-        // Base=$03A0. Index=0. Addr=$03A0.
-        // STA ($02), Y
-        // Look for STA ($02),Y
         assert!(asm_lines.iter().any(|line| line.contains("STA ($02),Y")));
     }
 

@@ -95,6 +95,10 @@ Phase 6-10 are complete.
 ### Miscellaneous Fixes
 - **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
 - **Boolean Logic**: Fixed `Animation.finished` to set `$FF` (True) instead of `1`, ensuring `NOT` works correctly.
+- **NMI Safety**: `TrampolineNMI` now saves CPU registers and Zero Page context (`$00`-$0F`), preventing 16-bit math corruption by interrupts.
+- **Interrupts**: `INTERRUPT` declarations now compile to `RTS` to support the NMI/IRQ Trampoline wrapper which calls them via `JSR`.
+- **String Heap**: Expanded to 16 slots (256 bytes) at `$0320`.
+- **Safety**: Semantic Analyzer bans `RETURN` inside loops (`FOR`, `WHILE`, `DO`, `SELECT`) to prevent stack corruption.
 
 - **Next Steps**:
     - Phase 15: Object Pooling.
@@ -104,11 +108,11 @@ Phase 6-10 are complete.
 - **$0100-$01FF**: Stack.
 - **$0200-$02FF**: OAM (Shadow Sprites).
 - **$0300-$031F**: Sound Engine State.
-- **$0320-$039F**: String Heap (8 slots * 16 bytes).
-- **$03A0-$07FF**: User Variables (DIM).
+- **$0320-$041F**: String Heap (16 slots * 16 bytes).
+- **$0420-$07FF**: User Variables (DIM).
 
 - **Pitfalls**:
     - `Text.Print` writes directly to the PPU ($2006/$2007). Use `WAIT_VBLANK` before calling this to avoid visual glitches.
     - `True` is `$FF`. Check assumptions in assembly injections if they rely on `1`.
-    - 16-bit Math helpers use ZP $06-$09.
+    - 16-bit Math helpers use ZP $06-$09 (now safe in NMI/IRQ due to context saving).
     - **OAM Overflow**: `Sprite.Draw` drops sprites if 64 limit reached. Enable `Sprite.SetFlicker(1)` to mitigate limits via cycling.

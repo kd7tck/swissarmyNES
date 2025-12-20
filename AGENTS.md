@@ -67,6 +67,7 @@ Phase 6-10 are complete.
     - **Arrays**: 1D Arrays, `DIM x(N)`.
     - **Strings**: `READ` support, `LEN()`, `ASC()`, `VAL()`, `CHR()`, `STR()`, `LEFT()`, `RIGHT()`, `MID()`.
     - **String Ops**: Concatenation (`+`), Comparison (`=`, `<>`).
+    - **Control Flow**: `FOR` loops now support all numeric types (`Byte`, `Int`, `Word`) via synthesized AST expressions.
 - **Details**:
     - **Boolean**: Standardized `True` to `$FF` (All ones) to support Bitwise `NOT` correctly.
     - **Codegen**:

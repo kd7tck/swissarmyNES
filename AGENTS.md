@@ -67,30 +67,25 @@ Phase 6-10 are complete.
     - **Runtime**: Uses ZP `$10`-`$13` for controller state.
     - **Analysis**: Pre-registers `Button` enum (A, B, Select, Start, Up, Down, Left, Right).
 
-### Phase Refinement: Arrays & Foundation & Strings
-- **Implemented**:
-    - **Logic & Math**: XOR operator, Unary Operators (`-`, `NOT`), 8-bit `AND`/`OR` fix, `ABS()`, `SGN()`, Bitwise Shifts (`<<`, `>>`).
-    - **Memory**: Robust `PEEK` (Static optimization & Dynamic support), `POKE` (Dynamic fix).
-    - **Arrays**: 1D Arrays, `DIM x(N)`.
-    - **Strings**: `READ` support, `LEN()`, `ASC()`, `VAL()`, `CHR()`, `STR()`, `LEFT()`, `RIGHT()`, `MID()`.
-    - **String Ops**: Concatenation (`+`), Comparison (`=`, `<>`).
-    - **Control Flow**: `FOR` loops now support all numeric types (`Byte`, `Int`, `Word`) via synthesized AST expressions.
+### Phase 13: Metasprite System (Completed)
+- **Implemented**: `METASPRITE` definition syntax, `Sprite.Draw`, `Sprite.Clear` runtime helpers.
 - **Details**:
-    - **Boolean**: Standardized `True` to `$FF` (All ones) to support Bitwise `NOT` correctly.
+    - **Syntax**: `METASPRITE name ... TILE x,y,t,a ... END METASPRITE`.
+    - **Runtime**:
+        - `Sprite.Draw(x, y, meta)`: Reads metasprite data and writes to OAM ($0200+). Uses linear allocation via $19 pointer.
+        - `Sprite.Clear()`: Resets OAM pointer ($19) and clears OAM buffer.
     - **Codegen**:
-        - Implemented `BinaryOperator::ShiftLeft/ShiftRight` (8/16-bit).
-        - Implemented `Runtime_StringConcat` and `Runtime_StringCompare`.
-        - `BinaryOperator::Add` handles String concatenation.
-        - `BinaryOperator::Equal/NotEqual` handles String comparison.
-        - **String Heap**: Circular buffer (4x16 bytes) at `$02A0` for dynamic string results.
-    - **Parser/AST**: Added `ShiftLeft`/`ShiftRight` tokens and precedence.
+        - Metasprite data is stored in `USER_DATA` segment.
+        - Format: `Count`, then `X, Y, Tile, Attr` per tile.
+        - Constants in TILE definition are resolved at compile time.
 
 - **Next Steps**:
-    - Phase 13: Metasprite System.
+    - Phase 14: Animation Engine.
 
 - **Pitfalls**:
     - `Text.Print` writes directly to the PPU ($2006/$2007). This is fast but must be done when rendering is disabled or during VBlank to avoid visual glitches.
     - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value).
     - `True` is now `$FF` (was `1`). Check assumptions in assembly injections if they rely on `1`.
     - 16-bit Math helpers use ZP $06-$09.
-    - **String Concatenation Limit**: The circular string heap has 4 slots. Complex expressions generating more than 4 simultaneous temporary strings (e.g. `s = a + b + c + d + e`) may overwrite early slots, potentially corrupting data if not evaluated strictly. Simple concatenations are safe.
+    - **String Concatenation Limit**: The circular string heap has 4 slots.
+    - **OAM Overflow**: `Sprite.Draw` stops filling if OAM wraps (64 sprites). It does not currently implement sprite cycling/flickering.

@@ -52,6 +52,7 @@ impl CodeGenerator {
         self.generate_string_data();
         self.generate_controller_helpers();
         self.generate_text_helpers();
+        self.generate_sprite_helpers();
         self.generate_user_data(program)?;
         self.generate_data_tables(program)?;
         self.generate_vectors(program)?;
@@ -1143,10 +1144,56 @@ impl CodeGenerator {
                         _ => return Err("DATA statement only supports literals".to_string()),
                     }
                 }
+            } else if let TopLevel::Metasprite(name, tiles) = decl {
+                self.output.push(format!("{}:", name));
+                self.output.push(format!("  db ${:02X}", tiles.len() as u8));
+                for tile in tiles {
+                    let x = self.resolve_constant(&tile.x)? as i8;
+                    let y = self.resolve_constant(&tile.y)? as i8;
+                    let t = self.resolve_constant(&tile.tile)? as u8;
+                    let a = self.resolve_constant(&tile.attr)? as u8;
+                    self.output.push(format!(
+                        "  db ${:02X}, ${:02X}, ${:02X}, ${:02X}",
+                        x as u8, y as u8, t, a
+                    ));
+                }
             }
         }
         self.output.push("".to_string());
         Ok(())
+    }
+
+    fn resolve_constant(&self, expr: &Expression) -> Result<i32, String> {
+        match expr {
+            Expression::Integer(val) => Ok(*val),
+            Expression::UnaryOp(UnaryOperator::Negate, operand) => {
+                let val = self.resolve_constant(operand)?;
+                Ok(-val)
+            }
+            Expression::Identifier(name) => {
+                if let Some(sym) = self.symbol_table.resolve(name) {
+                    if let Some(val) = sym.value {
+                        Ok(val)
+                    } else {
+                        Err(format!("Symbol '{}' is not a constant value", name))
+                    }
+                } else {
+                    Err(format!("Undefined symbol '{}'", name))
+                }
+            }
+            Expression::BinaryOp(l, op, r) => {
+                let lv = self.resolve_constant(l)?;
+                let rv = self.resolve_constant(r)?;
+                match op {
+                    BinaryOperator::Add => Ok(lv + rv),
+                    BinaryOperator::Subtract => Ok(lv - rv),
+                    BinaryOperator::Multiply => Ok(lv * rv),
+                    BinaryOperator::Divide => Ok(lv / rv),
+                    _ => Err("Unsupported constant operator".to_string()),
+                }
+            }
+            _ => Err("Not a constant expression".to_string()),
+        }
     }
 
     fn generate_data_tables(&mut self, program: &Program) -> Result<(), String> {
@@ -1234,6 +1281,103 @@ impl CodeGenerator {
         self.output.push("  EOR #$FF".to_string());
         self.output.push("  AND $11".to_string());
         self.output.push("  STA $13".to_string());
+        self.output.push("  RTS".to_string());
+        self.output.push("".to_string());
+    }
+
+    fn generate_sprite_helpers(&mut self) {
+        self.output.push("; --- Sprite Helpers ---".to_string());
+
+        // Runtime_SpriteClear
+        // Resets $19 (OAM Ptr) and fills OAM with $FF (Offscreen)
+        self.output.push("Runtime_SpriteClear:".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $19".to_string()); // Reset Ptr
+        self.output.push("  LDA #$FF".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("SpriteClear_Loop:".to_string());
+        self.output.push("  STA $0200, X".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  BNE SpriteClear_Loop".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Runtime_SpriteDraw
+        // Args: X ($14), Y ($15), MetaPtr ($16/$17)
+        // Uses: $02/$03 (Ptr), $04 (Count), $05 (Temp X), $06 (Temp Y), $19 (OAM Offset)
+        self.output.push("Runtime_SpriteDraw:".to_string());
+        self.output.push("  LDA $16".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  LDA $17".to_string());
+        self.output.push("  STA $03".to_string());
+
+        // Read Count
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  STA $04".to_string()); // Count
+        self.output.push("  INY".to_string()); // Y=1
+
+        self.output.push("  LDX $19".to_string()); // Load current OAM ptr
+
+        self.output.push("SpriteDraw_Loop:".to_string());
+        self.output.push("  LDA $04".to_string());
+        self.output.push("  BEQ SpriteDraw_Done".to_string());
+        self.output.push("  DEC $04".to_string());
+
+        // Read Rel X
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $14".to_string()); // + Screen X
+        self.output.push("  STA $05".to_string()); // Store Screen X
+        self.output.push("  INY".to_string());
+
+        // Read Rel Y
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $15".to_string()); // + Screen Y
+        self.output.push("  STA $06".to_string()); // Store Screen Y
+        self.output.push("  INY".to_string());
+
+        // Read Tile
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  PHA".to_string()); // Push Tile
+        self.output.push("  INY".to_string());
+
+        // Read Attr
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  PHA".to_string()); // Push Attr
+        self.output.push("  INY".to_string());
+
+        // Write to OAM
+        // X points to current slot (starting with Y coord at Base)
+        self.output.push("  LDA $06".to_string()); // Y
+        self.output.push("  STA $0200, X".to_string());
+        self.output.push("  INX".to_string());
+
+        self.output.push("  PLA".to_string()); // Attr (Popped first)
+        self.output.push("  STA $0201, X".to_string()); // Writes to Base+2 (Since X is Base+1)
+
+        self.output.push("  PLA".to_string()); // Tile
+        self.output.push("  STA $0200, X".to_string()); // Writes to Base+1 (Since X is Base+1)
+
+        self.output.push("  INX".to_string()); // X -> Base+2
+        self.output.push("  INX".to_string()); // X -> Base+3
+
+        self.output.push("  LDA $05".to_string()); // Screen X
+        self.output.push("  STA $0200, X".to_string()); // Writes to Base+3
+
+        self.output.push("  INX".to_string()); // X -> Base+4 (Next Sprite Base)
+        self.output.push("  STX $19".to_string()); // Save OAM Ptr
+
+        self.output.push("  CPX #0".to_string()); // Check if wrapped to 0
+        self.output.push("  BEQ SpriteDraw_Done".to_string());
+
+        self.output.push("  JMP SpriteDraw_Loop".to_string());
+
+        self.output.push("SpriteDraw_Done:".to_string());
+        // If we broke early due to wrap, stack might be dirty if we were in middle of push?
+        // No, we only check wrap at end of loop iteration where stack is empty.
+        // Wait, if we 'BEQ SpriteDraw_Done' at start (Count=0), stack is clean.
+        // If we break at CPX #0, stack is clean.
         self.output.push("  RTS".to_string());
         self.output.push("".to_string());
     }
@@ -1450,6 +1594,12 @@ impl CodeGenerator {
                         .insert(label.clone(), data_table_addr);
                     data_table_addr += 2;
                 }
+                TopLevel::Metasprite(name, tiles) => {
+                    self.data_table_offsets
+                        .insert(name.clone(), data_table_addr);
+                    // Size: Count(1) + Tiles(N * 4)
+                    data_table_addr += 1 + (tiles.len() as u16) * 4;
+                }
                 _ => {}
             }
         }
@@ -1600,6 +1750,24 @@ impl CodeGenerator {
                                 // Arg 0: Offset -> $18
                                 self.generate_expression(&args[0])?;
                                 self.output.push("  STA $18".to_string());
+                                return Ok(());
+                            }
+                        } else if base_name.eq_ignore_ascii_case("Sprite") {
+                            if member.eq_ignore_ascii_case("Draw") {
+                                // Arg 0: X -> $14
+                                self.generate_expression(&args[0])?;
+                                self.output.push("  STA $14".to_string());
+                                // Arg 1: Y -> $15
+                                self.generate_expression(&args[1])?;
+                                self.output.push("  STA $15".to_string());
+                                // Arg 2: Metasprite Ptr -> $16/$17
+                                self.generate_expression(&args[2])?;
+                                self.output.push("  STA $16".to_string());
+                                self.output.push("  STX $17".to_string());
+                                self.output.push("  JSR Runtime_SpriteDraw".to_string());
+                                return Ok(());
+                            } else if member.eq_ignore_ascii_case("Clear") {
+                                self.output.push("  JSR Runtime_SpriteClear".to_string());
                                 return Ok(());
                             }
                         }
@@ -2416,6 +2584,14 @@ impl CodeGenerator {
                             Ok(DataType::Word)
                         } else {
                             Err("Const no val".to_string())
+                        }
+                    } else if sym.kind == SymbolKind::Metasprite {
+                        if let Some(addr) = self.data_table_offsets.get(name) {
+                            self.output.push(format!("  LDA ${:04X}", addr));
+                            self.output.push(format!("  LDX ${:04X}", addr + 1));
+                            Ok(DataType::Word)
+                        } else {
+                            Err("Metasprite table entry missing".to_string())
                         }
                     } else {
                         Err("No addr".to_string())

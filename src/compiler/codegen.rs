@@ -1245,6 +1245,123 @@ impl CodeGenerator {
         self.output.push("  LDX $03".to_string());
         self.output.push("  RTS".to_string());
 
+        // Runtime_StringConcat
+        // Input: Stack (LHS Ptr), A/X (RHS Ptr)
+        // Output: A/X (New Ptr)
+        self.output.push("Runtime_StringConcat:".to_string());
+        self.output.push("  STA $06".to_string()); // RHS Low
+        self.output.push("  STX $07".to_string()); // RHS High
+                                                   // Pop Return Addr
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0A".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0B".to_string());
+        // Pop LHS
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $04".to_string()); // LHS Low
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $05".to_string()); // LHS High
+
+        // Push Ret
+        self.output.push("  LDA $0B".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  LDA $0A".to_string());
+        self.output.push("  PHA".to_string());
+
+        self.output.push("  JSR Runtime_GetHeapSlot".to_string());
+        self.output.push("  STA $02".to_string()); // Dest Low
+        self.output.push("  STX $03".to_string()); // Dest High
+
+        self.output.push("  LDY #0".to_string()); // Dest Index
+
+        // Copy LHS
+        self.output.push("Concat_LoopLHS:".to_string());
+        self.output.push("  LDA ($04),Y".to_string()); // Read from LHS
+        self.output.push("  BEQ Concat_StartRHS".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  CPY #15".to_string()); // Max 15 chars
+        self.output.push("  BCS Concat_Full".to_string());
+        self.output.push("  JMP Concat_LoopLHS".to_string());
+
+        self.output.push("Concat_StartRHS:".to_string());
+        // Need to read RHS[0] but write to Dest[Y].
+        // To read ($06),0 we need Y=0. But we need Y preserved for Dest.
+        self.output.push("Concat_LoopRHS:".to_string());
+        self.output.push("  TYA".to_string());
+        self.output.push("  PHA".to_string()); // Save Dest Index
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($06),Y".to_string()); // Read RHS char
+
+        // Increment RHS pointer ($06/$07)
+        self.output.push("  INC $06".to_string());
+        self.output.push("  BNE Concat_IncSkip".to_string());
+        self.output.push("  INC $07".to_string());
+        self.output.push("Concat_IncSkip:".to_string());
+
+        self.output.push("  TAX".to_string()); // Save char to X
+        self.output.push("  PLA".to_string());
+        self.output.push("  TAY".to_string()); // Restore Dest Index
+        self.output.push("  TXA".to_string()); // Restore char
+
+        self.output.push("  BEQ Concat_Done".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  CPY #15".to_string()); // Max 15 chars
+        self.output.push("  BCS Concat_Full".to_string());
+        self.output.push("  JMP Concat_LoopRHS".to_string());
+
+        self.output.push("Concat_Full:".to_string());
+        self.output.push("Concat_Done:".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA ($02),Y".to_string());
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  LDX $03".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Runtime_StringCompare
+        // Input: Stack (LHS Ptr), A/X (RHS Ptr)
+        // Output: A ($FF=Equal, $00=NotEqual), X=0
+        self.output.push("Runtime_StringCompare:".to_string());
+        self.output.push("  STA $06".to_string()); // RHS Low
+        self.output.push("  STX $07".to_string()); // RHS High
+                                                   // Pop Return Addr
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0A".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $0B".to_string());
+        // Pop LHS
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $04".to_string()); // LHS Low
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $05".to_string()); // LHS High
+
+        // Push Ret
+        self.output.push("  LDA $0B".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  LDA $0A".to_string());
+        self.output.push("  PHA".to_string());
+
+        self.output.push("  LDY #0".to_string());
+        self.output.push("StrCmp_Loop:".to_string());
+        self.output.push("  LDA ($04),Y".to_string());
+        self.output.push("  CMP ($06),Y".to_string());
+        self.output.push("  BNE StrCmp_NotEq".to_string());
+        self.output.push("  CMP #0".to_string());
+        self.output.push("  BEQ StrCmp_Eq".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  JMP StrCmp_Loop".to_string());
+
+        self.output.push("StrCmp_NotEq:".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("StrCmp_Eq:".to_string());
+        self.output.push("  LDA #$FF".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("  RTS".to_string());
+
         self.output.push("".to_string());
     }
 
@@ -2904,7 +3021,24 @@ impl CodeGenerator {
                     || tr == DataType::Int;
                 let is_signed = tl == DataType::Int || tr == DataType::Int;
 
-                if is_16 {
+                if tl == DataType::String {
+                    match op {
+                        BinaryOperator::Add => {
+                            // LHS on stack, RHS in A/X
+                            self.output.push("  JSR Runtime_StringConcat".to_string());
+                            Ok(DataType::String)
+                        }
+                        BinaryOperator::Equal | BinaryOperator::NotEqual => {
+                            // LHS on stack, RHS in A/X
+                            self.output.push("  JSR Runtime_StringCompare".to_string());
+                            if matches!(op, BinaryOperator::NotEqual) {
+                                self.output.push("  EOR #$FF".to_string()); // Invert boolean
+                            }
+                            Ok(DataType::Bool)
+                        }
+                        _ => Err("Unsupported operator for String".to_string()),
+                    }
+                } else if is_16 {
                     if tr == DataType::Byte || tr == DataType::Bool {
                         self.output.push("  STA $00".to_string());
                         self.output.push("  LDA #0".to_string());

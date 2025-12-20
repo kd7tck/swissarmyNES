@@ -386,7 +386,9 @@ impl SemanticAnalyzer {
                                 return;
                             } else if member.eq_ignore_ascii_case("SetFlicker") {
                                 if args.len() != 1 {
-                                    self.errors.push("Sprite.SetFlicker expects 1 argument (enable)".to_string());
+                                    self.errors.push(
+                                        "Sprite.SetFlicker expects 1 argument (enable)".to_string(),
+                                    );
                                 } else {
                                     self.analyze_expression(&args[0]);
                                 }

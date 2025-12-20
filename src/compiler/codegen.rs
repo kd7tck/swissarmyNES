@@ -53,6 +53,7 @@ impl CodeGenerator {
         self.generate_controller_helpers();
         self.generate_text_helpers();
         self.generate_sprite_helpers();
+        self.generate_animation_helpers();
         self.generate_user_data(program)?;
         self.generate_data_tables(program)?;
         self.generate_vectors(program)?;
@@ -699,6 +700,141 @@ impl CodeGenerator {
         self.output.push("  RTS".to_string());
     }
 
+    fn generate_animation_helpers(&mut self) {
+        self.output.push("; --- Animation Helpers ---".to_string());
+
+        // Runtime_Anim_Update
+        self.output.push("Runtime_Anim_Update:".to_string());
+
+        // 1. Check Finished (Offset 4)
+        self.output.push("  LDY #4".to_string());
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  BNE Anim_Ret".to_string()); // If Finished != 0, return
+
+        // 2. Dec Timer (Offset 3)
+        self.output.push("  DEY".to_string()); // Y=3
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  SEC".to_string());
+        self.output.push("  SBC #1".to_string());
+        self.output.push("  STA ($02), Y".to_string());
+        self.output.push("  BNE Anim_Ret".to_string()); // If Timer > 0, return
+
+        // 3. Timer Expired. Advance Frame.
+        // Load Index (Offset 2)
+        self.output.push("  DEY".to_string()); // Y=2
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #1".to_string());
+        self.output.push("  STA ($02), Y".to_string()); // Update Index (Tentative)
+        self.output.push("  TAX".to_string()); // X = New Index
+
+        // Load Anim Ptr (Offset 0) to $04/$05
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  STA $04".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  STA $05".to_string());
+
+        // Read Count (Anim+0)
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($04), Y".to_string());
+        self.output.push("  STA $06".to_string()); // Count in $06
+
+        // Compare Index vs Count
+        self.output.push("  CPX $06".to_string()); // New Index vs Count
+        self.output.push("  BCC Anim_LoadFrame".to_string()); // If Index < Count, OK
+
+        // End of Animation. Check Loop (Anim+1)
+        self.output.push("  INY".to_string()); // Y=1
+        self.output.push("  LDA ($04), Y".to_string());
+        self.output.push("  BNE Anim_Loop".to_string());
+
+        // No Loop.
+        self.output.push("  DEC $06".to_string()); // Count - 1
+        self.output.push("  LDA $06".to_string()); // Last Index
+        self.output.push("  LDY #2".to_string());
+        self.output.push("  STA ($02), Y".to_string()); // Store Last Index
+
+        self.output.push("  LDA #1".to_string());
+        self.output.push("  LDY #4".to_string());
+        self.output.push("  STA ($02), Y".to_string()); // Finished = 1
+        self.output.push("  JMP Anim_Ret".to_string());
+
+        self.output.push("Anim_Loop:".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  LDY #2".to_string());
+        self.output.push("  STA ($02), Y".to_string()); // Index = 0
+        self.output.push("  TAX".to_string()); // X = 0
+
+        self.output.push("Anim_LoadFrame:".to_string());
+        // Calculate Offset: 2 + Index * 3
+        // A*3 = A*2 + A.
+        self.output.push("  TXA".to_string());
+        self.output.push("  STA $06".to_string()); // Temp Index
+        self.output.push("  ASL".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $06".to_string());
+        self.output.push("  ADC #2".to_string());
+        self.output.push("  TAY".to_string()); // Y = Offset to Frame Start (MetaPtr)
+
+        // We need Offset to Duration = FrameStart + 2
+        // So Y = Y + 2
+        self.output.push("  INY".to_string());
+        self.output.push("  INY".to_string());
+
+        // Read Duration
+        self.output.push("  LDA ($04), Y".to_string());
+        self.output.push("  LDY #3".to_string());
+        self.output.push("  STA ($02), Y".to_string()); // Store new timer
+
+        self.output.push("Anim_Ret:".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Runtime_Anim_Draw
+        // Input: $14 (X), $15 (Y), $16/$17 (State Ptr)
+        self.output.push("Runtime_Anim_Draw:".to_string());
+
+        // Copy State Ptr to $02/$03
+        self.output.push("  LDA $16".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  LDA $17".to_string());
+        self.output.push("  STA $03".to_string());
+
+        // Load Anim Ptr (Offset 0) to $04/$05
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  STA $04".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  LDA ($02), Y".to_string());
+        self.output.push("  STA $05".to_string());
+
+        // Load Index (Offset 2)
+        self.output.push("  INY".to_string()); // Y=2
+        self.output.push("  LDA ($02), Y".to_string()); // A = Index
+
+        // Calc Offset: 2 + Index * 3
+        self.output.push("  STA $06".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $06".to_string());
+        self.output.push("  ADC #2".to_string());
+        self.output.push("  TAY".to_string()); // Y = Offset
+
+        // Read MetaPtr
+        self.output.push("  LDA ($04), Y".to_string());
+        self.output.push("  STA $16".to_string()); // Store in Argument 2 Low
+        self.output.push("  INY".to_string());
+        self.output.push("  LDA ($04), Y".to_string());
+        self.output.push("  STA $17".to_string()); // Store in Argument 2 High
+
+        // Call Sprite Draw (X/Y already in $14/$15)
+        self.output.push("  JSR Runtime_SpriteDraw".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("".to_string());
+    }
+
     fn generate_string_helpers(&mut self) {
         self.output.push("; --- String Helpers ---".to_string());
 
@@ -1157,6 +1293,18 @@ impl CodeGenerator {
                         x as u8, y as u8, t, a
                     ));
                 }
+            } else if let TopLevel::Animation(name, frames, loops) = decl {
+                self.output.push(format!("{}:", name));
+                self.output
+                    .push(format!("  db ${:02X}", frames.len() as u8));
+                self.output
+                    .push(format!("  db ${:02X}", if *loops { 1 } else { 0 }));
+                for (i, frame) in frames.iter().enumerate() {
+                    let lbl = format!("{}_f{}", name, i);
+                    self.output
+                        .push(format!("{}: WORD {}", lbl, frame.metasprite));
+                    self.output.push(format!("  db ${:02X}", frame.duration));
+                }
             }
         }
         self.output.push("".to_string());
@@ -1600,6 +1748,12 @@ impl CodeGenerator {
                     // Size: Count(1) + Tiles(N * 4)
                     data_table_addr += 1 + (tiles.len() as u16) * 4;
                 }
+                TopLevel::Animation(name, frames, _) => {
+                    self.data_table_offsets
+                        .insert(name.clone(), data_table_addr);
+                    // Size: Count(1) + Loop(1) + Frames(N * 3)
+                    data_table_addr += 2 + (frames.len() as u16) * 3;
+                }
                 _ => {}
             }
         }
@@ -1768,6 +1922,70 @@ impl CodeGenerator {
                                 return Ok(());
                             } else if member.eq_ignore_ascii_case("Clear") {
                                 self.output.push("  JSR Runtime_SpriteClear".to_string());
+                                return Ok(());
+                            }
+                        } else if base_name.eq_ignore_ascii_case("Animation") {
+                            if member.eq_ignore_ascii_case("Play") {
+                                // Arg 0: State (Address)
+                                let state_addr = self.get_static_address(&args[0])?;
+
+                                // Arg 1: Anim (Address) -> A/X
+                                self.generate_expression(&args[1])?;
+                                // Save Ptr to State (Offset 0)
+                                self.output.push(format!("  STA ${:04X}", state_addr));
+                                self.output.push(format!("  STX ${:04X}", state_addr + 1));
+
+                                // Init Frame Index (Offset 2) = 0
+                                self.output.push("  LDA #0".to_string());
+                                self.output.push(format!("  STA ${:04X}", state_addr + 2));
+
+                                // Init Timer (Offset 3) = Duration of Frame 0
+                                // Use $02/$03 as temp for Anim Ptr (since A/X had it)
+                                self.output.push(format!("  LDA ${:04X}", state_addr));
+                                self.output.push("  STA $02".to_string());
+                                self.output.push(format!("  LDA ${:04X}", state_addr + 1));
+                                self.output.push("  STA $03".to_string());
+
+                                // Offset to Duration of Frame 0 = 2 + 0*3 + 2 = 4
+                                self.output.push("  LDY #4".to_string());
+                                self.output.push("  LDA ($02), Y".to_string());
+                                self.output.push(format!("  STA ${:04X}", state_addr + 3));
+
+                                // Init Finished (Offset 4) = 0
+                                self.output.push("  LDA #0".to_string());
+                                self.output.push(format!("  STA ${:04X}", state_addr + 4));
+                                return Ok(());
+                            } else if member.eq_ignore_ascii_case("Update") {
+                                // Arg 0: State
+                                let state_addr = self.get_static_address(&args[0])?;
+                                self.output
+                                    .push(format!("  LDA #${:02X}", (state_addr & 0xFF) as u8));
+                                self.output.push("  STA $02".to_string());
+                                self.output.push(format!(
+                                    "  LDA #${:02X}",
+                                    ((state_addr >> 8) & 0xFF) as u8
+                                ));
+                                self.output.push("  STA $03".to_string());
+                                self.output.push("  JSR Runtime_Anim_Update".to_string());
+                                return Ok(());
+                            } else if member.eq_ignore_ascii_case("Draw") {
+                                // Arg 0: X -> $14
+                                self.generate_expression(&args[0])?;
+                                self.output.push("  STA $14".to_string());
+                                // Arg 1: Y -> $15
+                                self.generate_expression(&args[1])?;
+                                self.output.push("  STA $15".to_string());
+                                // Arg 2: State -> $16/$17
+                                let state_addr = self.get_static_address(&args[2])?;
+                                self.output
+                                    .push(format!("  LDA #${:02X}", (state_addr & 0xFF) as u8));
+                                self.output.push("  STA $16".to_string());
+                                self.output.push(format!(
+                                    "  LDA #${:02X}",
+                                    ((state_addr >> 8) & 0xFF) as u8
+                                ));
+                                self.output.push("  STA $17".to_string());
+                                self.output.push("  JSR Runtime_Anim_Draw".to_string());
                                 return Ok(());
                             }
                         }
@@ -2592,6 +2810,14 @@ impl CodeGenerator {
                             Ok(DataType::Word)
                         } else {
                             Err("Metasprite table entry missing".to_string())
+                        }
+                    } else if sym.kind == SymbolKind::Animation {
+                        if let Some(addr) = self.data_table_offsets.get(name) {
+                            self.output.push(format!("  LDA ${:04X}", addr));
+                            self.output.push(format!("  LDX ${:04X}", addr + 1));
+                            Ok(DataType::Word)
+                        } else {
+                            Err("Animation table entry missing".to_string())
                         }
                     } else {
                         Err("No addr".to_string())

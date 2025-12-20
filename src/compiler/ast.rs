@@ -73,6 +73,12 @@ pub struct MetaspriteTile {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct AnimationFrame {
+    pub metasprite: String,
+    pub duration: u8,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum TopLevel {
     Sub(String, Vec<(String, DataType)>, Vec<Statement>), // Name, Params, Body
     TypeDecl(String, Vec<(String, DataType)>),            // TYPE Name ... END TYPE
@@ -85,6 +91,7 @@ pub enum TopLevel {
     Enum(String, Vec<(String, Option<i32>)>), // ENUM Name, Members(Name, Optional Value)
     Macro(String, Vec<String>, Vec<Statement>), // MACRO Name, Params, Body
     Metasprite(String, Vec<MetaspriteTile>),  // METASPRITE Name, Tiles
+    Animation(String, Vec<AnimationFrame>, bool), // ANIMATION Name, Frames, Loops
 }
 
 #[derive(Debug, PartialEq, Clone)]

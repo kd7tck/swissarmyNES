@@ -1,52 +1,62 @@
 # SwissArmyNES
 
-**SwissArmyNES** is a comprehensive, web-based Integrated Development Environment (IDE) tailored for creating Nintendo Entertainment System (NES) games. It combines a Rust backend with a vector-based HTML/JS frontend to provide a modern workflow for retro game development.
+**SwissArmyNES** is a comprehensive, web-based Integrated Development Environment (IDE) tailored for creating Nintendo Entertainment System (NES) games. It combines a robust Rust backend compiler with a lightweight, vector-based HTML/JS frontend to provide a modern, zero-setup workflow for retro game development.
 
 ## Current Status
-
+The project is currently in active development, following a strict roadmap defined in `DESIGN.md`.
+**Completed Phases:** 1 through 11.
+- **Core Compiler**: Lexer, Parser, AST, Symbol Table, Code Generation, Assembly.
+- **Language Features**: Strings, Arrays (`DIM`), Structures (`TYPE`), Enums (`ENUM`), Macros (`DEF MACRO`), Advanced Math (16-bit, Signed), Control Flow (`SELECT CASE`, `FOR`, `WHILE`).
+- **Standard Library**: Controller Input (`Controller.Read`, `IsPressed`).
+- **Tools**: Palette Editor, Tile (CHR) Editor, Map (Nametable) Editor, Audio Tracker.
 
 ## Features
-- **Project Management**:
-  - **Create**: Create new projects with unique names.
-  - **Load/Save**: Persist your source code across sessions.
-  - **Explorer**: A sidebar "Project Explorer" to easily switch between projects.
-  - **Storage**: Projects are stored as folders in the `projects/` directory in the application root.
-- **SwissBASIC**: A hybrid language combining BASIC syntax with inline 6502 Assembly.
-  - **Variables**: `DIM` (BYTE, WORD, INT), `LET` assignments.
-  - **Control Flow**: `IF`, `WHILE`, `FOR...NEXT`, `DO...LOOP`.
-    - **Note**: `FOR` loops support both positive and negative `STEP` values (constants).
-  - **Math**:
-    - Supports `+`, `-`, `*` (multiply), `/` (divide), `AND`, `OR`.
-    - **Note**: Math is performed with 16-bit precision. Integer literals are treated as 16-bit to prevent premature overflow. `INT` variables support signed 8-bit arithmetic.
-  - **Hardware Access**:
-    - `POKE(addr, val)`: Supports constant addresses (16-bit) and dynamic addresses (16-bit via WORD variables).
-    - `PEEK(addr)`: Supports constant addresses and dynamic addresses (via WORD variables).
-    - Inline `ASM` blocks.
-  - **Audio**:
-    - `PLAY_SFX(id)`: Play a sound effect. `1` = Jump, `2` = Shoot.
-    - **Tracker**: Built-in audio tracker for composing sequences (Pulse 1, Pulse 2, Triangle).
-    - **Instruments**: Select from various Duty Cycles (12.5%, 25%, 50%, 75%) and Envelopes (Constant, Decay).
-  - **Structure**:
-    - `SUB`: Define subroutines.
-    - `TYPE`: Define custom structures (e.g. `TYPE Point \n x AS BYTE \n y AS BYTE \n END TYPE`).
-    - `INTERRUPT`: Define interrupt handlers (e.g., `INTERRUPT NMI() ... END INTERRUPT`).
-    - `ON <Vector> DO <Routine>`: Map interrupts to routines at runtime (e.g., `ON NMI DO MyVBlank`).
-- **Web IDE**:
-  - **Code Editor**: Syntax highlighting, line numbers, and basic auto-indentation.
-  - **Instant Compilation**: Click "Compile" to generate and download a `.nes` ROM file immediately.
-- **Visual Editors**:
-  - **Palette Editor**: Manage system colors and sub-palettes.
-  - **Tile Editor**: Edit 8x8 CHR tiles with real-time feedback.
-  - **Map Editor**: Paint 8x8 tiles onto a 32x30 nametable grid (screen) and assign color attributes (palettes).
 
-## Limitations
-- **Dynamic Addressing**: Use `WORD` variables for `POKE` and `PEEK` to access dynamic addresses. Use `CONST` for hardware registers (e.g. `$2006`).
+### SwissBASIC Language
+A hybrid language designed for the NES, combining BASIC simplicity with low-level control.
+- **Data Types**: `BYTE` (unsigned 8-bit), `INT` (signed 8-bit), `WORD` (unsigned 16-bit), `STRING` (dynamic text).
+- **Structures**:
+  - `TYPE`: Define custom data structures (e.g., `TYPE Player \n x AS BYTE \n y AS BYTE \n END TYPE`).
+  - `ENUM`: Define enumerated constants.
+  - `DIM`: 1D Arrays (e.g., `DIM buffer(10) AS BYTE`).
+- **Control Flow**:
+  - `IF ... THEN ... ELSEIF ... END IF`
+  - `SELECT CASE ... CASE ... END SELECT` (supports ranges `TO` and comparisons `IS`).
+  - `FOR ... NEXT` (supports variable steps).
+  - `WHILE ... WEND` / `DO ... LOOP`.
+- **Math & Logic**:
+  - Full 16-bit arithmetic (`+`, `-`, `*`, `/`, `MOD`).
+  - Bitwise operations (`AND`, `OR`, `XOR`, `NOT`, `<<`, `>>`).
+  - Built-in functions: `ABS`, `SGN`, `LEN`, `ASC`, `VAL`, `CHR`, `STR`.
+- **Hardware Access**:
+  - `PEEK` / `POKE` for direct memory access.
+  - Inline `ASM` blocks for critical assembly code.
+  - `INTERRUPT` handlers (NMI, IRQ) and dynamic vector mapping (`ON NMI DO ...`).
+- **Macros**: Preprocessor macros via `DEF MACRO` for code reuse.
+- **Multi-File Support**: `INCLUDE "file.swiss"` to organize projects.
+
+### Integrated Tools
+- **Project Management**: Create, Load, and Save projects locally.
+- **Code Editor**: Syntax highlighting, line numbers, and error reporting.
+- **Visual Editors**:
+  - **Palette**: Edit system colors and sub-palettes.
+  - **Tile (CHR)**: Draw 8x8 sprites and tiles with real-time feedback.
+  - **Map**: Paint tiles onto a 32x30 nametable grid.
+- **Audio Tracker**:
+  - Compose music and SFX for Pulse 1, Pulse 2, and Triangle channels.
+  - Custom envelopes for Volume and Duty Cycle.
+  - `PLAY_SFX` command integration.
+
+### Compiler & Runtime
+- **Instant Compilation**: Generates a valid `.nes` ROM file in milliseconds.
+- **Optimized Runtime**: Custom assembly routines for math, string handling, and audio mixing.
+- **Memory Management**: Automatic allocation of Zero Page and RAM variables.
 
 ## Getting Started
 
 ### Prerequisites
-- Rust (latest stable)
-- Cargo
+- **Rust**: Latest stable version.
+- **Cargo**: Included with Rust.
 
 ### Running Locally
 
@@ -60,31 +70,44 @@
    ```bash
    cargo run
    ```
-   The server will start at `http://0.0.0.0:3000`.
-   Open your browser to see the Web IDE.
+   The server will start at `http://0.0.0.0:3000`. Open your browser to access the IDE.
 
 3. **Run Tests:**
-   The project includes unit tests and end-to-end integration tests.
+   The project includes a comprehensive suite of unit and integration tests.
    ```bash
    cargo test
    ```
 
-### Project Structure
-*   `projects/`: Directory where user projects are stored (created at runtime).
-*   `src/lib.rs`: Core compiler and library logic.
-*   `src/main.rs`: Axum web server entry point.
-*   `src/server/`: Server modules including API handlers (`api.rs`) and project logic (`project.rs`).
-*   `src/compiler/`: Compiler modules (Lexer, Parser, AST, Analysis, Codegen, Assembler).
-*   `static/`: Frontend assets (HTML, CSS, JS).
-*   `tests/`: Integration tests.
+## Project Structure
 
-## Troubleshooting
+### Backend (`src/`)
+- **`lib.rs`**: Library entry point exposing compiler and server logic.
+- **`main.rs`**: Application entry point, sets up the Axum server.
+- **`server/`**: API handlers and file system logic.
+- **`compiler/`**: The heart of SwissArmyNES.
+  - `lexer.rs` / `parser.rs` / `ast.rs`: Language frontend.
+  - `analysis.rs`: Semantic analysis and type checking.
+  - `codegen.rs`: Generates 6502 assembly from AST.
+  - `assembler.rs`: Assembles generated code into NES ROM binary.
+  - `audio.rs`: Compiles tracker data into sound engine bytecode.
 
-### CI Failure: Clippy Warnings
-The CI pipeline is configured to treat warnings as errors. To avoid build failures due to false positives regarding "dead code" (unused functions/variables), the workflow is configured to allow dead code warnings:
-`cargo clippy -- -D warnings -A dead_code`
+### Frontend (`static/`)
+- **`index.html`**: Main single-page application entry.
+- **`js/`**: Vanilla JavaScript modules.
+  - `app.js`: Router and main logic.
+  - `editor.js`: Code editor implementation.
+  - `chr.js`, `map.js`, `palette.js`: Visual editors.
+  - `audio.js`: Audio tracker UI.
 
-If you encounter other Clippy failures, please address them by fixing the code or suppressing specific warnings if necessary.
+## Documentation
+- **`DESIGN.md`**: The master roadmap and technical specification.
+- **`AGENTS.md`**: Guidelines for AI contributors, including coding standards and context.
+
+## Contributing
+This project heavily utilizes AI agents for development. Contributors should:
+1.  Read `AGENTS.md` thoroughly.
+2.  Follow the "Test Constantly" directive.
+3.  Ensure all code passes `cargo clippy` and `cargo fmt`.
 
 ## License
 [License Information]

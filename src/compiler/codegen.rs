@@ -1251,7 +1251,7 @@ impl CodeGenerator {
         self.output.push("Runtime_StringConcat:".to_string());
         self.output.push("  STA $06".to_string()); // RHS Low
         self.output.push("  STX $07".to_string()); // RHS High
-        // Pop Return Addr
+                                                   // Pop Return Addr
         self.output.push("  PLA".to_string());
         self.output.push("  STA $0A".to_string());
         self.output.push("  PLA".to_string());
@@ -1325,7 +1325,7 @@ impl CodeGenerator {
         self.output.push("Runtime_StringCompare:".to_string());
         self.output.push("  STA $06".to_string()); // RHS Low
         self.output.push("  STX $07".to_string()); // RHS High
-        // Pop Return Addr
+                                                   // Pop Return Addr
         self.output.push("  PLA".to_string());
         self.output.push("  STA $0A".to_string());
         self.output.push("  PLA".to_string());

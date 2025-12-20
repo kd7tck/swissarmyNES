@@ -885,6 +885,28 @@ impl SemanticAnalyzer {
                                     }
                                 }
                                 return;
+                            } else if member.eq_ignore_ascii_case("Point") {
+                                if args.len() != 6 {
+                                    self.errors.push(
+                                        "Collision.Point expects 6 arguments (px, py, rx, ry, rw, rh)".to_string(),
+                                    );
+                                } else {
+                                    for arg in args {
+                                        self.analyze_expression(arg);
+                                    }
+                                }
+                                return;
+                            } else if member.eq_ignore_ascii_case("Tile") {
+                                if args.len() != 2 {
+                                    self.errors.push(
+                                        "Collision.Tile expects 2 arguments (x, y)".to_string(),
+                                    );
+                                } else {
+                                    for arg in args {
+                                        self.analyze_expression(arg);
+                                    }
+                                }
+                                return;
                             } else {
                                 self.errors
                                     .push(format!("Unknown Collision command '{}'", member));
@@ -1000,10 +1022,15 @@ impl SemanticAnalyzer {
                         {
                             return Some(DataType::Int);
                         }
-                        if base_name.eq_ignore_ascii_case("Collision")
-                            && member.eq_ignore_ascii_case("Rect")
-                        {
-                            return Some(DataType::Bool);
+                        if base_name.eq_ignore_ascii_case("Collision") {
+                            if member.eq_ignore_ascii_case("Rect")
+                                || member.eq_ignore_ascii_case("Point")
+                            {
+                                return Some(DataType::Bool);
+                            }
+                            if member.eq_ignore_ascii_case("Tile") {
+                                return Some(DataType::Byte);
+                            }
                         }
                     }
                 }

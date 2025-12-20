@@ -934,7 +934,7 @@ impl CodeGenerator {
         self.output.push("  CMP $00".to_string());
         self.output.push("  LDA $0111, X".to_string()); // X1_High
         self.output.push("  SBC $01".to_string());
-        self.output.push("  BCS Collision_False".to_string());
+        self.output.push("  BCS Collision_Rect_Fail".to_string());
 
         // Check 2: x1 + w1 > x2
         self.output.push("  CLC".to_string());
@@ -949,7 +949,7 @@ impl CodeGenerator {
         self.output.push("  CMP $00".to_string());
         self.output.push("  LDA $0109, X".to_string()); // X2_High
         self.output.push("  SBC $01".to_string());
-        self.output.push("  BCS Collision_False".to_string());
+        self.output.push("  BCS Collision_Rect_Fail".to_string());
 
         // Check 3: y1 < y2 + h2
         self.output.push("  CLC".to_string());
@@ -964,7 +964,7 @@ impl CodeGenerator {
         self.output.push("  CMP $00".to_string());
         self.output.push("  LDA $010F, X".to_string()); // Y1_High
         self.output.push("  SBC $01".to_string());
-        self.output.push("  BCS Collision_False".to_string());
+        self.output.push("  BCS Collision_Rect_Fail".to_string());
 
         // Check 4: y1 + h1 > y2
         self.output.push("  CLC".to_string());
@@ -979,9 +979,117 @@ impl CodeGenerator {
         self.output.push("  CMP $00".to_string());
         self.output.push("  LDA $0107, X".to_string()); // Y2_High
         self.output.push("  SBC $01".to_string());
-        self.output.push("  BCS Collision_False".to_string());
+        self.output.push("  BCS Collision_Rect_Fail".to_string());
 
         self.output.push("  LDA #$FF".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("Collision_Rect_Fail:".to_string());
+        self.output.push("  JMP Collision_False".to_string());
+
+        self.output.push("Runtime_Collision_Point:".to_string());
+        self.output.push("  TSX".to_string());
+
+        // Check 1: px >= rx
+        self.output.push("  LDA $010E, X".to_string()); // PX_L
+        self.output.push("  CMP $010A, X".to_string()); // RX_L
+        self.output.push("  LDA $010D, X".to_string()); // PX_H
+        self.output.push("  SBC $0109, X".to_string()); // RX_H
+        self.output.push("  BCC Collision_Point_Fail".to_string());
+
+        // Check 2: px < rx + rw
+        self.output.push("  CLC".to_string());
+        self.output.push("  LDA $010A, X".to_string()); // RX_L
+        self.output.push("  ADC $0106, X".to_string()); // RW_L
+        self.output.push("  STA $00".to_string());
+        self.output.push("  LDA $0109, X".to_string()); // RX_H
+        self.output.push("  ADC $0105, X".to_string()); // RW_H
+        self.output.push("  STA $01".to_string());
+
+        self.output.push("  LDA $010E, X".to_string()); // PX_L
+        self.output.push("  CMP $00".to_string());
+        self.output.push("  LDA $010D, X".to_string()); // PX_H
+        self.output.push("  SBC $01".to_string());
+        self.output.push("  BCS Collision_Point_Fail".to_string());
+
+        // Check 3: py >= ry
+        self.output.push("  LDA $010C, X".to_string()); // PY_L
+        self.output.push("  CMP $0108, X".to_string()); // RY_L
+        self.output.push("  LDA $010B, X".to_string()); // PY_H
+        self.output.push("  SBC $0107, X".to_string()); // RY_H
+        self.output.push("  BCC Collision_Point_Fail".to_string());
+
+        // Check 4: py < ry + rh
+        self.output.push("  CLC".to_string());
+        self.output.push("  LDA $0108, X".to_string()); // RY_L
+        self.output.push("  ADC $0104, X".to_string()); // RH_L
+        self.output.push("  STA $00".to_string());
+        self.output.push("  LDA $0107, X".to_string()); // RY_H
+        self.output.push("  ADC $0103, X".to_string()); // RH_H
+        self.output.push("  STA $01".to_string());
+
+        self.output.push("  LDA $010C, X".to_string()); // PY_L
+        self.output.push("  CMP $00".to_string());
+        self.output.push("  LDA $010B, X".to_string()); // PY_H
+        self.output.push("  SBC $01".to_string());
+        self.output.push("  BCS Collision_Point_Fail".to_string());
+
+        self.output.push("  LDA #$FF".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("Collision_Point_Fail:".to_string());
+        self.output.push("  JMP Collision_False".to_string());
+
+        self.output.push("Runtime_Collision_Tile:".to_string());
+        self.output.push("  TSX".to_string());
+        // Args: X (5,6), Y (3,4) (High, Low)
+        self.output.push("  LDA $0106, X".to_string()); // X_L
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  STA $00".to_string()); // TileX
+
+        self.output.push("  LDA $0104, X".to_string()); // Y_L
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  STA $01".to_string()); // TileY
+
+        // Offset = TileY * 32 + TileX
+        self.output.push("  LDA $01".to_string());
+        self.output.push("  STA $02".to_string()); // Low
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $03".to_string()); // High
+
+        // x32
+        for _ in 0..5 {
+            self.output.push("  ASL $02".to_string());
+            self.output.push("  ROL $03".to_string());
+        }
+
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $00".to_string()); // + TileX
+        self.output.push("  STA $02".to_string());
+        self.output.push("  LDA $03".to_string());
+        self.output.push("  ADC #0".to_string());
+        self.output.push("  STA $03".to_string());
+
+        // Add Base Addr $D500
+        self.output.push("  LDA $02".to_string());
+        self.output
+            .push(format!("  ADC #${:02X}", NAMETABLE_ADDR & 0xFF));
+        self.output.push("  STA $02".to_string());
+        self.output.push("  LDA $03".to_string());
+        self.output
+            .push(format!("  ADC #${:02X}", (NAMETABLE_ADDR >> 8) & 0xFF));
+        self.output.push("  STA $03".to_string());
+
+        // Read
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($02), Y".to_string());
         self.output.push("  LDX #0".to_string());
         self.output.push("  RTS".to_string());
 
@@ -3009,34 +3117,87 @@ impl CodeGenerator {
                             self.output.push("  JSR Runtime_Pool_Spawn".to_string());
                             return Ok(DataType::Int);
                         }
-                        if base_name.eq_ignore_ascii_case("Collision")
-                            && member.eq_ignore_ascii_case("Rect")
-                        {
-                            for arg in args {
-                                let dtype = self.generate_expression(arg)?;
-                                if dtype == DataType::Word
-                                    || dtype == DataType::Int
-                                    || dtype == DataType::String
-                                {
-                                    self.output.push("  PHA".to_string()); // Low
-                                    self.output.push("  TXA".to_string());
-                                    self.output.push("  PHA".to_string()); // High
-                                } else {
-                                    self.output.push("  PHA".to_string()); // Low
-                                    self.output.push("  LDA #0".to_string());
-                                    self.output.push("  PHA".to_string()); // High
+                        if base_name.eq_ignore_ascii_case("Collision") {
+                            if member.eq_ignore_ascii_case("Rect") {
+                                for arg in args {
+                                    let dtype = self.generate_expression(arg)?;
+                                    if dtype == DataType::Word
+                                        || dtype == DataType::Int
+                                        || dtype == DataType::String
+                                    {
+                                        self.output.push("  PHA".to_string()); // Low
+                                        self.output.push("  TXA".to_string());
+                                        self.output.push("  PHA".to_string()); // High
+                                    } else {
+                                        self.output.push("  PHA".to_string()); // Low
+                                        self.output.push("  LDA #0".to_string());
+                                        self.output.push("  PHA".to_string()); // High
+                                    }
                                 }
+                                self.output.push("  JSR Runtime_Collision_Rect".to_string());
+                                // Clean up stack (16 bytes)
+                                self.output.push("  TSX".to_string());
+                                self.output.push("  TXA".to_string());
+                                self.output.push("  CLC".to_string());
+                                self.output.push("  ADC #16".to_string());
+                                self.output.push("  TAX".to_string());
+                                self.output.push("  TXS".to_string());
+                                self.output.push("  LDX #0".to_string());
+                                return Ok(DataType::Bool);
+                            } else if member.eq_ignore_ascii_case("Point") {
+                                for arg in args {
+                                    let dtype = self.generate_expression(arg)?;
+                                    if dtype == DataType::Word
+                                        || dtype == DataType::Int
+                                        || dtype == DataType::String
+                                    {
+                                        self.output.push("  PHA".to_string()); // Low
+                                        self.output.push("  TXA".to_string());
+                                        self.output.push("  PHA".to_string()); // High
+                                    } else {
+                                        self.output.push("  PHA".to_string()); // Low
+                                        self.output.push("  LDA #0".to_string());
+                                        self.output.push("  PHA".to_string()); // High
+                                    }
+                                }
+                                self.output
+                                    .push("  JSR Runtime_Collision_Point".to_string());
+                                // Clean up stack (6 args * 2 bytes = 12)
+                                self.output.push("  TSX".to_string());
+                                self.output.push("  TXA".to_string());
+                                self.output.push("  CLC".to_string());
+                                self.output.push("  ADC #12".to_string());
+                                self.output.push("  TAX".to_string());
+                                self.output.push("  TXS".to_string());
+                                self.output.push("  LDX #0".to_string());
+                                return Ok(DataType::Bool);
+                            } else if member.eq_ignore_ascii_case("Tile") {
+                                for arg in args {
+                                    let dtype = self.generate_expression(arg)?;
+                                    if dtype == DataType::Word
+                                        || dtype == DataType::Int
+                                        || dtype == DataType::String
+                                    {
+                                        self.output.push("  PHA".to_string()); // Low
+                                        self.output.push("  TXA".to_string());
+                                        self.output.push("  PHA".to_string()); // High
+                                    } else {
+                                        self.output.push("  PHA".to_string()); // Low
+                                        self.output.push("  LDA #0".to_string());
+                                        self.output.push("  PHA".to_string()); // High
+                                    }
+                                }
+                                self.output.push("  JSR Runtime_Collision_Tile".to_string());
+                                // Clean up stack (2 args * 2 bytes = 4)
+                                self.output.push("  TSX".to_string());
+                                self.output.push("  TXA".to_string());
+                                self.output.push("  CLC".to_string());
+                                self.output.push("  ADC #4".to_string());
+                                self.output.push("  TAX".to_string());
+                                self.output.push("  TXS".to_string());
+                                self.output.push("  LDX #0".to_string());
+                                return Ok(DataType::Byte);
                             }
-                            self.output.push("  JSR Runtime_Collision_Rect".to_string());
-                            // Clean up stack (16 bytes)
-                            self.output.push("  TSX".to_string());
-                            self.output.push("  TXA".to_string());
-                            self.output.push("  CLC".to_string());
-                            self.output.push("  ADC #16".to_string());
-                            self.output.push("  TAX".to_string());
-                            self.output.push("  TXS".to_string());
-                            self.output.push("  LDX #0".to_string());
-                            return Ok(DataType::Bool);
                         }
                         if base_name.eq_ignore_ascii_case("Controller") {
                             self.generate_expression(&args[0])?;

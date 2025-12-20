@@ -44,7 +44,7 @@ mod tests {
         // Validation
         // Header: Count(1) + Ptrs(2*1) = 3 bytes
         assert_eq!(blob[0], 1); // Count
-        assert_eq!(blob[1], 3 & 0xFF); // Ptr Low (Addr $D103) -> 03
+        assert_eq!(blob[1], 3); // Ptr Low (Addr $D103) -> 03
         assert_eq!(blob[2], 0xD1); // Ptr High -> D1
 
         // Track Data

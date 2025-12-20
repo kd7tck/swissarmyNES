@@ -1536,55 +1536,64 @@ impl CodeGenerator {
             Statement::For(var_name, start_expr, end_expr, step_expr, body) => {
                 let loop_label = self.new_label();
                 let exit_label = self.new_label();
-                let is_negative_step = match step_expr {
-                    Some(Expression::Integer(val)) => *val < 0,
-                    _ => false, // Simplification
+
+                // Determine step direction and value to use
+                let (is_negative_step, step_val_expr) = match step_expr {
+                    Some(expr) => {
+                        let is_neg = match expr {
+                            Expression::Integer(val) => *val < 0,
+                            Expression::UnaryOp(UnaryOperator::Negate, _) => true,
+                            _ => false,
+                        };
+                        (is_neg, expr.clone())
+                    }
+                    None => (false, Expression::Integer(1)),
                 };
 
+                // Init: var = start
                 self.generate_statement(&Statement::Let(
                     Expression::Identifier(var_name.clone()),
                     start_expr.clone(),
                 ))?;
+
                 self.output.push(format!("{}:", loop_label));
 
-                self.generate_expression(&Expression::Identifier(var_name.clone()))?;
-                self.output.push("  PHA".to_string());
-                self.generate_expression(end_expr)?;
-                self.output.push("  STA $00".to_string());
-                self.output.push("  PLA".to_string());
-                self.output.push("  CMP $00".to_string());
-
-                let body_label = self.new_label();
-                if is_negative_step {
-                    self.output.push(format!("  BCC {}", exit_label));
+                // Condition:
+                // If step < 0: Check var >= end
+                // If step >= 0: Check var <= end
+                let operator = if is_negative_step {
+                    BinaryOperator::GreaterThanOrEqual
                 } else {
-                    self.output.push(format!("  BEQ {}", body_label));
-                    self.output.push(format!("  BCC {}", body_label));
-                    self.output.push(format!("  JMP {}", exit_label));
-                }
-                self.output.push(format!("{}:", body_label));
+                    BinaryOperator::LessThanOrEqual
+                };
 
+                // Synthesize condition expression
+                let condition = Expression::BinaryOp(
+                    Box::new(Expression::Identifier(var_name.clone())),
+                    operator,
+                    Box::new(end_expr.clone()),
+                );
+
+                self.generate_expression(&condition)?;
+
+                // Result is Boolean ($FF or $00) in A
+                self.output.push("  CMP #0".to_string());
+                self.output.push(format!("  BEQ {}", exit_label)); // Exit if False
+
+                // Body
                 self.generate_block(body)?;
 
-                self.generate_expression(&Expression::Identifier(var_name.clone()))?;
-                self.output.push("  PHA".to_string());
-                if let Some(step) = step_expr {
-                    self.generate_expression(step)?;
-                } else {
-                    self.output.push("  LDA #1".to_string());
-                }
-                self.output.push("  STA $00".to_string());
-                self.output.push("  PLA".to_string());
-                self.output.push("  CLC".to_string());
-                self.output.push("  ADC $00".to_string());
-                if let Some(sym) = self.symbol_table.resolve(var_name) {
-                    if let Some(addr) = sym.address {
-                        self.output.push(format!("  STA ${:04X}", addr));
-                    }
-                }
-                if is_negative_step {
-                    self.output.push(format!("  BCC {}", exit_label));
-                }
+                // Increment: var = var + step
+                let increment = Statement::Let(
+                    Expression::Identifier(var_name.clone()),
+                    Expression::BinaryOp(
+                        Box::new(Expression::Identifier(var_name.clone())),
+                        BinaryOperator::Add,
+                        Box::new(step_val_expr),
+                    ),
+                );
+                self.generate_statement(&increment)?;
+
                 self.output.push(format!("  JMP {}", loop_label));
                 self.output.push(format!("{}:", exit_label));
             }

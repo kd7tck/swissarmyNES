@@ -32,16 +32,16 @@ mod tests {
         let mut codegen = CodeGenerator::new(symbol_table);
         let asm_lines = codegen.generate(&program).expect("Codegen failed");
 
-        // p is at $0300.
-        // p.x is at $0300. p.y is at $0301.
-        // p.x = 10 -> LDA #$0A; STA $0300
-        // p.y = 20 -> LDA #$14; STA $0301
+        // p is at $03A0.
+        // p.x is at $03A0. p.y is at $03A1.
+        // p.x = 10 -> LDA #$0A; STA $03A0
+        // p.y = 20 -> LDA #$14; STA $03A1
 
         let asm_str = asm_lines.join("\n");
         assert!(asm_str.contains("LDA #$0A"));
-        assert!(asm_str.contains("STA $0300"));
+        assert!(asm_str.contains("STA $03A0"));
         assert!(asm_str.contains("LDA #$14"));
-        assert!(asm_str.contains("STA $0301"));
+        assert!(asm_str.contains("STA $03A1"));
     }
 
     #[test]
@@ -65,13 +65,13 @@ mod tests {
             END SUB
         ";
 
-        // r @ $0300
-        // r.tl @ $0300 (Point)
-        // r.tl.x @ $0300
-        // r.tl.y @ $0301
-        // r.br @ $0302 (Point)
-        // r.br.x @ $0302
-        // r.br.y @ $0303
+        // r @ $03A0
+        // r.tl @ $03A0 (Point)
+        // r.tl.x @ $03A0
+        // r.tl.y @ $03A1
+        // r.br @ $03A2 (Point)
+        // r.br.x @ $03A2
+        // r.br.y @ $03A3
 
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().expect("Lexing failed");
@@ -86,12 +86,12 @@ mod tests {
 
         let asm_str = asm_lines.join("\n");
 
-        // r.tl.x = 1 => STA $0300
+        // r.tl.x = 1 => STA $03A0
         assert!(asm_str.contains("LDA #$01"));
-        assert!(asm_str.contains("STA $0300"));
+        assert!(asm_str.contains("STA $03A0"));
 
-        // r.br.y = 2 => STA $0303
+        // r.br.y = 2 => STA $03A3
         assert!(asm_str.contains("LDA #$02"));
-        assert!(asm_str.contains("STA $0303"));
+        assert!(asm_str.contains("STA $03A3"));
     }
 }

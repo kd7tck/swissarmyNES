@@ -53,6 +53,7 @@ pub enum Token {
     Tile,
     Animation,
     Frame,
+    WaitVBlank,
 
     // Identifiers
     Identifier(String),
@@ -301,6 +302,7 @@ impl<'a> Lexer<'a> {
             "TILE" => Token::Tile,
             "ANIMATION" => Token::Animation,
             "FRAME" => Token::Frame,
+            "WAITVBLANK" | "WAIT_VBLANK" => Token::WaitVBlank,
             _ => Token::Identifier(ident),
         }
     }

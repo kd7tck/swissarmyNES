@@ -68,16 +68,16 @@ Phase 6-10 are complete.
     - **Analysis**: Pre-registers `Button` enum (A, B, Select, Start, Up, Down, Left, Right).
 
 ### Phase 13: Metasprite System (Completed)
-- **Implemented**: `METASPRITE` definition syntax, `Sprite.Draw`, `Sprite.Clear` runtime helpers.
+- **Implemented**: `METASPRITE` definition syntax, `Sprite.Draw`, `Sprite.Clear`, `Sprite.SetFlicker`.
 - **Details**:
     - **Syntax**: `METASPRITE name ... TILE x,y,t,a ... END METASPRITE`.
     - **Runtime**:
-        - `Sprite.Draw(x, y, meta)`: Reads metasprite data and writes to OAM ($0200+). Uses linear allocation via $19 pointer.
-        - `Sprite.Clear()`: Resets OAM pointer ($19) and clears OAM buffer.
+        - `Sprite.Draw(x, y, meta)`: Reads metasprite data and writes to OAM. Stops filling if 64 sprites drawn.
+        - `Sprite.Clear()`: Resets OAM pointer.
+        - `Sprite.SetFlicker(enable)`: Enables OAM rotation (flickering) to support > 64 sprites or > 8 sprites/line. Uses ZP `$1C` (Enable), `$1A` (Offset), `$1B` (Count).
     - **Codegen**:
         - Metasprite data is stored in `USER_DATA` segment.
         - Format: `Count`, then `X, Y, Tile, Attr` per tile.
-        - Constants in TILE definition are resolved at compile time.
 
 ### Phase 14: Animation Engine (Completed)
 - **Implemented**: `ANIMATION` definition syntax, `Animation.Play`, `Animation.Update`, `Animation.Draw`, `AnimState` struct.
@@ -92,11 +92,15 @@ Phase 6-10 are complete.
         - Animation data format: `Count`, `Loop`, then `FramePtr (Word)`, `Duration` per frame.
         - `rs6502` compatibility: Uses explicit unique labels for frame pointers to support `WORD` directive.
 
+### Miscellaneous Fixes
+- **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
+- **Boolean Logic**: Fixed `Animation.finished` to set `$FF` (True) instead of `1`, ensuring `NOT` works correctly.
+
 - **Next Steps**:
     - Phase 15: Object Pooling.
 
 ### Memory Map
-- **$0000-$00FF**: Zero Page (Variables, Pointers, Math Helpers).
+- **$0000-$00FF**: Zero Page (Variables, Pointers, Math Helpers, Sprite State).
 - **$0100-$01FF**: Stack.
 - **$0200-$02FF**: OAM (Shadow Sprites).
 - **$0300-$031F**: Sound Engine State.
@@ -104,7 +108,7 @@ Phase 6-10 are complete.
 - **$03A0-$07FF**: User Variables (DIM).
 
 - **Pitfalls**:
-    - `Text.Print` writes directly to the PPU ($2006/$2007). This is fast but must be done when rendering is disabled or during VBlank to avoid visual glitches.
-    - `True` is now `$FF` (was `1`). Check assumptions in assembly injections if they rely on `1`.
+    - `Text.Print` writes directly to the PPU ($2006/$2007). Use `WAIT_VBLANK` before calling this to avoid visual glitches.
+    - `True` is `$FF`. Check assumptions in assembly injections if they rely on `1`.
     - 16-bit Math helpers use ZP $06-$09.
-    - **OAM Overflow**: `Sprite.Draw` stops filling if OAM wraps (64 sprites). It does not currently implement sprite cycling/flickering.
+    - **OAM Overflow**: `Sprite.Draw` drops sprites if 64 limit reached. Enable `Sprite.SetFlicker(1)` to mitigate limits via cycling.

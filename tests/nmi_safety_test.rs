@@ -28,14 +28,29 @@ mod tests {
 
         let mut symbol_table = SymbolTable::new();
         // Define symbols manually to skip Analysis phase
-        symbol_table.define("x".to_string(), DataType::Byte, swissarmynes::compiler::symbol_table::SymbolKind::Variable).unwrap();
-        symbol_table.define("NMI".to_string(), DataType::Byte, swissarmynes::compiler::symbol_table::SymbolKind::Sub).unwrap();
+        symbol_table
+            .define(
+                "x".to_string(),
+                DataType::Byte,
+                swissarmynes::compiler::symbol_table::SymbolKind::Variable,
+            )
+            .unwrap();
+        symbol_table
+            .define(
+                "NMI".to_string(),
+                DataType::Byte,
+                swissarmynes::compiler::symbol_table::SymbolKind::Sub,
+            )
+            .unwrap();
 
         let mut codegen = CodeGenerator::new(symbol_table);
         let asm = codegen.generate(&program).expect("Codegen failed");
 
         // Verify TrampolineNMI exists and has safe context saving
-        let trampoline_idx = asm.iter().position(|line| line == "TrampolineNMI:").unwrap();
+        let trampoline_idx = asm
+            .iter()
+            .position(|line| line == "TrampolineNMI:")
+            .unwrap();
         let trampoline_code = &asm[trampoline_idx..];
 
         // Check for saving $00-$0F
@@ -43,14 +58,23 @@ mod tests {
         assert!(trampoline_code.iter().any(|line| line.contains("LDA $0F")));
 
         // Check for JSR CallUserNMI
-        assert!(trampoline_code.iter().any(|line| line.contains("JSR CallUserNMI")));
+        assert!(trampoline_code
+            .iter()
+            .any(|line| line.contains("JSR CallUserNMI")));
 
         // Verify NMI handler ends in RTS (not RTI)
         let nmi_idx = asm.iter().position(|line| line == "NMI:").unwrap();
         // Look for next RTS/RTI
-        let return_idx = asm[nmi_idx..].iter().position(|line| line.contains("RTS") || line.contains("RTI")).unwrap();
+        let return_idx = asm[nmi_idx..]
+            .iter()
+            .position(|line| line.contains("RTS") || line.contains("RTI"))
+            .unwrap();
         let return_instr = &asm[nmi_idx + return_idx];
 
-        assert_eq!(return_instr.trim(), "RTS", "INTERRUPT block should end with RTS to support Trampoline");
+        assert_eq!(
+            return_instr.trim(),
+            "RTS",
+            "INTERRUPT block should end with RTS to support Trampoline"
+        );
     }
 }

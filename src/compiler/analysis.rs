@@ -566,13 +566,15 @@ impl SemanticAnalyzer {
             }
             Statement::Return(Some(expr)) => {
                 if self.unsafe_return_depth > 0 {
-                    self.errors.push("Cannot RETURN from inside a loop or SELECT CASE block".to_string());
+                    self.errors
+                        .push("Cannot RETURN from inside a loop or SELECT CASE block".to_string());
                 }
                 self.analyze_expression(expr);
             }
             Statement::Return(None) => {
-                 if self.unsafe_return_depth > 0 {
-                    self.errors.push("Cannot RETURN from inside a loop or SELECT CASE block".to_string());
+                if self.unsafe_return_depth > 0 {
+                    self.errors
+                        .push("Cannot RETURN from inside a loop or SELECT CASE block".to_string());
                 }
             }
             Statement::Poke(addr, val) => {

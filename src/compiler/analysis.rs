@@ -684,6 +684,9 @@ impl SemanticAnalyzer {
                     if base_name.eq_ignore_ascii_case("Pool") {
                         return;
                     }
+                    if base_name.eq_ignore_ascii_case("Collision") {
+                        return;
+                    }
                 }
 
                 self.analyze_expression(base);
@@ -869,6 +872,24 @@ impl SemanticAnalyzer {
                                     .push(format!("Unknown Controller function '{}'", member));
                                 return;
                             }
+                        } else if base_name.eq_ignore_ascii_case("Collision") {
+                            if member.eq_ignore_ascii_case("Rect") {
+                                if args.len() != 8 {
+                                    self.errors.push(
+                                        "Collision.Rect expects 8 arguments (x1, y1, w1, h1, x2, y2, w2, h2)"
+                                            .to_string(),
+                                    );
+                                } else {
+                                    for arg in args {
+                                        self.analyze_expression(arg);
+                                    }
+                                }
+                                return;
+                            } else {
+                                self.errors
+                                    .push(format!("Unknown Collision command '{}'", member));
+                                return;
+                            }
                         }
                     }
                 }
@@ -979,6 +1000,11 @@ impl SemanticAnalyzer {
                         {
                             return Some(DataType::Int);
                         }
+                        if base_name.eq_ignore_ascii_case("Collision")
+                            && member.eq_ignore_ascii_case("Rect")
+                        {
+                            return Some(DataType::Bool);
+                        }
                     }
                 }
 
@@ -1005,6 +1031,9 @@ impl SemanticAnalyzer {
                         return None;
                     }
                     if base_name.eq_ignore_ascii_case("Pool") {
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("Collision") {
                         return None;
                     }
                 }

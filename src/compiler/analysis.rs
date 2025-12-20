@@ -534,6 +534,59 @@ impl SemanticAnalyzer {
                                     .push(format!("Unknown Pool command '{}'", member));
                                 return;
                             }
+                        } else if base_name.eq_ignore_ascii_case("Scroll") {
+                            if member.eq_ignore_ascii_case("Set") {
+                                if args.len() != 2 {
+                                    self.errors
+                                        .push("Scroll.Set expects 2 arguments (x, y)".to_string());
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                }
+                                return;
+                            } else if member.eq_ignore_ascii_case("LoadColumn") {
+                                if args.len() != 2 {
+                                    self.errors.push(
+                                        "Scroll.LoadColumn expects 2 arguments (x, array)"
+                                            .to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                    if let Some(DataType::Array(_, _)) = self.resolve_type(&args[1])
+                                    {
+                                        // OK
+                                    } else {
+                                        self.errors.push(
+                                            "Scroll.LoadColumn expects an array as 2nd argument"
+                                                .to_string(),
+                                        );
+                                    }
+                                }
+                                return;
+                            } else {
+                                self.errors.push(format!(
+                                    "Unknown Scroll command '{}' (did you mean Set?)",
+                                    member
+                                ));
+                                return;
+                            }
+                        } else if base_name.eq_ignore_ascii_case("PPU") {
+                            if member.eq_ignore_ascii_case("Ctrl")
+                                || member.eq_ignore_ascii_case("Mask")
+                            {
+                                if args.len() != 1 {
+                                    self.errors
+                                        .push(format!("PPU.{} expects 1 argument", member));
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                }
+                                return;
+                            } else {
+                                self.errors
+                                    .push(format!("Unknown PPU command '{}'", member));
+                                return;
+                            }
                         }
                     }
                 }
@@ -685,6 +738,12 @@ impl SemanticAnalyzer {
                         return;
                     }
                     if base_name.eq_ignore_ascii_case("Collision") {
+                        return;
+                    }
+                    if base_name.eq_ignore_ascii_case("Scroll") {
+                        return;
+                    }
+                    if base_name.eq_ignore_ascii_case("PPU") {
                         return;
                     }
                 }
@@ -1061,6 +1120,12 @@ impl SemanticAnalyzer {
                         return None;
                     }
                     if base_name.eq_ignore_ascii_case("Collision") {
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("Scroll") {
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("PPU") {
                         return None;
                     }
                 }

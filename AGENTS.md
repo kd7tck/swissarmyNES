@@ -50,64 +50,24 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 6-10 are complete.
+Phase 1-18 are complete. Phase 19 is Next.
 
-### Phase 10: Macros (Completed)
-- **Implemented**: `DEF MACRO` syntax, AST Preprocessor expansion.
+### Phase 18: Scrolling - Horizontal (Completed)
+- **Implemented**: `Scroll` and `PPU` modules.
 - **Details**:
-    - Macros are AST-based text replacements.
-    - `Statement::Call` is replaced by the macro body with arguments substituted.
-    - Support for nested macros and recursion limit (100).
-    - Macros are defined at Top Level and removed before CodeGen.
-
-### Phase 11: Standard Library - Controller (Completed)
-- **Implemented**: `Controller` module (Read, IsPressed, IsHeld, IsReleased) and `Button` enum.
-- **Details**:
-    - **Parser**: Updated to allow keywords (like `Read`) as member names in dot notation.
-    - **Runtime**: Uses ZP `$10`-`$13` for controller state.
-    - **Analysis**: Pre-registers `Button` enum (A, B, Select, Start, Up, Down, Left, Right).
-
-### Phase 13: Metasprite System (Completed)
-- **Implemented**: `METASPRITE` definition syntax, `Sprite.Draw`, `Sprite.Clear`, `Sprite.SetFlicker`.
-- **Details**:
-    - **Syntax**: `METASPRITE name ... TILE x,y,t,a ... END METASPRITE`.
+    - **Scroll**:
+        - `Scroll.Set(x, y)`: Updates shadow registers.
+        - `Scroll.LoadColumn(x, array)`: Queues column data for VBlank transfer.
+    - **PPU**:
+        - `PPU.Ctrl(val)`: Updates `$2000` and shadow `$F8`.
+        - `PPU.Mask(val)`: Updates `$2001`.
     - **Runtime**:
-        - `Sprite.Draw(x, y, meta)`: Reads metasprite data and writes to OAM. Stops filling if 64 sprites drawn.
-        - `Sprite.Clear()`: Resets OAM pointer.
-        - `Sprite.SetFlicker(enable)`: Enables OAM rotation (flickering) to support > 64 sprites or > 8 sprites/line. Uses ZP `$1C` (Enable), `$1A` (Offset), `$1B` (Count).
-    - **Codegen**:
-        - Metasprite data is stored in `USER_DATA` segment.
-        - Format: `Count`, then `X, Y, Tile, Attr` per tile.
-
-### Phase 14: Animation Engine (Completed)
-- **Implemented**: `ANIMATION` definition syntax, `Animation.Play`, `Animation.Update`, `Animation.Draw`, `AnimState` struct.
-- **Details**:
-    - **Syntax**: `ANIMATION Name ... FRAME Metasprite, Duration ... [LOOP] END ANIMATION`.
-    - **Runtime**:
-        - `AnimState` struct: `ptr` (Word), `frame_index` (Byte), `timer` (Byte), `finished` (Byte).
-        - `Animation.Play(state, anim)`: Initializes state.
-        - `Animation.Update(state)`: Updates timer and frame index. Handles looping.
-        - `Animation.Draw(x, y, state)`: Draws current frame's metasprite.
-    - **Codegen**:
-        - Animation data format: `Count`, `Loop`, then `FramePtr (Word)`, `Duration` per frame.
-        - `rs6502` compatibility: Uses explicit unique labels for frame pointers to support `WORD` directive.
-
-### Phase 15: Object Pooling (Completed)
-- **Implemented**: `Pool` static namespace.
-- **Details**:
-    - `Pool.Spawn(array)`: Scans array for an inactive slot (first byte == 0). Returns index or -1 (if full). Marks as active (1).
-    - `Pool.Despawn(array, index)`: Marks the slot at `index` as inactive (0).
-    - **Codegen**:
-        - Implemented `Runtime_Pool_Spawn` and `Runtime_Pool_Despawn`.
-        - Uses stride calculation based on array type size.
-
-### Phase 16: Collision - AABB (Completed)
-- **Implemented**: `Collision` static namespace with `Rect` method.
-- **Details**:
-    - `Collision.Rect(x1, y1, w1, h1, x2, y2, w2, h2)`: Returns `True` ($FF) if rectangles overlap, else `False` ($00).
-    - **Runtime**:
-        - `Runtime_Collision_Rect`: Expects 8 arguments (16 bytes, promoted to WORD) on the stack.
-        - Uses 16-bit unsigned arithmetic for comparison to support larger coordinate spaces.
+        - Uses ZP `$E0` (Scroll X) and `$E1` (Scroll Y), `$F8` (PPU Ctrl Shadow).
+        - VBlank Buffer at `$0420-$045F`.
+        - `TrampolineNMI` handles OAM DMA, VBlank Buffer, Sound, User NMI, and Scroll.
+    - **Memory Map**:
+        - User Variables moved to `$0460`.
+    - **Verified**: `tests/scroll_test.rs` and `tests/scroll_column_test.rs`.
 
 ### Miscellaneous Fixes
 - **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
@@ -120,18 +80,22 @@ Phase 6-10 are complete.
 - **RAM Overflow Check**: Added explicit check in `allocate_memory` to error if user variables exceed `$07FF`.
 
 - **Next Steps**:
-    - Phase 17: Collision - Point & Tile.
+    - Start Phase 19: Vertical Scrolling. This will build upon the existing Scroll/PPU architecture.
 
 ### Memory Map
-- **$0000-$00FF**: Zero Page (Variables, Pointers, Math Helpers, Sprite State).
+- **$0000-$00FF**: Zero Page.
+    - `$E0`: Scroll X, `$E1`: Scroll Y.
+    - `$F8`: PPU Ctrl Shadow.
 - **$0100-$01FF**: Stack.
 - **$0200-$02FF**: OAM (Shadow Sprites).
 - **$0300-$031F**: Sound Engine State.
-- **$0320-$041F**: String Heap (16 slots * 16 bytes).
-- **$0420-$07FF**: User Variables (DIM).
+- **$0320-$041F**: String Heap.
+- **$0420-$045F**: VBlank Buffer (Internal).
+- **$0460-$07FF**: User Variables (DIM).
 
 - **Pitfalls**:
     - `Text.Print` writes directly to the PPU ($2006/$2007). Use `WAIT_VBLANK` before calling this to avoid visual glitches.
     - `True` is `$FF`. Check assumptions in assembly injections if they rely on `1`.
     - 16-bit Math helpers use ZP $06-$09 (now safe in NMI/IRQ due to context saving).
     - **OAM Overflow**: `Sprite.Draw` drops sprites if 64 limit reached. Enable `Sprite.SetFlicker(1)` to mitigate limits via cycling.
+    - **Scrolling**: `Scroll.Set` updates shadow registers which are applied in the next NMI. Ensure `Scroll.Set` is called before VBlank if immediate effect is needed (though it applies next frame).

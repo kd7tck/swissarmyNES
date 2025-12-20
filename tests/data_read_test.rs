@@ -58,11 +58,11 @@ mod tests {
         assert!(found_neg, "Data -1 not found");
 
         // 2. Verify READ
-        // READ a (Byte) -> JSR Runtime_ReadByte, STA $0420
+        // READ a (Byte) -> JSR Runtime_ReadByte, STA $0460
         let found_read_byte = asm_lines
             .iter()
             .any(|line| line.contains("JSR Runtime_ReadByte"))
-            && asm_lines.iter().any(|line| line.contains("STA $0420")); // a is first var
+            && asm_lines.iter().any(|line| line.contains("STA $0460")); // a is first var
 
         assert!(found_read_byte, "READ Byte code incorrect");
 

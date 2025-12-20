@@ -7,7 +7,7 @@ use std::collections::HashMap;
 pub const NAMETABLE_ADDR: u16 = 0xD500;
 const SOUND_RAM_START: u16 = 0x0300;
 const STRING_HEAP_START: u16 = 0x0320;
-const VAR_START_RAM: u16 = 0x0420;
+const VAR_START_RAM: u16 = 0x0460;
 
 pub struct CodeGenerator {
     symbol_table: SymbolTable,
@@ -61,6 +61,7 @@ impl CodeGenerator {
         self.generate_animation_helpers();
         self.generate_pool_helpers();
         self.generate_collision_helpers();
+        self.generate_scroll_helpers();
         self.generate_user_data(program)?;
         self.generate_data_tables(program)?;
         self.generate_vectors(program)?;
@@ -291,12 +292,48 @@ impl CodeGenerator {
             self.output.push("  PHA".to_string());
         }
 
+        // OAM DMA
+        self.output.push("  LDA #$00".to_string());
+        self.output.push("  STA $2003".to_string());
+        self.output.push("  LDA #$02".to_string());
+        self.output.push("  STA $4014".to_string());
+
+        // VBlank Buffer Processing
+        self.output.push("  LDA $0420".to_string());
+        self.output.push("  BEQ SkipVBlankBuffer".to_string());
+        self.output.push("  LDA $2002".to_string());
+        self.output.push("  LDA $0422".to_string());
+        self.output.push("  STA $2006".to_string());
+        self.output.push("  LDA $0423".to_string());
+        self.output.push("  STA $2006".to_string());
+        self.output.push("  LDA $F8".to_string());
+        self.output.push("  ORA #$04".to_string());
+        self.output.push("  STA $2000".to_string());
+        self.output.push("  LDX #0".to_string());
+        self.output.push("VBlankBufferLoop:".to_string());
+        self.output.push("  LDA $0424, X".to_string());
+        self.output.push("  STA $2007".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  CPX #30".to_string());
+        self.output.push("  BNE VBlankBufferLoop".to_string());
+        self.output.push("  LDA $F8".to_string());
+        self.output.push("  STA $2000".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $0420".to_string());
+        self.output.push("SkipVBlankBuffer:".to_string());
+
         self.output.push("  JSR Sound_Update".to_string());
         self.output.push("  LDA $03FA".to_string());
         self.output.push("  ORA $03FB".to_string());
         self.output.push("  BEQ SkipNMI".to_string());
         self.output.push("  JSR CallUserNMI".to_string());
         self.output.push("SkipNMI:".to_string());
+
+        self.output.push("  LDA $2002".to_string());
+        self.output.push("  LDA $E0".to_string());
+        self.output.push("  STA $2005".to_string());
+        self.output.push("  LDA $E1".to_string());
+        self.output.push("  STA $2005".to_string());
 
         for i in (0..16).rev() {
             self.output.push("  PLA".to_string());
@@ -1096,6 +1133,76 @@ impl CodeGenerator {
         self.output.push("Collision_False:".to_string());
         self.output.push("  LDA #0".to_string());
         self.output.push("  LDX #0".to_string());
+        self.output.push("  RTS".to_string());
+        self.output.push("".to_string());
+    }
+
+    fn generate_scroll_helpers(&mut self) {
+        self.output.push("; --- Scroll Helpers ---".to_string());
+
+        self.output.push("Runtime_Scroll_LoadColumn:".to_string());
+
+        // Check Buffer
+        self.output.push("  LDA $0420".to_string());
+        self.output.push("  BNE Scroll_LoadColumn_Done".to_string());
+
+        // Save Data Ptr (A/X) -> $00/$01
+        self.output.push("  STA $00".to_string());
+        self.output.push("  STX $01".to_string());
+
+        // Pop Virtual X -> $02/$03
+        // Stack order: Low (Pushed First), High (Pushed Last)?
+        // My codegen pushes Low then High.
+        // self.output.push("  PHA".to_string()); // Low
+        // self.output.push("  TXA".to_string());
+        // self.output.push("  PHA".to_string()); // High
+        // So Stack Top is High.
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $03".to_string()); // High
+        self.output.push("  PLA".to_string());
+        self.output.push("  STA $02".to_string()); // Low
+
+        // Calculate Target High ($05)
+        // Base $20 or $24 based on X High Bit 0
+        self.output.push("  LDA $03".to_string());
+        self.output.push("  AND #1".to_string());
+        self.output.push("  BEQ Scroll_Base2000".to_string());
+        self.output.push("  LDA #$24".to_string());
+        self.output.push("  JMP Scroll_BaseStore".to_string());
+        self.output.push("Scroll_Base2000:".to_string());
+        self.output.push("  LDA #$20".to_string());
+        self.output.push("Scroll_BaseStore:".to_string());
+        self.output.push("  STA $05".to_string());
+
+        // Calculate Target Low ($04) = (X Low / 8)
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  STA $04".to_string());
+
+        // Write Header
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $0421".to_string()); // Type
+        self.output.push("  LDA $05".to_string());
+        self.output.push("  STA $0422".to_string()); // High
+        self.output.push("  LDA $04".to_string());
+        self.output.push("  STA $0423".to_string()); // Low
+
+        // Copy Data
+        self.output.push("  LDY #0".to_string());
+        self.output.push("Scroll_CopyLoop:".to_string());
+        self.output.push("  LDA ($00), Y".to_string());
+        self.output.push("  STA $0424, Y".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  CPY #30".to_string());
+        self.output.push("  BNE Scroll_CopyLoop".to_string());
+
+        // Set Flag
+        self.output.push("  LDA #1".to_string());
+        self.output.push("  STA $0420".to_string());
+
+        self.output.push("Scroll_LoadColumn_Done:".to_string());
         self.output.push("  RTS".to_string());
         self.output.push("".to_string());
     }
@@ -2514,6 +2621,49 @@ impl CodeGenerator {
                                 ));
                                 self.output.push("  STA $17".to_string());
                                 self.output.push("  JSR Runtime_Anim_Draw".to_string());
+                                return Ok(());
+                            }
+                        } else if base_name.eq_ignore_ascii_case("Scroll") {
+                            if member.eq_ignore_ascii_case("Set") {
+                                // Arg 0: X -> $E0
+                                self.generate_expression(&args[0])?;
+                                self.output.push("  STA $E0".to_string());
+                                // Arg 1: Y -> $E1
+                                self.generate_expression(&args[1])?;
+                                self.output.push("  STA $E1".to_string());
+                                return Ok(());
+                            } else if member.eq_ignore_ascii_case("LoadColumn") {
+                                // Arg 0: X (Value)
+                                let x_type = self.generate_expression(&args[0])?;
+                                // Push to Stack (Low, High)
+                                if x_type == DataType::Byte || x_type == DataType::Int {
+                                    self.output.push("  PHA".to_string()); // Low
+                                    self.output.push("  LDA #0".to_string());
+                                    self.output.push("  PHA".to_string()); // High
+                                } else {
+                                    self.output.push("  PHA".to_string()); // Low
+                                    self.output.push("  TXA".to_string());
+                                    self.output.push("  PHA".to_string()); // High
+                                }
+
+                                // Arg 1: Array (Address)
+                                self.generate_address_expression(&args[1])?; // $02/$03
+                                self.output.push("  LDA $02".to_string());
+                                self.output.push("  LDX $03".to_string());
+
+                                self.output
+                                    .push("  JSR Runtime_Scroll_LoadColumn".to_string());
+                                return Ok(());
+                            }
+                        } else if base_name.eq_ignore_ascii_case("PPU") {
+                            if member.eq_ignore_ascii_case("Ctrl") {
+                                self.generate_expression(&args[0])?;
+                                self.output.push("  STA $F8".to_string()); // Shadow
+                                self.output.push("  STA $2000".to_string());
+                                return Ok(());
+                            } else if member.eq_ignore_ascii_case("Mask") {
+                                self.generate_expression(&args[0])?;
+                                self.output.push("  STA $2001".to_string());
                                 return Ok(());
                             }
                         }

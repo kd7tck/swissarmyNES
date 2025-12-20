@@ -1,5 +1,6 @@
 use super::ast::{
-    BinaryOperator, DataType, Expression, Program, Statement, TopLevel, UnaryOperator,
+    BinaryOperator, DataType, Expression, MetaspriteTile, Program, Statement, TopLevel,
+    UnaryOperator,
 };
 use super::lexer::Token;
 
@@ -303,6 +304,49 @@ impl Parser {
             self.consume(Token::Macro, "Expected MACRO after END")?;
 
             return Ok(TopLevel::Macro(name, params, body));
+        }
+
+        if self.match_token(Token::Metasprite) {
+            let name = if let Token::Identifier(n) = self.advance().clone() {
+                n
+            } else {
+                return Err("Expected identifier after METASPRITE".to_string());
+            };
+            self.consume(Token::Newline, "Expected newline after METASPRITE name")?;
+
+            let mut tiles = Vec::new();
+            while !self.check(Token::End) && !self.is_at_end() {
+                if self.match_token(Token::Newline) {
+                    continue;
+                }
+
+                if self.match_token(Token::Tile) {
+                    let x = self.parse_literal_int()?;
+                    self.consume(Token::Comma, "Expected ',' after x")?;
+                    let y = self.parse_literal_int()?;
+                    self.consume(Token::Comma, "Expected ',' after y")?;
+                    let tile = self.parse_literal_int()?;
+                    self.consume(Token::Comma, "Expected ',' after tile")?;
+                    let attr = self.parse_literal_int()?;
+
+                    tiles.push(MetaspriteTile {
+                        x: x as i8,
+                        y: y as i8,
+                        tile: tile as u8,
+                        attr: attr as u8,
+                    });
+                    self.consume(Token::Newline, "Expected newline after TILE definition")?;
+                } else {
+                    return Err(format!(
+                        "Expected TILE or END METASPRITE, found {:?}",
+                        self.peek()
+                    ));
+                }
+            }
+            self.consume(Token::End, "Expected END METASPRITE")?;
+            self.consume(Token::Metasprite, "Expected METASPRITE after END")?;
+
+            return Ok(TopLevel::Metasprite(name, tiles));
         }
 
         let mut data_label = None;
@@ -858,6 +902,21 @@ impl Parser {
             Ok(self.advance())
         } else {
             Err(format!("{} Found: {:?}", message, self.peek()))
+        }
+    }
+
+    fn parse_literal_int(&mut self) -> Result<i32, String> {
+        let expr = self.parse_expression()?;
+        match expr {
+            Expression::Integer(val) => Ok(val),
+            Expression::UnaryOp(UnaryOperator::Negate, operand) => {
+                if let Expression::Integer(val) = *operand {
+                    Ok(-val)
+                } else {
+                    Err("Expected integer literal".to_string())
+                }
+            }
+            _ => Err("Expected integer literal".to_string()),
         }
     }
 }

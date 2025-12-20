@@ -90,6 +90,15 @@ impl SemanticAnalyzer {
                         self.errors.push(e);
                     }
                 }
+                TopLevel::Metasprite(name, _) => {
+                    if let Err(e) = self.symbol_table.define(
+                        name.clone(),
+                        DataType::Word, // It's a pointer
+                        SymbolKind::Metasprite,
+                    ) {
+                        self.errors.push(e);
+                    }
+                }
                 TopLevel::Interrupt(name, _body) => {
                     if let Err(e) =
                         self.symbol_table

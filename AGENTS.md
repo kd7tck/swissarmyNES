@@ -94,3 +94,19 @@ Phase 6-10 are complete.
     - `True` is now `$FF` (was `1`). Check assumptions in assembly injections if they rely on `1`.
     - 16-bit Math helpers use ZP $06-$09.
     - **String Concatenation Limit**: The circular string heap has 4 slots. Complex expressions generating more than 4 simultaneous temporary strings (e.g. `s = a + b + c + d + e`) may overwrite early slots, potentially corrupting data if not evaluated strictly. Simple concatenations are safe.
+
+### Phase 13: Metasprite System (Completed)
+- **Implemented**: `METASPRITE` definition block, `Sprite.Draw(x, y, meta)`, `Sprite.Clear()`.
+- **Details**:
+    - **Syntax**:
+      ```basic
+      METASPRITE PlayerIdle
+        TILE 0, 0, $10, $00
+        TILE 8, 0, $11, $00
+      END METASPRITE
+      ```
+    - **Runtime**:
+        - `Sprite.Clear()`: Resets OAM pointer (`$19`) and clears Shadow OAM (`$0200-$02FF`).
+        - `Sprite.Draw(x, y, metasprite)`: Adds relative coordinates to (x, y) and writes to Shadow OAM.
+        - **OAM DMA**: Automatically performed in the generated NMI handler (`TrampolineNMI`) by writing to `$4014`.
+    - **Memory**: Uses `$19` as `OAM_PTR`. Shadow OAM is fixed at `$0200`.

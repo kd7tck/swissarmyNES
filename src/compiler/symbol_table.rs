@@ -10,6 +10,7 @@ pub enum SymbolKind {
     Local,    // Local variable (implicit or explicit in FOR/LET)
     Struct,   // Struct definition
     Enum,     // Enum definition
+    Metasprite, // Metasprite definition
 }
 
 #[derive(Debug, Clone, PartialEq)]

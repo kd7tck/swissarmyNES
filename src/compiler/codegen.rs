@@ -52,6 +52,7 @@ impl CodeGenerator {
         self.generate_string_data();
         self.generate_controller_helpers();
         self.generate_text_helpers();
+        self.generate_sprite_helpers();
         self.generate_user_data(program)?;
         self.generate_data_tables(program)?;
         self.generate_vectors(program)?;
@@ -272,6 +273,11 @@ impl CodeGenerator {
         self.output.push("  RTI".to_string());
         self.output.push("".to_string());
         self.output.push("TrampolineNMI:".to_string());
+        // OAM DMA
+        self.output.push("  LDA #$00".to_string());
+        self.output.push("  STA $2003".to_string());
+        self.output.push("  LDA #$02".to_string());
+        self.output.push("  STA $4014".to_string());
         self.output.push("  JSR Sound_Update".to_string());
         self.output.push("  JMP ($03FA)".to_string());
         self.output.push("TrampolineIRQ:".to_string());
@@ -1102,47 +1108,67 @@ impl CodeGenerator {
         self.output.push("; --- User Data ---".to_string());
         self.output.push("USER_DATA_START:".to_string());
         for decl in &program.declarations {
-            if let TopLevel::Data(label, exprs) = decl {
-                if let Some(l) = label {
-                    self.output.push(format!("{}:", l));
-                }
-                for expr in exprs {
-                    match expr {
-                        Expression::Integer(val) => {
-                            if (-128..=255).contains(val) {
-                                self.output
-                                    .push(format!("  db ${:02X}", (val & 0xFF) as u8));
-                            } else {
-                                let low = (val & 0xFF) as u8;
-                                let high = ((val >> 8) & 0xFF) as u8;
-                                self.output
-                                    .push(format!("  db ${:02X}, ${:02X}", low, high));
-                            }
-                        }
-                        Expression::StringLiteral(s) => {
-                            let bytes: Vec<String> =
-                                s.bytes().map(|b| format!("${:02X}", b)).collect();
-                            self.output.push(format!("  db {}, $00", bytes.join(", ")));
-                        }
-                        Expression::UnaryOp(UnaryOperator::Negate, operand) => {
-                            if let Expression::Integer(val) = **operand {
-                                let neg_val = -val;
-                                if (-128..=255).contains(&neg_val) {
+            match decl {
+                TopLevel::Data(label, exprs) => {
+                    if let Some(l) = label {
+                        self.output.push(format!("{}:", l));
+                    }
+                    for expr in exprs {
+                        match expr {
+                            Expression::Integer(val) => {
+                                if (-128..=255).contains(val) {
                                     self.output
-                                        .push(format!("  db ${:02X}", (neg_val & 0xFF) as u8));
+                                        .push(format!("  db ${:02X}", (val & 0xFF) as u8));
                                 } else {
-                                    let low = (neg_val & 0xFF) as u8;
-                                    let high = ((neg_val >> 8) & 0xFF) as u8;
+                                    let low = (val & 0xFF) as u8;
+                                    let high = ((val >> 8) & 0xFF) as u8;
                                     self.output
                                         .push(format!("  db ${:02X}, ${:02X}", low, high));
                                 }
-                            } else {
-                                return Err("DATA error".to_string());
                             }
+                            Expression::StringLiteral(s) => {
+                                let bytes: Vec<String> =
+                                    s.bytes().map(|b| format!("${:02X}", b)).collect();
+                                self.output.push(format!("  db {}, $00", bytes.join(", ")));
+                            }
+                            Expression::UnaryOp(UnaryOperator::Negate, operand) => {
+                                if let Expression::Integer(val) = **operand {
+                                    let neg_val = -val;
+                                    if (-128..=255).contains(&neg_val) {
+                                        self.output.push(format!(
+                                            "  db ${:02X}",
+                                            (neg_val & 0xFF) as u8
+                                        ));
+                                    } else {
+                                        let low = (neg_val & 0xFF) as u8;
+                                        let high = ((neg_val >> 8) & 0xFF) as u8;
+                                        self.output.push(format!(
+                                            "  db ${:02X}, ${:02X}",
+                                            low, high
+                                        ));
+                                    }
+                                } else {
+                                    return Err("DATA error".to_string());
+                                }
+                            }
+                            _ => return Err("DATA statement only supports literals".to_string()),
                         }
-                        _ => return Err("DATA statement only supports literals".to_string()),
                     }
                 }
+                TopLevel::Metasprite(name, tiles) => {
+                    self.output.push(format!("{}:", name));
+                    self.output.push(format!("  db ${:02X}", tiles.len()));
+                    for tile in tiles {
+                        self.output.push(format!(
+                            "  db ${:02X}, ${:02X}, ${:02X}, ${:02X}",
+                            (tile.x as u8),
+                            (tile.y as u8),
+                            tile.tile,
+                            tile.attr
+                        ));
+                    }
+                }
+                _ => {}
             }
         }
         self.output.push("".to_string());
@@ -1183,6 +1209,11 @@ impl CodeGenerator {
             if let TopLevel::Data(Some(label), _) = decl {
                 self.output.push(format!("Ptr_{}: WORD {}", label, label));
                 self.data_table_offsets.insert(label.clone(), current_addr);
+                current_addr += 2;
+            }
+            if let TopLevel::Metasprite(name, _) = decl {
+                self.output.push(format!("Ptr_{}: WORD {}", name, name));
+                self.data_table_offsets.insert(name.clone(), current_addr);
                 current_addr += 2;
             }
         }
@@ -1289,6 +1320,106 @@ impl CodeGenerator {
         self.output.push("  BNE Text_Loop".to_string());
         self.output.push("Text_Done:".to_string());
         self.output.push("  RTS".to_string());
+        self.output.push("".to_string());
+    }
+
+    fn generate_sprite_helpers(&mut self) {
+        self.output.push("; --- Sprite Helpers ---".to_string());
+
+        // Runtime_Sprite_Clear
+        // Resets $19 to 0 and clears $0200-$02FF (sets Y to $FE)
+        self.output.push("Runtime_Sprite_Clear:".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output.push("  STA $19".to_string()); // OAM Ptr
+        self.output.push("  LDX #0".to_string());
+        self.output.push("Sprite_ClearLoop:".to_string());
+        self.output.push("  LDA #$FE".to_string());
+        self.output.push("  STA $0200, X".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("  BNE Sprite_ClearLoop".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Runtime_DrawMetasprite
+        // Inputs: $14 (X), $15 (Y), $16/$17 (Ptr)
+        // Uses $19 (OAM Ptr), $00 (Count), $01 (Temp)
+        self.output.push("Runtime_DrawMetasprite:".to_string());
+        // Load Count
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($16), Y".to_string());
+        self.output.push("  STA $00".to_string());
+        self.output.push("  CMP #0".to_string());
+        self.output.push("  BEQ DrawMeta_Done".to_string());
+
+        self.output.push("  INC $16".to_string()); // Advance Ptr
+        self.output.push("  BNE DrawMeta_StartLoop".to_string());
+        self.output.push("  INC $17".to_string());
+
+        self.output.push("DrawMeta_StartLoop:".to_string());
+        self.output.push("DrawMeta_Loop:".to_string());
+        // Check OAM Overflow
+        self.output.push("  LDX $19".to_string());
+        // Assuming $19 is byte, wraps at 0. If it was 0 initially and we filled 64, it's 0 again.
+        // But we increment by 4. So if it wraps, it hits 0.
+        // We can check if it's 0 AND we processed some sprites?
+        // Easier: Just check if we are at end? 64*4 = 256.
+        // If we want to be safe, we rely on the loop count or check if X=0 (but X=0 at start).
+        // Actually, if we fill 64 sprites, $19 becomes 0.
+        // We should just write. If it wraps, it overwrites sprite 0.
+        // A simple check: don't check.
+
+        // Read RelX
+        self.output.push("  LDA ($16), Y".to_string()); // Y is 0 here? No, we need to manage Y or Ptr.
+        // Since we have multiple bytes, better to increment Ptr.
+        // RelX
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($16), Y".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $14".to_string()); // + Global X
+        self.output.push("  STA $0203, X".to_string()); // Store X to OAM+3
+        self.output.push("  JSR DrawMeta_IncPtr".to_string());
+
+        // RelY
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($16), Y".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $15".to_string()); // + Global Y
+        self.output.push("  STA $0200, X".to_string()); // Store Y to OAM+0
+        self.output.push("  JSR DrawMeta_IncPtr".to_string());
+
+        // Tile
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($16), Y".to_string());
+        self.output.push("  STA $0201, X".to_string()); // Store Tile to OAM+1
+        self.output.push("  JSR DrawMeta_IncPtr".to_string());
+
+        // Attr
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($16), Y".to_string());
+        self.output.push("  STA $0202, X".to_string()); // Store Attr to OAM+2
+        self.output.push("  JSR DrawMeta_IncPtr".to_string());
+
+        // Increment OAM Ptr
+        self.output.push("  TXA".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #4".to_string());
+        self.output.push("  STA $19".to_string());
+
+        self.output.push("  DEC $00".to_string());
+        self.output.push("  BNE DrawMeta_Loop".to_string());
+
+        self.output.push("DrawMeta_Done:".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("DrawMeta_IncPtr:".to_string());
+        self.output.push("  INC $16".to_string());
+        self.output.push("  BNE DrawMeta_IncRet".to_string());
+        self.output.push("  INC $17".to_string());
+        self.output.push("DrawMeta_IncRet:".to_string());
+        self.output.push("  RTS".to_string());
+
         self.output.push("".to_string());
     }
 
@@ -1450,6 +1581,11 @@ impl CodeGenerator {
                         .insert(label.clone(), data_table_addr);
                     data_table_addr += 2;
                 }
+                TopLevel::Metasprite(name, _) => {
+                    self.data_table_offsets
+                        .insert(name.clone(), data_table_addr);
+                    data_table_addr += 2;
+                }
                 _ => {}
             }
         }
@@ -1600,6 +1736,24 @@ impl CodeGenerator {
                                 // Arg 0: Offset -> $18
                                 self.generate_expression(&args[0])?;
                                 self.output.push("  STA $18".to_string());
+                                return Ok(());
+                            }
+                        } else if base_name.eq_ignore_ascii_case("Sprite") {
+                            if member.eq_ignore_ascii_case("Draw") {
+                                // Arg 0: X -> $14
+                                self.generate_expression(&args[0])?;
+                                self.output.push("  STA $14".to_string());
+                                // Arg 1: Y -> $15
+                                self.generate_expression(&args[1])?;
+                                self.output.push("  STA $15".to_string());
+                                // Arg 2: Meta -> $16/$17
+                                self.generate_expression(&args[2])?;
+                                self.output.push("  STA $16".to_string());
+                                self.output.push("  STX $17".to_string());
+                                self.output.push("  JSR Runtime_DrawMetasprite".to_string());
+                                return Ok(());
+                            } else if member.eq_ignore_ascii_case("Clear") {
+                                self.output.push("  JSR Runtime_Sprite_Clear".to_string());
                                 return Ok(());
                             }
                         }

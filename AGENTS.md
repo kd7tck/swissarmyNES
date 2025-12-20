@@ -109,6 +109,15 @@ Phase 6-10 are complete.
         - `Runtime_Collision_Rect`: Expects 8 arguments (16 bytes, promoted to WORD) on the stack.
         - Uses 16-bit unsigned arithmetic for comparison to support larger coordinate spaces.
 
+### Phase 17: Collision - Point & Tile (Completed)
+- **Implemented**: `Collision.Point` and `Collision.Tile`.
+- **Details**:
+    - `Collision.Point(px, py, rx, ry, rw, rh)`: Returns `True` ($FF) if point is inside rectangle.
+    - `Collision.Tile(x, y)`: Returns the tile ID (Byte) at the given pixel coordinates.
+    - **Runtime**:
+        - `Runtime_Collision_Point`: 6 arguments (12 bytes on stack). Uses 16-bit comparisons.
+        - `Runtime_Collision_Tile`: 2 arguments (4 bytes on stack). Calculates offset into `NAMETABLE_ADDR` ($D500) using `(Y/8)*32 + (X/8)`.
+
 ### Miscellaneous Fixes
 - **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
 - **Boolean Logic**: Fixed `Animation.finished` to set `$FF` (True) instead of `1`, ensuring `NOT` works correctly.
@@ -120,7 +129,7 @@ Phase 6-10 are complete.
 - **RAM Overflow Check**: Added explicit check in `allocate_memory` to error if user variables exceed `$07FF`.
 
 - **Next Steps**:
-    - Phase 17: Collision - Point & Tile.
+    - Phase 18: Scrolling - Horizontal.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page (Variables, Pointers, Math Helpers, Sprite State).

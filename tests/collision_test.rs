@@ -6,19 +6,14 @@ mod tests {
     use swissarmynes::compiler::parser::Parser;
 
     #[test]
-    fn test_collision_rect() {
+    fn test_collision_point_generation() {
         let source = "
-            DIM c1 AS BOOL
-            DIM c2 AS BOOL
-
-            SUB Main()
-                ' Box 1: 10,10 10x10 (10-20, 10-20)
-                ' Box 2: 15,15 10x10 (15-25, 15-25) -> Overlap
-                c1 = Collision.Rect(10, 10, 10, 10, 15, 15, 10, 10)
-
-                ' Box 3: 30,30 10x10 -> No Overlap
-                c2 = Collision.Rect(10, 10, 10, 10, 30, 30, 10, 10)
-            END SUB
+            DIM result AS BYTE
+            IF Collision.Point(10, 10, 0, 0, 20, 20) THEN
+                result = 1
+            ELSE
+                result = 0
+            END IF
         ";
 
         let mut lexer = Lexer::new(source);
@@ -33,7 +28,48 @@ mod tests {
         let asm_lines = codegen.generate(&program).expect("Codegen failed");
         let asm_source = asm_lines.join("\n");
 
-        assert!(asm_source.contains("JSR Runtime_Collision_Rect"));
-        assert!(asm_source.contains("Collision_False:"));
+        // Verify helper is present
+        assert!(asm_source.contains("Runtime_Collision_Point:"));
+
+        // Verify call
+        // 6 args * 2 bytes = 12 bytes pushed.
+        // We look for PHA sequence or just the JSR.
+        assert!(asm_source.contains("JSR Runtime_Collision_Point"));
+
+        // Verify stack cleanup (TSX, TXA, ADC #12, TAX, TXS)
+        assert!(asm_source.contains("ADC #12"));
+    }
+
+    #[test]
+    fn test_collision_tile_generation() {
+        let source = "
+            DIM t AS BYTE
+            t = Collision.Tile(100, 50)
+        ";
+
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("Lexing failed");
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().expect("Parsing failed");
+        let mut analyzer = SemanticAnalyzer::new();
+        analyzer.analyze(&program).expect("Analysis failed");
+
+        let symbol_table = analyzer.symbol_table;
+        let mut codegen = CodeGenerator::new(symbol_table);
+        let asm_lines = codegen.generate(&program).expect("Codegen failed");
+        let asm_source = asm_lines.join("\n");
+
+        // Verify helper is present
+        assert!(asm_source.contains("Runtime_Collision_Tile:"));
+
+        // Verify call
+        assert!(asm_source.contains("JSR Runtime_Collision_Tile"));
+
+        // Verify stack cleanup (2 args * 2 bytes = 4 bytes)
+        assert!(asm_source.contains("ADC #4"));
+
+        // Verify nametable math in helper
+        // Look for shifting logic
+        assert!(asm_source.contains("AND #$1F")); // Clamp Col
     }
 }

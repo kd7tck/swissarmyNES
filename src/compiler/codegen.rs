@@ -1301,7 +1301,8 @@ impl CodeGenerator {
                     .push(format!("  db ${:02X}", if *loops { 1 } else { 0 }));
                 for (i, frame) in frames.iter().enumerate() {
                     let lbl = format!("{}_f{}", name, i);
-                    self.output.push(format!("{}: WORD {}", lbl, frame.metasprite));
+                    self.output
+                        .push(format!("{}: WORD {}", lbl, frame.metasprite));
                     self.output.push(format!("  db ${:02X}", frame.duration));
                 }
             }

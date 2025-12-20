@@ -77,7 +77,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Auto-assign incrementing values to enum members.
 - **Completion Criteria:** `CONST STATE_IDLE = 0` can be replaced with `ENUM State { Idle, Run }`.
 
-## Phase 10: Macros
+## Phase 10: Macros (Completed)
 **Goal:** Reduce code duplication in SwissBASIC.
 - **Action Items:**
     - Implement `DEF MACRO name(args)` syntax.

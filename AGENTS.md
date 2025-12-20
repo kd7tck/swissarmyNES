@@ -50,7 +50,15 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are complete. Phase Refinement (Strings & Math) is also largely complete.
+Phase 6-10 are complete.
+
+### Phase 10: Macros (Completed)
+- **Implemented**: `DEF MACRO` syntax, AST Preprocessor expansion.
+- **Details**:
+    - Macros are AST-based text replacements.
+    - `Statement::Call` is replaced by the macro body with arguments substituted.
+    - Support for nested macros and recursion limit (100).
+    - Macros are defined at Top Level and removed before CodeGen.
 
 ### Phase Refinement: Arrays & Foundation & Strings
 - **Implemented**:
@@ -70,7 +78,7 @@ Phase 6 (Advanced Math), Phase 7 (Switch/Case), and Phase 8 (Structs) are comple
     - **Parser/AST**: Added `ShiftLeft`/`ShiftRight` tokens and precedence.
 
 - **Next Steps**:
-    - Phase 10: Macros.
+    - Phase 11: Standard Library - Controller.
 
 - **Pitfalls**:
     - `RETURN` inside a `CASE` block is unsafe because the stack is not cleaned up (it contains the Select value).

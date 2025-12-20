@@ -47,6 +47,8 @@ pub enum Token {
     Select,
     Case,
     Enum,
+    Def,
+    Macro,
 
     // Identifiers
     Identifier(String),
@@ -289,6 +291,8 @@ impl<'a> Lexer<'a> {
             "SELECT" => Token::Select,
             "CASE" => Token::Case,
             "ENUM" => Token::Enum,
+            "DEF" => Token::Def,
+            "MACRO" => Token::Macro,
             _ => Token::Identifier(ident),
         }
     }

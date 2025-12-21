@@ -223,7 +223,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
 ---
 
 ## Phase 26: Visual - CHR Import
-**Goal:** Use external art tools.
+**Goal:** Use external JS art tools.
 - **Action Items:**
     - JS-based PNG parser.
     - Color quantization (nearest neighbor to NES palette).

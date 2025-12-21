@@ -238,11 +238,10 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
 - **Completion Criteria:** User paints with 16x16 blocks instead of single tiles.
 
 ## Phase 28: Visual - Screen Editor
-**Goal:** Organize game world.
+**Goal:** Organize game world. Screen editing will be built into the map editor directly. Allowing a person to edit individial tiles or collection of tiles called metatiles.
 - **Action Items:**
-    - Define "Screen" as a collection of Metatiles (e.g., 16x15 blocks).
-    - Store screens as compressed data arrays.
-- **Completion Criteria:** Can edit and save 10 distinct screens.
+    - Integrate metatiles into other systems more fully.
+- **Completion Criteria:** Can edit and work with metatiles in other systems that also use tiles.
 
 ## Phase 29: Visual - World Editor
 **Goal:** Stitch screens together.

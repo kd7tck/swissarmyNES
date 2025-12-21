@@ -19,6 +19,7 @@ A hybrid language designed for the NES, combining BASIC simplicity with low-leve
   - `TYPE`: Define custom data structures (e.g., `TYPE Player \n x AS BYTE \n y AS BYTE \n END TYPE`).
   - `ENUM`: Define enumerated constants.
   - `DIM`: 1D Arrays (e.g., `DIM buffer(10) AS BYTE`).
+  - meta sprites are arrays of tile id's. They should not directly store tile data.
 - **Control Flow**:
   - `IF ... THEN ... ELSEIF ... END IF`
   - `SELECT CASE ... CASE ... END SELECT` (supports ranges `TO` and comparisons `IS`).

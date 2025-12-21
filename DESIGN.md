@@ -244,11 +244,11 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
 - **Completion Criteria:** Can edit and work with metatiles in other systems that also use tiles.
 
 ## Phase 29: Visual - World Editor for MAPS
-**Goal:** Stitch Maps together.
+**Goal:** Stitch Maps together. each grid point in world editor is a map from the map editor.
 - **Action Items:**
     - 2D Grid view of tiles or metatiles in vast grid map able to be stored in ROM.
     - Define adjacency (which MAP is Right/Up/Down/Left).
-- **Completion Criteria:** Visual map of the entire game world.
+- **Completion Criteria:** Visual map of the entire game world. and ability to import maps and use maps inside of world editor.
 
 ## Phase 30: Visual - Sprite Editor
 **Goal:** Dedicated character design tool.

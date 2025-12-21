@@ -50,52 +50,7 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-23 are complete. Phase 24 is Next.
-
-### Phase 24: Audio - Arpeggios (Completed)
-- **Implemented**: Arpeggio support for audio tracks.
-- **Backend**:
-    - `AudioTrack` updated to include `arpeggio_env` field.
-    - `compile_audio_data` updated to inject Arpeggio ID into track header (Header size 6).
-- **Codegen**:
-    - **Memory Map Updated**:
-        - Sound RAM expanded to `$0300-$034F` (80 bytes).
-        - String Heap moved to `$0350-$044F` (256 bytes).
-        - VBlank Buffer moved to `$0450-$048F` (64 bytes).
-        - User Variables start at `$0490`.
-    - `Sound_Init`: Clears extended sound RAM range ($0300-$034F).
-    - `Sound_Play`: Reads Arpeggio ID and resets Arp state.
-    - `Sound_Update`: Calls `SndArpUpdate` after `SndEnvUpdate`.
-    - `SndChUpdate`: Stores `BasePitch` index instead of calculating Period directly.
-    - `SndArpUpdate`: Processes Arpeggio envelope, updates `ArpNoteOffset`, and recalculates Period (Base + Offset). Writes to hardware registers with optimization to avoid phase reset (checking High Byte change).
-- **Frontend**:
-    - Updated `static/js/audio.js` and `static/index.html` to add Arpeggio dropdown selector.
-- **Verified**: `tests/audio_compilation_test.rs`, `tests/audio_priority_test.rs`, and all other integration tests passed with new memory layout.
-
-### Phase 23: Audio - Envelope Editor UI (Completed)
-- **Implemented**: Priority system for sound channels.
-- **Backend**:
-    - `AudioTrack` now has a `priority` field (u8).
-    - `compile_audio_data` injects the priority byte into the track header (after instrument).
-- **Codegen**:
-    - `Sound_Init`: Clears extended sound RAM range ($0300-$031F) to include priority/instrument storage.
-    - `Sound_Play`: Checks if `NewPriority >= CurrentPriority` (stored at `$0314` + ChannelIndex). If not, aborts. Updates priority if proceeding.
-    - `SndChUpdate`: Clears priority (sets to 0) when a track finishes (Terminator).
-- **Frontend**:
-    - Added "Priority" input to `AudioTracker` UI.
-- **Verified**: `tests/audio_priority_test.rs`.
-
-### Miscellaneous Fixes
-- **Assembler**: Fixed "Branch too far" error in `Sound_Update` by fixing duplicate labels (`SndPtrInc3` vs `SndPtrInc4`).
-- **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
-- **Boolean Logic**: Fixed `Animation.finished` to set `$FF` (True) instead of `1`, ensuring `NOT` works correctly.
-- **NMI Safety**: `TrampolineNMI` now saves CPU registers and Zero Page context (`$00`-$0F`), preventing 16-bit math corruption by interrupts.
-- **String Heap**: Expanded to 16 slots (256 bytes) at `$0320`.
-- **Signed Assignment Bug**: Fixed `Statement::Let` to correctly sign-extend `INT` values when assigning to `WORD` variables (using `STX` instead of zero-filling).
-
-- **Next Steps**:
-    - Start Phase 25b: Audio - SFX Editor UI Foundation.
-    - Implement Frontend SFX Editor (List, Create, Delete).
+Phase 1-25c are complete. Phase 25d is Next.
 
 ### Phase 25a: Audio - SFX Engine Core (Completed)
 - **Implemented**: Sound Effects (SFX) support and Sound Engine Overhaul.
@@ -114,7 +69,25 @@ Phase 1-23 are complete. Phase 24 is Next.
         - Refactored to use 32-byte stride per channel to avoid collisions.
         - Implemented `SFX_Play`, `SndPitchUpdate`, `SndDutyUpdate`.
         - Fixed `rs6502` compatibility issues (`.db` -> `db`, avoid `LDX abs,Y`).
-- **Verified**: `tests/sfx_compilation_test.rs` passed. All regressions fixed.
+- **Verified**: `tests/sfx_compilation_test.rs` passed.
+
+### Phase 25b: Audio - SFX Editor UI Foundation (Completed)
+- **Implemented**: Frontend SFX Editor.
+- **Frontend**:
+    - `static/js/sfx.js`: Implemented `SFXEditor` class.
+    - `static/css/sfx.css`: Added styling for SFX list and property panel.
+    - `static/index.html`: Added SFX tab structure.
+    - `static/js/app.js`: Instantiated `SFXEditor`.
+    - `static/js/project.js`: Integrated SFX load/save logic.
+- **Features**: Create, Delete, Rename SFX; Edit Channel, Priority, Speed, Loop.
+
+### Phase 25c: Audio - Visual Envelope Designers (Completed)
+- **Implemented**: Visual editors for Volume, Pitch, and Duty sequences within the SFX Editor.
+- **Frontend**:
+    - Added `SequenceCanvas` class to `sfx.js` for interactive drawing of envelope data.
+    - Added Tab system to `SFXEditor` to switch between Volume, Pitch, and Duty editors.
+    - Updated CSS to support canvas and tabs.
+- **Features**: Draw SFX sequences visually with mouse.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -147,3 +120,8 @@ Phase 1-23 are complete. Phase 24 is Next.
     - **Audio Labels**: When injecting assembly strings in loops or multiple blocks, ensure labels are unique or use local labels if assembler supports it. `rs6502` global label reuse caused "Branch too far".
     - **DPCM Alignment**: Samples must start on 64-byte boundaries. Compiler handles padding.
     - **OAM Overflow**: `Sprite.Draw` drops sprites if 64 limit reached. Enable `Sprite.SetFlicker(1)` to mitigate limits via cycling.
+    - **SFX Sequences**: `SequenceCanvas` modifies arrays in place. Ensure `onChange` handles any side effects if necessary (currently just triggers redraw).
+
+- **Next Steps**:
+    - Start Phase 25d: Audio - Import/Export & Full Integration.
+    - Implement Drag-and-Drop for `.sfx.json` files.

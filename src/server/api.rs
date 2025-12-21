@@ -180,11 +180,14 @@ pub fn compile_source(
     // 1. Palette Data at $E000
     let palette_data = if let Some(a) = &resolved_assets {
         let mut data = vec![0x0F; 32];
-        for (i, pal) in a.palettes.iter().take(8).enumerate() {
-            let start_idx = i * 4;
-            for (j, &color) in pal.colors.iter().enumerate() {
-                if start_idx + j < 32 {
-                    data[start_idx + j] = color;
+        let names = ["BG0", "BG1", "BG2", "BG3", "SP0", "SP1", "SP2", "SP3"];
+        for (i, name) in names.iter().enumerate() {
+            if let Some(pal) = a.palettes.iter().find(|p| p.name == *name) {
+                let start_idx = i * 4;
+                for (j, &color) in pal.colors.iter().enumerate() {
+                    if start_idx + j < 32 {
+                        data[start_idx + j] = color;
+                    }
                 }
             }
         }

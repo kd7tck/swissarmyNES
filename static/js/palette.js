@@ -32,14 +32,21 @@ class PaletteEditor {
             assets.palettes = [];
         }
 
+        // Re-order assets.palettes to match canonical order (BG0..SP3)
+        // This ensures other editors (like Metatile/World) can access by index safely.
+        const sortedPalettes = [];
         names.forEach(name => {
             let found = assets.palettes.find(p => p.name === name);
             if (!found) {
                 found = { name: name, colors: [0x0F, 0x00, 0x10, 0x20] }; // Default grays
-                assets.palettes.push(found);
             }
+            sortedPalettes.push(found);
             this.palettes.push(found);
         });
+
+        // Update the source of truth
+        assets.palettes.length = 0;
+        sortedPalettes.forEach(p => assets.palettes.push(p));
 
         this.render();
     }

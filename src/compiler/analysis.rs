@@ -564,9 +564,28 @@ impl SemanticAnalyzer {
                                     }
                                 }
                                 return;
+                            } else if member.eq_ignore_ascii_case("LoadRow") {
+                                if args.len() != 2 {
+                                    self.errors.push(
+                                        "Scroll.LoadRow expects 2 arguments (y, array)".to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                    if let Some(DataType::Array(_, _)) = self.resolve_type(&args[1])
+                                    {
+                                        // OK
+                                    } else {
+                                        self.errors.push(
+                                            "Scroll.LoadRow expects an array as 2nd argument"
+                                                .to_string(),
+                                        );
+                                    }
+                                }
+                                return;
                             } else {
                                 self.errors.push(format!(
-                                    "Unknown Scroll command '{}' (did you mean Set?)",
+                                    "Unknown Scroll command '{}' (Set, LoadColumn, LoadRow)",
                                     member
                                 ));
                                 return;

@@ -80,7 +80,21 @@ Phase 1-18 are complete. Phase 19 is Next.
 - **RAM Overflow Check**: Added explicit check in `allocate_memory` to error if user variables exceed `$07FF`.
 
 - **Next Steps**:
-    - Start Phase 19: Vertical Scrolling. This will build upon the existing Scroll/PPU architecture.
+    - Finish Phase 19: Vertical Scrolling (if specific camera logic needed) or Start Phase 20: Random Number Generator.
+
+### Phase 19: Vertical Scrolling (Completed)
+- **Implemented**: `Scroll.LoadRow(y, array)`.
+- **Details**:
+    - **Scroll.LoadRow**:
+        - Updates a 32-tile row in VRAM during VBlank.
+        - Calculates target address: Base `$2000` or `$2800` (if Y >= 240/High Bit 0 set), Offset `(Y & $F8) << 2`.
+        - Uses VBlank Buffer Type 1.
+    - **TrampolineNMI**:
+        - Updated to handle Type 0 (Column, Inc 32, Len 30) and Type 1 (Row, Inc 1, Len 32).
+        - Correctly manages PPU Increment mode via `$2000`.
+    - **Fix**:
+        - Fixed `Scroll.LoadColumn` and `Scroll.LoadRow` argument marshalling to correctly handle `INT` (8-bit signed) as 16-bit values on stack, preserving high-byte/sign-extension for proper coordinate calculation.
+    - **Verified**: `tests/scroll_row_test.rs`.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.

@@ -809,55 +809,55 @@ impl CodeGenerator {
         self.output.push("  STA $F1".to_string());
         self.output.push("  LDY #0".to_string());
         self.output.push("  LDA ($F0), Y".to_string()); // Loop Index
-        // Note: Envelope format is [PtrL, PtrH, LoopIndex, (Val, Dur)..., 0, 0]
-        // But pointer logic above:
-        // PtrL/H is in ENVELOPE_TABLE_ADDR (which is a table of pointers).
-        // The pointers point to: LoopIndex (1), Steps (N*2), Term(2).
-        // In previous implementation:
-        // SndEnvNextStep logic:
-        // Calculates address in $F0/$F1.
-        // Adds Pos to it?
-        // "LDA $F2" (Pos). "ADC $F0".
-        // Ah, Pos starts at where?
-        // LoopIndex is at Offset 0.
-        // Steps start at Offset 1.
-        // `Pos` variable in RAM tracks offset from *Start of Data*.
-        // So Pos=0 -> LoopIndex. Pos=1 -> Step 0 Value.
-        // If Pos=0, we skip it?
-        // `SndEnvNextStep` logic in previous code:
-        //   LDA ($F0), Y -> Val (Offset 0 relative to $F0+Pos)
-        // Wait, if Pos starts at 1 (skipping loop index), then it works.
-        // `Sound_Play` initializes Pos to 0.
-        // If Pos=0, it reads LoopIndex as Val?
-        // That seems wrong in previous implementation.
-        // Let's re-read previous `SndEnvUpdate`.
-        //   LDA $F2 (Pos)
-        //   ADC $F0
-        //   LDA ($F0), Y -> Val
-        // If Pos=0, it reads byte 0 (LoopIndex).
-        // If LoopIndex is treated as Val, and Dur is next byte...
-        // This seems like a bug in previous implementation or I misunderstand.
-        // Let's check `compile_envelopes`.
-        // blob structure:
-        // Byte 0: Loop Index
-        // Byte 1: Val 0
-        // Byte 2: Dur 0
-        // ...
-        // `compile_envelopes` logic:
-        //   blob.push(loop_index);
-        //   current_offset += 1;
-        //   blob.push(val); blob.push(dur);
-        // So yes, byte 0 is loop index.
-        // If `Pos` is 0, we read byte 0.
-        // So `SndEnvUpdate` reads LoopIndex as `Val`.
-        // And `Val` 0 as `Dur`.
-        // If `Dur` != 0, it applies.
-        // Does LoopIndex look like a valid Value? It's a index (0-255).
-        // Does Val 0 look like valid Dur? It's value (signed).
-        // This suggests `Sound_Play` should init Pos to 1.
-        // But `Sound_Play` does `STA ... 1C` with 0.
-        // I should fix this. Arp needs similar logic.
-        // I'll init Pos to 1 in Sound_Play for Vol/Pitch/Arp.
+                                                        // Note: Envelope format is [PtrL, PtrH, LoopIndex, (Val, Dur)..., 0, 0]
+                                                        // But pointer logic above:
+                                                        // PtrL/H is in ENVELOPE_TABLE_ADDR (which is a table of pointers).
+                                                        // The pointers point to: LoopIndex (1), Steps (N*2), Term(2).
+                                                        // In previous implementation:
+                                                        // SndEnvNextStep logic:
+                                                        // Calculates address in $F0/$F1.
+                                                        // Adds Pos to it?
+                                                        // "LDA $F2" (Pos). "ADC $F0".
+                                                        // Ah, Pos starts at where?
+                                                        // LoopIndex is at Offset 0.
+                                                        // Steps start at Offset 1.
+                                                        // `Pos` variable in RAM tracks offset from *Start of Data*.
+                                                        // So Pos=0 -> LoopIndex. Pos=1 -> Step 0 Value.
+                                                        // If Pos=0, we skip it?
+                                                        // `SndEnvNextStep` logic in previous code:
+                                                        //   LDA ($F0), Y -> Val (Offset 0 relative to $F0+Pos)
+                                                        // Wait, if Pos starts at 1 (skipping loop index), then it works.
+                                                        // `Sound_Play` initializes Pos to 0.
+                                                        // If Pos=0, it reads LoopIndex as Val?
+                                                        // That seems wrong in previous implementation.
+                                                        // Let's re-read previous `SndEnvUpdate`.
+                                                        //   LDA $F2 (Pos)
+                                                        //   ADC $F0
+                                                        //   LDA ($F0), Y -> Val
+                                                        // If Pos=0, it reads byte 0 (LoopIndex).
+                                                        // If LoopIndex is treated as Val, and Dur is next byte...
+                                                        // This seems like a bug in previous implementation or I misunderstand.
+                                                        // Let's check `compile_envelopes`.
+                                                        // blob structure:
+                                                        // Byte 0: Loop Index
+                                                        // Byte 1: Val 0
+                                                        // Byte 2: Dur 0
+                                                        // ...
+                                                        // `compile_envelopes` logic:
+                                                        //   blob.push(loop_index);
+                                                        //   current_offset += 1;
+                                                        //   blob.push(val); blob.push(dur);
+                                                        // So yes, byte 0 is loop index.
+                                                        // If `Pos` is 0, we read byte 0.
+                                                        // So `SndEnvUpdate` reads LoopIndex as `Val`.
+                                                        // And `Val` 0 as `Dur`.
+                                                        // If `Dur` != 0, it applies.
+                                                        // Does LoopIndex look like a valid Value? It's a index (0-255).
+                                                        // Does Val 0 look like valid Dur? It's value (signed).
+                                                        // This suggests `Sound_Play` should init Pos to 1.
+                                                        // But `Sound_Play` does `STA ... 1C` with 0.
+                                                        // I should fix this. Arp needs similar logic.
+                                                        // I'll init Pos to 1 in Sound_Play for Vol/Pitch/Arp.
 
         self.output
             .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x1C)); // Pos
@@ -875,18 +875,18 @@ impl CodeGenerator {
 
         self.output.push("  LDA $F2".to_string()); // Pos
         self.output.push("  ASL".to_string()); // x2 (Steps are 2 bytes? No, Pos is byte index in blob? Or Step Index?)
-        // Previous logic:
-        //   LDA $F2 (Pos)
-        //   ASL
-        //   ADC $F0
-        // This implies Pos is Step Index (0, 1, 2...), and each step is 2 bytes.
-        // If so, Offset 0 (LoopIndex) is skipped if we add #1 to $F0 before adding Pos*2?
-        // Let's trace.
-        // Ptr points to Start (LoopIndex).
-        // Add #1 -> Points to Step 0 Val.
-        // Pos=0. Add 0. Points to Step 0 Val.
-        // OK, so Pos=0 works if it means Step 0.
-        // And we skip the first byte (LoopIndex).
+                                               // Previous logic:
+                                               //   LDA $F2 (Pos)
+                                               //   ASL
+                                               //   ADC $F0
+                                               // This implies Pos is Step Index (0, 1, 2...), and each step is 2 bytes.
+                                               // If so, Offset 0 (LoopIndex) is skipped if we add #1 to $F0 before adding Pos*2?
+                                               // Let's trace.
+                                               // Ptr points to Start (LoopIndex).
+                                               // Add #1 -> Points to Step 0 Val.
+                                               // Pos=0. Add 0. Points to Step 0 Val.
+                                               // OK, so Pos=0 works if it means Step 0.
+                                               // And we skip the first byte (LoopIndex).
 
         self.output.push("  ASL".to_string());
         self.output.push("  CLC".to_string());

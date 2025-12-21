@@ -50,7 +50,23 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-20 are complete. Phase 21 is Next.
+Phase 1-21 are complete. Phase 22 is Next.
+
+### Phase 21: Audio - DPCM Support (Completed)
+- **Implemented**: Full support for NES Delta Modulation Channel (DMC).
+- **Backend**:
+    - `ProjectAssets` now includes `samples: Vec<DpcmSample>`.
+    - `compile_samples` (in `src/compiler/audio.rs`) compiles raw sample data into 64-byte aligned blocks and generates a lookup table.
+    - `compile_audio_data` updated to support Channel 3 (DMC).
+    - `compile_source` injects Samples at `$E040` and Sample Table at `$D480`.
+- **Codegen**:
+    - Updated `Sound_Update` to handle Channel 3.
+    - Added `PlayDMC` routine: Lookups address/length from `$D480`, sets `$4010`/`$4012`/`$4013`, and enables channel via `$4015`.
+- **Frontend**:
+    - Updated `AudioTracker` (`static/js/audio.js`) to support 4 tracks.
+    - Added "Samples" view to manage DPCM samples.
+    - Implemented simple WAV import and DPCM (1-bit delta) encoding in JS.
+- **Verified**: `tests/audio_dpcm_test.rs` and `tests/audio_compilation_test.rs`.
 
 ### Phase 20: Random Number Generator (Completed)
 - **Implemented**: `RND(max)` function and `RANDOMIZE seed` statement.
@@ -66,19 +82,17 @@ Phase 1-20 are complete. Phase 21 is Next.
     - **Verified**: `tests/rng_test.rs`.
 
 ### Miscellaneous Fixes
+- **Assembler**: Fixed "Branch too far" error in `Sound_Update` by fixing duplicate labels (`SndPtrInc3` vs `SndPtrInc4`).
 - **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
 - **Boolean Logic**: Fixed `Animation.finished` to set `$FF` (True) instead of `1`, ensuring `NOT` works correctly.
 - **NMI Safety**: `TrampolineNMI` now saves CPU registers and Zero Page context (`$00`-$0F`), preventing 16-bit math corruption by interrupts.
-- **Interrupts**: `INTERRUPT` declarations now compile to `RTS` to support the NMI/IRQ Trampoline wrapper which calls them via `JSR`.
 - **String Heap**: Expanded to 16 slots (256 bytes) at `$0320`.
-- **Safety**: Semantic Analyzer bans `RETURN` inside loops (`FOR`, `WHILE`, `DO`, `SELECT`) to prevent stack corruption.
 - **Signed Assignment Bug**: Fixed `Statement::Let` to correctly sign-extend `INT` values when assigning to `WORD` variables (using `STX` instead of zero-filling).
-- **RAM Overflow Check**: Added explicit check in `allocate_memory` to error if user variables exceed `$07FF`.
 
 - **Next Steps**:
-    - Start Phase 21: Audio - DPCM Support.
-    - Implement DPCM sample import (WAV -> 1-bit Delta).
-    - Audio Compiler support for DPCM.
+    - Start Phase 22: Audio - SFX Priority.
+    - Implement priority flag for SFX tracks.
+    - Sound engine only interrupts music channel if SFX priority > current note priority.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -91,10 +105,19 @@ Phase 1-20 are complete. Phase 21 is Next.
 - **$0320-$041F**: String Heap.
 - **$0420-$045F**: VBlank Buffer (Internal).
 - **$0460-$07FF**: User Variables (DIM).
+- **$8000-$CFFF**: PRG-ROM (Code).
+- **$D000**: NTSC Period Table.
+- **$D100**: Music Data.
+- **$D480**: DPCM Sample Table (Addr, Len).
+- **$D500**: Nametable Data.
+- **$E000**: Palette Data.
+- **$E040**: DPCM Samples (Start).
+- **$FF00**: Data Tables (Vectors pointers).
+- **$FFFA**: Vectors (NMI, Reset, IRQ).
 
 - **Pitfalls**:
     - `Text.Print` writes directly to the PPU ($2006/$2007). Use `WAIT_VBLANK` before calling this to avoid visual glitches.
     - `True` is `$FF`. Check assumptions in assembly injections if they rely on `1`.
-    - 16-bit Math helpers use ZP $06-$09 (now safe in NMI/IRQ due to context saving).
+    - **Audio Labels**: When injecting assembly strings in loops or multiple blocks, ensure labels are unique or use local labels if assembler supports it. `rs6502` global label reuse caused "Branch too far".
+    - **DPCM Alignment**: Samples must start on 64-byte boundaries. Compiler handles padding.
     - **OAM Overflow**: `Sprite.Draw` drops sprites if 64 limit reached. Enable `Sprite.SetFlicker(1)` to mitigate limits via cycling.
-    - **Scrolling**: `Scroll.Set` updates shadow registers which are applied in the next NMI. Ensure `Scroll.Set` is called before VBlank if immediate effect is needed (though it applies next frame).

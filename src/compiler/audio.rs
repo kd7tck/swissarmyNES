@@ -1,5 +1,7 @@
 pub const PERIOD_TABLE_ADDR: u16 = 0xD000;
 pub const MUSIC_DATA_ADDR: u16 = 0xD100;
+pub const SAMPLE_TABLE_ADDR: u16 = 0xD480;
+pub const SAMPLE_DATA_ADDR: u16 = 0xE040;
 
 /// NTSC Period Table for octaves 0-7 (C to B)
 /// Indices: 0-11 = Octave 0, 12-23 = Octave 1, etc.
@@ -36,6 +38,77 @@ pub fn generate_period_table() -> Vec<u8> {
 }
 
 use crate::server::project::ProjectAssets;
+use std::iter;
+
+/// Compiles DPCM samples into two blobs:
+/// 1. `samples_blob`: The raw sample data, padded and aligned for DMC.
+/// 2. `table_blob`: A lookup table (Address Byte, Length Byte) for each sample.
+pub fn compile_samples(assets: &Option<ProjectAssets>) -> (Vec<u8>, Vec<u8>) {
+    let mut samples_blob = Vec::new();
+    let mut table_blob = Vec::new();
+
+    let start_addr = SAMPLE_DATA_ADDR as usize;
+    let mut current_addr = start_addr;
+
+    if let Some(assets) = assets {
+        for sample in &assets.samples {
+            // 1. Alignment check
+            let alignment_needed = current_addr % 64;
+            if alignment_needed != 0 {
+                let padding = 64 - alignment_needed;
+                samples_blob.extend(iter::repeat_n(0, padding));
+                current_addr += padding;
+            }
+
+            // 2. Prepare Data
+            let mut data = sample.data.clone();
+            if data.is_empty() {
+                data.push(0);
+            }
+            if data.len() > 4081 {
+                data.truncate(4081);
+            }
+
+            // Length must be 16*N + 1
+            // We can satisfy this by extending to next multiple of 16, plus 1.
+            // (len - 1) % 16 == 0
+            let remainder = (data.len().saturating_sub(1)) % 16;
+            if remainder != 0 {
+                let needed = 16 - remainder;
+                data.extend(iter::repeat_n(0, needed));
+            }
+
+            // Recalculate L
+            let l_val = ((data.len() - 1) / 16) as u8;
+
+            // Calculate A
+            // A = (Address - $C000) >> 6
+            // Address must be in range $C000-$FFFF.
+            let a_val = if current_addr >= 0xC000 {
+                (((current_addr as u32) - 0xC000) >> 6) as u8
+            } else {
+                0
+            };
+
+            // Store in table
+            table_blob.push(a_val);
+            table_blob.push(l_val);
+
+            // Append data
+            let len = data.len();
+            samples_blob.extend(data);
+            current_addr += len;
+        }
+    }
+
+    // Pad table to 128 bytes (64 entries)
+    if table_blob.len() < 128 {
+        let needed = 128 - table_blob.len();
+        table_blob.extend(iter::repeat_n(0, needed));
+    }
+
+    (samples_blob, table_blob)
+}
 
 /// Compiles audio tracks into a binary format injected at MUSIC_DATA_ADDR ($D100).
 ///
@@ -52,25 +125,15 @@ use crate::server::project::ProjectAssets;
 ///   - `0`: Pulse 1
 ///   - `1`: Pulse 2
 ///   - `2`: Triangle
+///   - `3`: DMC (Uses Sample Table)
 /// - **Instrument** (1 byte): The hardware envelope or duty cycle setting.
-///   - For Pulse: Bits 7-6 = Duty, Bits 3-0 = Volume/Envelope. (e.g., `$B0` = 50% duty, vol 0 (envelope ignored?))
-///   - For Triangle: Linear Counter Load value.
+///   - For Pulse: Bits 7-6 = Duty, Bits 3-0 = Volume/Envelope.
+///   - For Triangle: Linear Counter Load.
+///   - For DMC: Rate Index (0-15).
 /// - **Note Sequence**: A stream of `[Duration, Pitch]` pairs.
-///   - **Duration** (1 byte): How many frames (60Hz) to play the note.
-///     - A duration of `0` is the **Terminator**, marking the end of the track.
-///   - **Pitch** (1 byte): The index into the Period Table ($00-$5F).
-///     - Index `$FF` (255) represents **Silence** (Rest).
-///
-/// ## Example Structure
-/// ```text
-/// $D100: [02]                  ; 2 Tracks
-/// $D101: [20, D1]              ; Track 0 starts at $D120
-/// $D103: [40, D1]              ; Track 1 starts at $D140
-/// ...
-/// $D120: [00]                  ; Channel 0 (Pulse 1)
-/// $D121: [7F]                  ; Instrument (50% Duty, Max Vol)
-/// $D122: [08, 1A, 08, 1C, 00]  ; Note (Dur 8, Pitch 1A), Note (Dur 8, Pitch 1C), End
-/// ```
+///   - **Duration** (1 byte): Frames to play. 0 = End.
+///   - **Pitch** (1 byte): Period Table Index. For DMC: Sample Index.
+///     - Index `$FF` (255) represents **Silence**.
 pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
     let mut blob = Vec::new();
 
@@ -83,7 +146,7 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
         let data_start_offset = 1 + pointer_table_size;
 
         // Pointers will be filled later, we insert placeholders
-        blob.extend(std::iter::repeat_n(0, pointer_table_size));
+        blob.extend(iter::repeat_n(0, pointer_table_size));
 
         let mut current_offset = data_start_offset;
 

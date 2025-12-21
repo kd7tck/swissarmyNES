@@ -44,12 +44,20 @@ pub struct AudioTrack {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DpcmSample {
+    pub name: String,
+    pub data: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProjectAssets {
     pub chr_bank: Vec<u8>,
     pub palettes: Vec<Palette>,
     pub nametables: Vec<Nametable>,
     #[serde(default)]
     pub audio_tracks: Vec<AudioTrack>,
+    #[serde(default)]
+    pub samples: Vec<DpcmSample>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -114,6 +122,7 @@ pub fn create_project(name: &str) -> Result<(), String> {
         palettes: vec![],        // Start empty
         nametables: vec![],      // Start empty
         audio_tracks: vec![],    // Start empty
+        samples: vec![],         // Start empty
     };
     let assets_json = serde_json::to_string_pretty(&default_assets).map_err(|e| e.to_string())?;
     fs::write(project_path.join("assets.json"), assets_json).map_err(|e| e.to_string())?;

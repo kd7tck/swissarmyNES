@@ -165,6 +165,13 @@ pub fn compile_source(
     let music_data = audio::compile_audio_data(&resolved_assets);
     injections.push((audio::MUSIC_DATA_ADDR, music_data));
 
+    // 3b. Sample Data
+    let (samples, sample_table) = audio::compile_samples(&resolved_assets);
+    if !samples.is_empty() {
+        injections.push((audio::SAMPLE_DATA_ADDR, samples));
+    }
+    injections.push((audio::SAMPLE_TABLE_ADDR, sample_table));
+
     // 4. Nametable Data at $D500 (NAMETABLE_ADDR)
     // We only support one nametable for now (Nametable 0)
     if let Some(a) = &resolved_assets {

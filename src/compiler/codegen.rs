@@ -5,9 +5,10 @@ use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 use std::collections::HashMap;
 
 pub const NAMETABLE_ADDR: u16 = 0xD500;
+pub const ENVELOPE_TABLE_ADDR: u16 = 0xD900;
 const SOUND_RAM_START: u16 = 0x0300;
-const STRING_HEAP_START: u16 = 0x0320;
-const VAR_START_RAM: u16 = 0x0460;
+const STRING_HEAP_START: u16 = 0x0340;
+const VAR_START_RAM: u16 = 0x0480;
 
 pub struct CodeGenerator {
     symbol_table: SymbolTable,
@@ -111,6 +112,7 @@ impl CodeGenerator {
         self.output.push("  STA $0500,x".to_string());
         self.output.push("  STA $0600,x".to_string());
         self.output.push("  STA $0700,x".to_string());
+        self.output.push("  STA $0320,x".to_string()); // Clear extra sound ram/string heap gap
         self.output.push("  LDA #$FE".to_string());
         self.output.push("  STA $0200,x".to_string());
         self.output.push("  INX".to_string());
@@ -299,15 +301,15 @@ impl CodeGenerator {
         self.output.push("  STA $4014".to_string());
 
         // VBlank Buffer Processing
-        self.output.push("  LDA $0420".to_string());
+        self.output.push("  LDA $0440".to_string());
         self.output.push("  BEQ SkipVBlankBuffer".to_string());
         self.output.push("  LDA $2002".to_string());
-        self.output.push("  LDA $0422".to_string());
+        self.output.push("  LDA $0442".to_string());
         self.output.push("  STA $2006".to_string());
-        self.output.push("  LDA $0423".to_string());
+        self.output.push("  LDA $0443".to_string());
         self.output.push("  STA $2006".to_string());
-        // Check Type ($0421)
-        self.output.push("  LDA $0421".to_string());
+        // Check Type ($0441)
+        self.output.push("  LDA $0441".to_string());
         self.output.push("  BNE VBlankBufferRow".to_string());
 
         // Type 0: Column (Inc 32, Len 30)
@@ -316,7 +318,7 @@ impl CodeGenerator {
         self.output.push("  STA $2000".to_string());
         self.output.push("  LDX #0".to_string());
         self.output.push("VBlankBufferColLoop:".to_string());
-        self.output.push("  LDA $0424, X".to_string());
+        self.output.push("  LDA $0444, X".to_string());
         self.output.push("  STA $2007".to_string());
         self.output.push("  INX".to_string());
         self.output.push("  CPX #30".to_string());
@@ -330,7 +332,7 @@ impl CodeGenerator {
         self.output.push("  STA $2000".to_string());
         self.output.push("  LDX #0".to_string());
         self.output.push("VBlankBufferRowLoop:".to_string());
-        self.output.push("  LDA $0424, X".to_string());
+        self.output.push("  LDA $0444, X".to_string());
         self.output.push("  STA $2007".to_string());
         self.output.push("  INX".to_string());
         self.output.push("  CPX #32".to_string());
@@ -340,7 +342,7 @@ impl CodeGenerator {
         self.output.push("  LDA $F8".to_string());
         self.output.push("  STA $2000".to_string());
         self.output.push("  LDA #0".to_string());
-        self.output.push("  STA $0420".to_string());
+        self.output.push("  STA $0440".to_string());
         self.output.push("SkipVBlankBuffer:".to_string());
 
         self.output.push("  JSR Sound_Update".to_string());
@@ -421,7 +423,7 @@ impl CodeGenerator {
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START));
         self.output.push("  INX".to_string());
-        self.output.push("  CPX #$20".to_string());
+        self.output.push("  CPX #$40".to_string()); // Clear 64 bytes
         self.output.push("  BNE SndClear".to_string());
         self.output.push("  RTS".to_string());
 
@@ -438,12 +440,21 @@ impl CodeGenerator {
         self.output.push("  STA $F0".to_string());
         self.output.push("  LDA $D102, X".to_string());
         self.output.push("  STA $F1".to_string());
+
+        // Read Channel (Offset 0)
         self.output.push("  LDY #$00".to_string());
         self.output.push("  LDA ($F0), Y".to_string());
         self.output.push("  AND #$03".to_string());
         self.output.push("  STA $F2".to_string());
 
         self.output.push("  LDX $F2".to_string());
+        // Map Channel ID to Index (x4)
+        self.output.push("  LDA $F2".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  TAX".to_string());
+
+        // Read Priority (Offset 2)
         self.output.push("  LDY #$02".to_string());
         self.output.push("  LDA ($F0), Y".to_string());
         self.output
@@ -452,13 +463,42 @@ impl CodeGenerator {
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x14));
 
+        // Read Instrument (Offset 1)
         self.output.push("  LDY #$01".to_string());
         self.output.push("  LDA ($F0), Y".to_string());
         self.output.push("  STA $F3".to_string());
 
+        // Read VolEnv (Offset 3)
+        self.output.push("  LDY #$03".to_string());
+        self.output.push("  LDA ($F0), Y".to_string());
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x18));
+
+        // Read PitchEnv (Offset 4)
+        self.output.push("  LDY #$04".to_string());
+        self.output.push("  LDA ($F0), Y".to_string());
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x24));
+
+        // Reset Envelopes
+        self.output.push("  LDA #0".to_string());
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x1C)); // VolEnvPos
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x20)); // VolEnvTimer
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x28)); // PitchEnvPos
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x2C)); // PitchEnvTimer
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x30)); // PitchAccumL
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x34)); // PitchAccumH
+
+        // Advance Ptr (Header Size 5)
         self.output.push("  LDA $F0".to_string());
         self.output.push("  CLC".to_string());
-        self.output.push("  ADC #3".to_string());
+        self.output.push("  ADC #5".to_string());
         self.output.push("  STA $F0".to_string());
         self.output.push("  BCC SndPtrInc2".to_string());
         self.output.push("  INC $F1".to_string());
@@ -471,7 +511,11 @@ impl CodeGenerator {
         self.output.push("  LDY $F2".to_string());
         self.output.push("  LDA $F3".to_string());
         self.output
-            .push(format!("  STA ${:04X}, Y", SOUND_RAM_START + 0x10));
+            .push(format!("  STA ${:04X}, Y", SOUND_RAM_START + 0x10)); // Store Inst in Inst Array? Wait, $0310 + Y (0-3).
+                                                                        // Wait, previous code used 0x10 + Y for Instrument storage?
+                                                                        // "STA ${:04X}, Y", SOUND_RAM_START + 0x10. Y is Channel ID.
+                                                                        // X is Channel Index (0,4,8,12).
+                                                                        // But Inst Config is at $0310-$0313. So Y is correct.
         self.output.push("  LDA #$01".to_string());
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START));
@@ -495,12 +539,16 @@ impl CodeGenerator {
         self.output.push("  PHA".to_string());
         self.output.push("  LDX #$00".to_string());
         self.output.push("  JSR SndChUpdate".to_string());
+        self.output.push("  JSR SndEnvUpdate".to_string());
         self.output.push("  LDX #$04".to_string());
         self.output.push("  JSR SndChUpdate".to_string());
+        self.output.push("  JSR SndEnvUpdate".to_string());
         self.output.push("  LDX #$08".to_string());
         self.output.push("  JSR SndChUpdate".to_string());
+        self.output.push("  JSR SndEnvUpdate".to_string());
         self.output.push("  LDX #$0C".to_string());
         self.output.push("  JSR SndChUpdate".to_string());
+        self.output.push("  JSR SndEnvUpdate".to_string());
         self.output.push("  PLA".to_string());
         self.output.push("  TAY".to_string());
         self.output.push("  PLA".to_string());
@@ -509,12 +557,12 @@ impl CodeGenerator {
         self.output.push("  RTS".to_string());
 
         self.output.push("Runtime_StringLen:".to_string());
-        self.output.push("  STA $02".to_string()); // Ptr Low
-        self.output.push("  STX $03".to_string()); // Ptr High
+        self.output.push("  STA $02".to_string());
+        self.output.push("  STX $03".to_string());
         self.output.push("  LDA #0".to_string());
-        self.output.push("  STA $06".to_string()); // Len Low
-        self.output.push("  STA $07".to_string()); // Len High
-        self.output.push("  TAY".to_string()); // Y = 0
+        self.output.push("  STA $06".to_string());
+        self.output.push("  STA $07".to_string());
+        self.output.push("  TAY".to_string());
         self.output.push("Runtime_StringLen_Loop:".to_string());
         self.output.push("  LDA ($02), Y".to_string());
         self.output.push("  CMP #0".to_string());
@@ -527,7 +575,7 @@ impl CodeGenerator {
             .push("Runtime_StringLen_SkipIncHigh:".to_string());
         self.output.push("  INY".to_string());
         self.output.push("  BNE Runtime_StringLen_Loop".to_string());
-        self.output.push("  INC $03".to_string()); // Wrap page
+        self.output.push("  INC $03".to_string());
         self.output.push("  JMP Runtime_StringLen_Loop".to_string());
         self.output.push("Runtime_StringLen_Done:".to_string());
         self.output.push("  LDA $06".to_string());
@@ -607,6 +655,17 @@ impl CodeGenerator {
         self.output.push("  STA $F6".to_string());
         self.output.push("  LDA $D001, Y".to_string());
         self.output.push("  STA $F7".to_string());
+
+        self.output.push("  LDA #0".to_string());
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x1C));
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x20));
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x28));
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x2C));
+
         self.output.push("  CPX #$00".to_string());
         self.output.push("  BEQ PlayP1".to_string());
         self.output.push("  CPX #$04".to_string());
@@ -678,6 +737,136 @@ impl CodeGenerator {
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 3));
         self.output.push("SndChEnd:".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("SndEnvUpdate:".to_string());
+        self.output
+            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x18)); // VolEnvID
+        self.output.push("  CMP #$FF".to_string());
+        self.output.push("  BNE SndEnvProcess".to_string());
+        self.output.push("  RTS".to_string());
+        self.output.push("SndEnvProcess:".to_string());
+
+        self.output
+            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x20)); // Timer
+        self.output.push("  BEQ SndEnvNextStep".to_string());
+        self.output
+            .push(format!("  DEC ${:04X}, X", SOUND_RAM_START + 0x20));
+        self.output.push("  JMP SndEnvUpdate_Done".to_string());
+
+        self.output.push("SndEnvNextStep:".to_string());
+        self.output
+            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x18));
+        self.output.push("  ASL".to_string());
+        self.output.push("  TAY".to_string());
+        self.output
+            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
+        self.output.push("  STA $F0".to_string());
+        self.output
+            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
+        self.output.push("  STA $F1".to_string());
+
+        self.output
+            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x1C)); // Pos
+        self.output.push("  STA $F2".to_string());
+
+        self.output.push("  LDA $F0".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #1".to_string());
+        self.output.push("  STA $F0".to_string());
+        self.output.push("  BCC SndEnvPtr1".to_string());
+        self.output.push("  INC $F1".to_string());
+        self.output.push("SndEnvPtr1:".to_string());
+
+        self.output.push("  LDA $F2".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC $F0".to_string());
+        self.output.push("  STA $F0".to_string());
+        self.output.push("  BCC SndEnvPtr2".to_string());
+        self.output.push("  INC $F1".to_string());
+        self.output.push("SndEnvPtr2:".to_string());
+
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($F0), Y".to_string());
+        self.output.push("  STA $F3".to_string()); // Val
+        self.output.push("  INY".to_string());
+        self.output.push("  LDA ($F0), Y".to_string());
+        self.output.push("  STA $F4".to_string()); // Dur
+
+        self.output.push("  LDA $F4".to_string());
+        self.output.push("  BNE SndEnvApply".to_string());
+
+        // Loop
+        self.output
+            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x18));
+        self.output.push("  ASL".to_string());
+        self.output.push("  TAY".to_string());
+        self.output
+            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
+        self.output.push("  STA $F0".to_string());
+        self.output
+            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
+        self.output.push("  STA $F1".to_string());
+        self.output.push("  LDY #0".to_string());
+        self.output.push("  LDA ($F0), Y".to_string());
+        self.output.push("  CMP #$FF".to_string());
+        self.output.push("  BEQ SndEnvHold".to_string());
+
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x1C));
+        self.output.push("  LDA #1".to_string());
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x20));
+        self.output.push("  JMP SndEnvUpdate_Done".to_string());
+
+        self.output.push("SndEnvHold:".to_string());
+        self.output.push("  JMP SndEnvUpdate_Done".to_string());
+
+        self.output.push("SndEnvApply:".to_string());
+        self.output.push("  LDA $F4".to_string());
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x20));
+        self.output
+            .push(format!("  INC ${:04X}, X", SOUND_RAM_START + 0x1C));
+
+        self.output
+            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x10));
+        self.output.push("  AND #$F0".to_string());
+        self.output.push("  ORA $F3".to_string());
+        self.output.push("  STA $F5".to_string());
+
+        self.output.push("  CPX #0".to_string());
+        self.output.push("  BEQ SndEnvVolP1".to_string());
+        self.output.push("  CPX #4".to_string());
+        self.output.push("  BEQ SndEnvVolP2".to_string());
+        self.output.push("  CPX #12".to_string());
+        self.output.push("  BEQ SndEnvVolDMC".to_string());
+        self.output.push("  CPX #8".to_string());
+        self.output.push("  BEQ SndEnvVolTri".to_string());
+        self.output.push("  JMP SndEnvUpdate_Done".to_string());
+
+        self.output.push("SndEnvVolP1:".to_string());
+        self.output.push("  LDA $F5".to_string());
+        self.output.push("  STA $4000".to_string());
+        self.output.push("  JMP SndEnvUpdate_Done".to_string());
+        self.output.push("SndEnvVolP2:".to_string());
+        self.output.push("  LDA $F5".to_string());
+        self.output.push("  STA $4004".to_string());
+        self.output.push("  JMP SndEnvUpdate_Done".to_string());
+        self.output.push("SndEnvVolDMC:".to_string());
+        self.output.push("  JMP SndEnvUpdate_Done".to_string());
+        self.output.push("SndEnvVolTri:".to_string());
+        self.output.push("  LDA $F3".to_string());
+        self.output.push("  BEQ SndEnvTriOff".to_string());
+        self.output.push("  LDA #$FF".to_string());
+        self.output.push("  STA $4008".to_string());
+        self.output.push("  JMP SndEnvUpdate_Done".to_string());
+        self.output.push("SndEnvTriOff:".to_string());
+        self.output.push("  LDA #$00".to_string());
+        self.output.push("  STA $4008".to_string());
+
+        self.output.push("SndEnvUpdate_Done:".to_string());
         self.output.push("  RTS".to_string());
     }
 
@@ -1241,7 +1430,7 @@ impl CodeGenerator {
         self.output.push("Runtime_Scroll_LoadColumn:".to_string());
 
         // Check Buffer
-        self.output.push("  LDA $0420".to_string());
+        self.output.push("  LDA $0440".to_string());
         self.output.push("  BNE Scroll_LoadColumn_Done".to_string());
 
         // Save Data Ptr (A/X) -> $00/$01
@@ -1281,24 +1470,24 @@ impl CodeGenerator {
 
         // Write Header
         self.output.push("  LDA #0".to_string());
-        self.output.push("  STA $0421".to_string()); // Type
+        self.output.push("  STA $0441".to_string()); // Type
         self.output.push("  LDA $05".to_string());
-        self.output.push("  STA $0422".to_string()); // High
+        self.output.push("  STA $0442".to_string()); // High
         self.output.push("  LDA $04".to_string());
-        self.output.push("  STA $0423".to_string()); // Low
+        self.output.push("  STA $0443".to_string()); // Low
 
         // Copy Data
         self.output.push("  LDY #0".to_string());
         self.output.push("Scroll_CopyLoop:".to_string());
         self.output.push("  LDA ($00), Y".to_string());
-        self.output.push("  STA $0424, Y".to_string());
+        self.output.push("  STA $0444, Y".to_string());
         self.output.push("  INY".to_string());
         self.output.push("  CPY #30".to_string());
         self.output.push("  BNE Scroll_CopyLoop".to_string());
 
         // Set Flag
         self.output.push("  LDA #1".to_string());
-        self.output.push("  STA $0420".to_string());
+        self.output.push("  STA $0440".to_string());
 
         self.output.push("Scroll_LoadColumn_Done:".to_string());
         self.output.push("  RTS".to_string());
@@ -1307,7 +1496,7 @@ impl CodeGenerator {
         self.output.push("Runtime_Scroll_LoadRow:".to_string());
 
         // Check Buffer
-        self.output.push("  LDA $0420".to_string());
+        self.output.push("  LDA $0440".to_string());
         self.output.push("  BNE Scroll_LoadRow_Done".to_string());
 
         // Save Data Ptr (A/X) -> $00/$01
@@ -1353,24 +1542,24 @@ impl CodeGenerator {
 
         // Write Header
         self.output.push("  LDA #1".to_string()); // Type 1 (Row)
-        self.output.push("  STA $0421".to_string()); // Type
+        self.output.push("  STA $0441".to_string()); // Type
         self.output.push("  LDA $05".to_string());
-        self.output.push("  STA $0422".to_string()); // High
+        self.output.push("  STA $0442".to_string()); // High
         self.output.push("  LDA $04".to_string());
-        self.output.push("  STA $0423".to_string()); // Low
+        self.output.push("  STA $0443".to_string()); // Low
 
         // Copy Data
         self.output.push("  LDY #0".to_string());
         self.output.push("Scroll_RowCopyLoop:".to_string());
         self.output.push("  LDA ($00), Y".to_string());
-        self.output.push("  STA $0424, Y".to_string());
+        self.output.push("  STA $0444, Y".to_string());
         self.output.push("  INY".to_string());
         self.output.push("  CPY #32".to_string()); // 32 tiles for row
         self.output.push("  BNE Scroll_RowCopyLoop".to_string());
 
         // Set Flag
         self.output.push("  LDA #1".to_string());
-        self.output.push("  STA $0420".to_string());
+        self.output.push("  STA $0440".to_string());
 
         self.output.push("Scroll_LoadRow_Done:".to_string());
         self.output.push("  RTS".to_string());

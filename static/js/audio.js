@@ -10,6 +10,7 @@ class AudioTracker {
             { name: "Track 4", notes: [], channel: 3, instrument: 0x0F, priority: 0 } // DMC
         ];
         this.samples = [];
+        this.envelopeEditor = null;
 
         // Configuration
         this.rows = 24;
@@ -21,6 +22,7 @@ class AudioTracker {
     }
 
     initUI() {
+        this.envelopeEditor = new window.EnvelopeEditor('audio-envelopes-root');
         this.renderGrid();
         this.bindEvents();
     }
@@ -28,6 +30,8 @@ class AudioTracker {
     bindEvents() {
         const trackSelect = document.getElementById('audio-track-select');
         const instrumentSelect = document.getElementById('audio-instrument-select');
+        const volEnvSelect = document.getElementById('audio-vol-env-select');
+        const pitchEnvSelect = document.getElementById('audio-pitch-env-select');
 
         if (trackSelect) {
             trackSelect.addEventListener('change', (e) => {
@@ -40,6 +44,20 @@ class AudioTracker {
             instrumentSelect.addEventListener('change', (e) => {
                 this.currentInstrument = parseInt(e.target.value);
                 this.tracks[this.currentTrackIndex].instrument = this.currentInstrument;
+            });
+        }
+
+        if (volEnvSelect) {
+            volEnvSelect.addEventListener('change', (e) => {
+                const val = parseInt(e.target.value);
+                this.tracks[this.currentTrackIndex].vol_env = (val < 0) ? null : val;
+            });
+        }
+
+        if (pitchEnvSelect) {
+            pitchEnvSelect.addEventListener('change', (e) => {
+                const val = parseInt(e.target.value);
+                this.tracks[this.currentTrackIndex].pitch_env = (val < 0) ? null : val;
             });
         }
 
@@ -63,6 +81,9 @@ class AudioTracker {
             btnSamples.addEventListener('click', () => {
                 const trackerRoot = document.getElementById('audio-tracker-root');
                 const samplesRoot = document.getElementById('audio-samples-root');
+                const envRoot = document.getElementById('audio-envelopes-root');
+
+                envRoot.style.display = 'none';
                 if (samplesRoot.style.display === 'none') {
                     samplesRoot.style.display = 'block';
                     trackerRoot.style.display = 'none';
@@ -73,6 +94,29 @@ class AudioTracker {
                 }
             });
         }
+
+        const btnEnvelopes = document.getElementById('btn-manage-envelopes');
+        if (btnEnvelopes) {
+            btnEnvelopes.addEventListener('click', () => {
+                const trackerRoot = document.getElementById('audio-tracker-root');
+                const samplesRoot = document.getElementById('audio-samples-root');
+                const envRoot = document.getElementById('audio-envelopes-root');
+
+                samplesRoot.style.display = 'none';
+                if (envRoot.style.display === 'none') {
+                    envRoot.style.display = 'block';
+                    trackerRoot.style.display = 'none';
+                } else {
+                    envRoot.style.display = 'none';
+                    trackerRoot.style.display = 'grid';
+                    this.loadTrackUI(); // Reload selects
+                }
+            });
+        }
+
+        window.addEventListener('envelopes-updated', () => {
+            this.loadTrackUI();
+        });
 
         const btnAddSample = document.getElementById('btn-add-sample');
         if (btnAddSample) {
@@ -138,21 +182,37 @@ class AudioTracker {
         const cells = this.root.querySelectorAll('.tracker-cell');
         cells.forEach(c => c.classList.remove('active'));
 
+        const track = this.tracks[this.currentTrackIndex];
+
         const instrumentSelect = document.getElementById('audio-instrument-select');
         if (instrumentSelect) {
-            const trk = this.tracks[this.currentTrackIndex];
-            if (trk.instrument === undefined) trk.instrument = 0x9F;
-            instrumentSelect.value = trk.instrument;
+            if (track.instrument === undefined) track.instrument = 0x9F;
+            instrumentSelect.value = track.instrument;
         }
 
         const priorityInput = document.getElementById('audio-priority-input');
         if (priorityInput) {
-            const trk = this.tracks[this.currentTrackIndex];
-            if (trk.priority === undefined) trk.priority = 0;
-            priorityInput.value = trk.priority;
+            if (track.priority === undefined) track.priority = 0;
+            priorityInput.value = track.priority;
         }
 
-        const track = this.tracks[this.currentTrackIndex];
+        const updateEnvSelect = (id, val) => {
+            const sel = document.getElementById(id);
+            if (sel && this.envelopeEditor) {
+                sel.innerHTML = '<option value="-1">No Env</option>';
+                this.envelopeEditor.getEnvelopes().forEach((env, i) => {
+                    const opt = document.createElement('option');
+                    opt.value = i;
+                    opt.textContent = env.name;
+                    sel.appendChild(opt);
+                });
+                sel.value = (val === null || val === undefined) ? -1 : val;
+            }
+        };
+
+        updateEnvSelect('audio-vol-env-select', track.vol_env);
+        updateEnvSelect('audio-pitch-env-select', track.pitch_env);
+
         track.notes.forEach(note => {
             const cell = this.root.querySelector(`.tracker-cell[data-row="${note.row}"][data-col="${note.col}"]`);
             if (cell) {
@@ -163,12 +223,17 @@ class AudioTracker {
 
     getData() {
         return {
-            tracks: this.tracks,
-            samples: this.samples
+            audio_tracks: this.tracks, // Renamed to match struct key
+            samples: this.samples,
+            envelopes: this.envelopeEditor ? this.envelopeEditor.getEnvelopes() : []
         };
     }
 
     loadData(data) {
+        if (data && data.envelopes && this.envelopeEditor) {
+            this.envelopeEditor.loadEnvelopes(data.envelopes);
+        }
+
         if (data && data.audio_tracks) {
             this.tracks = data.audio_tracks.map((t, i) => ({
                 name: t.name || `Track ${i+1}`,
@@ -180,7 +245,9 @@ class AudioTracker {
                 })),
                 channel: (t.channel !== undefined) ? t.channel : i,
                 instrument: (t.instrument !== undefined) ? t.instrument : ((i===2)?0xFF:((i===3)?0x0F:0x9F)),
-                priority: (t.priority !== undefined) ? t.priority : 0
+                priority: (t.priority !== undefined) ? t.priority : 0,
+                vol_env: t.vol_env,
+                pitch_env: t.pitch_env
             }));
 
             // Fill up to 4 if missing
@@ -191,15 +258,17 @@ class AudioTracker {
                     notes: [],
                     channel: i,
                     instrument: (i===2)?0xFF:((i===3)?0x0F:0x9F),
-                    priority: 0
+                    priority: 0,
+                    vol_env: null,
+                    pitch_env: null
                 });
             }
         } else {
              this.tracks = [
-                { name: "Track 1", notes: [], channel: 0, instrument: 0x9F, priority: 0 },
-                { name: "Track 2", notes: [], channel: 1, instrument: 0x9F, priority: 0 },
-                { name: "Track 3", notes: [], channel: 2, instrument: 0xFF, priority: 0 },
-                { name: "Track 4", notes: [], channel: 3, instrument: 0x0F, priority: 0 }
+                { name: "Track 1", notes: [], channel: 0, instrument: 0x9F, priority: 0, vol_env: null, pitch_env: null },
+                { name: "Track 2", notes: [], channel: 1, instrument: 0x9F, priority: 0, vol_env: null, pitch_env: null },
+                { name: "Track 3", notes: [], channel: 2, instrument: 0xFF, priority: 0, vol_env: null, pitch_env: null },
+                { name: "Track 4", notes: [], channel: 3, instrument: 0x0F, priority: 0, vol_env: null, pitch_env: null }
             ];
         }
 

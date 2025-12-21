@@ -32,16 +32,16 @@ mod tests {
         let mut codegen = CodeGenerator::new(symbol_table);
         let asm_lines = codegen.generate(&program).expect("Codegen failed");
 
-        // p is at $0460.
-        // p.x is at $0460. p.y is at $0461.
-        // p.x = 10 -> LDA #$0A; STA $0460
-        // p.y = 20 -> LDA #$14; STA $0461
+        // p is at $0480.
+        // p.x is at $0480. p.y is at $0481.
+        // p.x = 10 -> LDA #$0A; STA $0480
+        // p.y = 20 -> LDA #$14; STA $0481
 
         let asm_str = asm_lines.join("\n");
         assert!(asm_str.contains("LDA #$0A"));
-        assert!(asm_str.contains("STA $0460"));
+        assert!(asm_str.contains("STA $0480"));
         assert!(asm_str.contains("LDA #$14"));
-        assert!(asm_str.contains("STA $0461"));
+        assert!(asm_str.contains("STA $0481"));
     }
 
     #[test]
@@ -86,12 +86,12 @@ mod tests {
 
         let asm_str = asm_lines.join("\n");
 
-        // r.tl.x = 1 => STA $0460
+        // r.tl.x = 1 => STA $0480
         assert!(asm_str.contains("LDA #$01"));
-        assert!(asm_str.contains("STA $0460"));
+        assert!(asm_str.contains("STA $0480"));
 
-        // r.br.y = 2 => STA $0463
+        // r.br.y = 2 => STA $0483
         assert!(asm_str.contains("LDA #$02"));
-        assert!(asm_str.contains("STA $0463"));
+        assert!(asm_str.contains("STA $0483"));
     }
 }

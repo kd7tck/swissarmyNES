@@ -113,9 +113,16 @@
                             <option value="207">75% Duty, Decay ($CF)</option>
                             <option value="255">Linear On ($FF)</option>
                         </select>
+                        <select id="audio-vol-env-select" title="Volume Envelope">
+                            <option value="-1">No Vol Env</option>
+                        </select>
+                        <select id="audio-pitch-env-select" title="Pitch Envelope">
+                            <option value="-1">No Pitch Env</option>
+                        </select>
                         <input type="number" id="audio-priority-input" min="0" max="255" value="0" title="Priority (Higher value interrupts lower)" style="width: 50px; background: #333; color: white; border: 1px solid #555;">
                         <button id="btn-play-track">Play</button>
                         <button id="btn-manage-samples">Samples</button>
+                        <button id="btn-manage-envelopes">Envelopes</button>
                     </div>
                     <div id="audio-tracker-root" class="tracker-grid"></div>
                     <div id="audio-samples-root" style="display:none; padding: 10px; border: 1px solid #444;">
@@ -128,6 +135,9 @@
                          <ul id="sample-list" style="list-style: none; padding: 0;">
                              <!-- Samples list -->
                          </ul>
+                    </div>
+                    <div id="audio-envelopes-root" style="display:none; padding: 10px; border: 1px solid #444; height: 100%;">
+                        <!-- Injected by envelopes.js -->
                     </div>
                 </div>
             </section>
@@ -143,6 +153,7 @@
     <script src="/js/chr.js"></script>
     <script src="/js/map.js"></script>
     <script src="/js/audio.js"></script>
+    <script src="/js/envelopes.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

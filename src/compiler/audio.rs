@@ -160,6 +160,7 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Vec<u8> {
         for sfx in &assets.sound_effects {
             // Speed (Duration)
             let speed = if sfx.speed == 0 { 1 } else { sfx.speed };
+            let loop_val = if sfx.does_loop { 0 } else { 0xFF };
 
             // Vol Env
             {
@@ -169,7 +170,7 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Vec<u8> {
                 blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
                 env_idx += 1;
 
-                blob.push(0xFF); // No Loop
+                blob.push(loop_val);
                 current_offset += 1;
 
                 for &val in &sfx.vol_sequence {
@@ -190,7 +191,7 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Vec<u8> {
                 blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
                 env_idx += 1;
 
-                blob.push(0xFF); // No Loop
+                blob.push(loop_val);
                 current_offset += 1;
 
                 for &val in &sfx.pitch_sequence {
@@ -211,7 +212,7 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Vec<u8> {
                 blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
                 env_idx += 1;
 
-                blob.push(0xFF); // No Loop
+                blob.push(loop_val);
                 current_offset += 1;
 
                 for &val in &sfx.duty_sequence {

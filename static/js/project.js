@@ -91,11 +91,13 @@ class ProjectManager {
             document.getElementById('current-project-name').textContent = name;
 
             // Load Audio Tracks
-            if (window.audioTracker && this.assets.audio_tracks) {
-                window.audioTracker.loadData(this.assets);
-            } else if (window.audioTracker) {
-                // Initialize empty if no tracks
-                window.audioTracker.loadData({ audio_tracks: [] });
+            if (window.audioTracker) {
+                window.audioTracker.loadData(this.assets || {});
+            }
+
+            // Load SFX
+            if (window.sfxEditor) {
+                window.sfxEditor.loadData(this.assets.sound_effects || []);
             }
 
             // Dispatch an event to let other components know the project loaded
@@ -211,7 +213,14 @@ class ProjectManager {
         // Collect Audio Data
         if (window.audioTracker) {
              const audioData = window.audioTracker.getData();
-             this.assets.audio_tracks = audioData.tracks;
+             this.assets.audio_tracks = audioData.audio_tracks;
+             this.assets.samples = audioData.samples;
+             this.assets.envelopes = audioData.envelopes;
+        }
+
+        // Collect SFX Data
+        if (window.sfxEditor) {
+            this.assets.sound_effects = window.sfxEditor.getData();
         }
 
         const payload = {

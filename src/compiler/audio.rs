@@ -3,6 +3,7 @@ use crate::compiler::codegen::ENVELOPE_TABLE_ADDR;
 pub const PERIOD_TABLE_ADDR: u16 = 0xD000;
 pub const MUSIC_DATA_ADDR: u16 = 0xD100;
 pub const SAMPLE_TABLE_ADDR: u16 = 0xD480;
+pub const SFX_TABLE_ADDR: u16 = 0xD900;
 pub const SAMPLE_DATA_ADDR: u16 = 0xE040;
 
 /// NTSC Period Table for octaves 0-7 (C to B)
@@ -115,21 +116,28 @@ pub fn compile_samples(assets: &Option<ProjectAssets>) -> (Vec<u8>, Vec<u8>) {
 pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Vec<u8> {
     let mut blob = Vec::new();
     if let Some(assets) = assets {
-        let count = assets.envelopes.len();
-        blob.push(count as u8);
+        let user_env_count = assets.envelopes.len();
+        let sfx_count = assets.sound_effects.len();
+        let total_count = user_env_count + (sfx_count * 3); // Vol, Pitch, Duty per SFX
+
+        blob.push(total_count as u8);
 
         // Pointers
-        let pointer_table_size = count * 2;
+        let pointer_table_size = total_count * 2;
         blob.extend(iter::repeat_n(0, pointer_table_size));
 
         let start_addr = ENVELOPE_TABLE_ADDR as usize;
         let mut current_offset = 1 + pointer_table_size;
 
-        for (i, env) in assets.envelopes.iter().enumerate() {
+        let mut env_idx = 0;
+
+        // 1. User Envelopes
+        for env in &assets.envelopes {
             let abs_addr = start_addr + current_offset;
-            let ptr_idx = 1 + (i * 2);
+            let ptr_idx = 1 + (env_idx * 2);
             blob[ptr_idx] = (abs_addr & 0xFF) as u8;
             blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
+            env_idx += 1;
 
             // Data
             // Loop Index
@@ -146,6 +154,123 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Vec<u8> {
             blob.push(0); // Val
             blob.push(0); // Dur = 0
             current_offset += 2;
+        }
+
+        // 2. SFX Envelopes
+        for sfx in &assets.sound_effects {
+            // Speed (Duration)
+            let speed = if sfx.speed == 0 { 1 } else { sfx.speed };
+
+            // Vol Env
+            {
+                let abs_addr = start_addr + current_offset;
+                let ptr_idx = 1 + (env_idx * 2);
+                blob[ptr_idx] = (abs_addr & 0xFF) as u8;
+                blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
+                env_idx += 1;
+
+                blob.push(0xFF); // No Loop
+                current_offset += 1;
+
+                for &val in &sfx.vol_sequence {
+                    blob.push(val);
+                    blob.push(speed);
+                    current_offset += 2;
+                }
+                blob.push(0);
+                blob.push(0);
+                current_offset += 2;
+            }
+
+            // Pitch Env
+            {
+                let abs_addr = start_addr + current_offset;
+                let ptr_idx = 1 + (env_idx * 2);
+                blob[ptr_idx] = (abs_addr & 0xFF) as u8;
+                blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
+                env_idx += 1;
+
+                blob.push(0xFF); // No Loop
+                current_offset += 1;
+
+                for &val in &sfx.pitch_sequence {
+                    blob.push(val as u8); // Cast i8 to u8
+                    blob.push(speed);
+                    current_offset += 2;
+                }
+                blob.push(0);
+                blob.push(0);
+                current_offset += 2;
+            }
+
+            // Duty Env
+            {
+                let abs_addr = start_addr + current_offset;
+                let ptr_idx = 1 + (env_idx * 2);
+                blob[ptr_idx] = (abs_addr & 0xFF) as u8;
+                blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
+                env_idx += 1;
+
+                blob.push(0xFF); // No Loop
+                current_offset += 1;
+
+                for &val in &sfx.duty_sequence {
+                    blob.push(val);
+                    blob.push(speed);
+                    current_offset += 2;
+                }
+                blob.push(0);
+                blob.push(0);
+                current_offset += 2;
+            }
+        }
+    } else {
+        blob.push(0);
+    }
+    if blob.is_empty() {
+        blob.push(0);
+    }
+    blob
+}
+
+pub fn compile_sfx_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
+    let mut blob = Vec::new();
+    if let Some(assets) = assets {
+        let count = assets.sound_effects.len();
+        blob.push(count as u8);
+
+        // Pointers
+        let pointer_table_size = count * 2;
+        let data_start_offset = 1 + pointer_table_size;
+        blob.extend(iter::repeat_n(0, pointer_table_size));
+
+        let mut current_offset = data_start_offset;
+
+        let user_env_count = assets.envelopes.len();
+
+        for (i, sfx) in assets.sound_effects.iter().enumerate() {
+            let abs_addr = SFX_TABLE_ADDR as usize + current_offset;
+            let ptr_idx = 1 + (i * 2);
+            blob[ptr_idx] = (abs_addr & 0xFF) as u8;
+            blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
+
+            // SFX Data Structure:
+            // Channel (1)
+            // Priority (1)
+            // VolEnvID (1)
+            // PitchEnvID (1)
+            // DutyEnvID (1)
+
+            blob.push(sfx.channel);
+            blob.push(sfx.priority);
+
+            // Calculate Envelope IDs
+            let base_env_id = user_env_count + (i * 3);
+            blob.push(base_env_id as u8); // Vol
+            blob.push((base_env_id + 1) as u8); // Pitch
+            blob.push((base_env_id + 2) as u8); // Duty
+
+            current_offset += 5;
         }
     } else {
         blob.push(0);

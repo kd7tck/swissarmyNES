@@ -94,9 +94,27 @@ Phase 1-23 are complete. Phase 24 is Next.
 - **Signed Assignment Bug**: Fixed `Statement::Let` to correctly sign-extend `INT` values when assigning to `WORD` variables (using `STX` instead of zero-filling).
 
 - **Next Steps**:
-    - Start Phase 25a: Audio - SFX Engine Core.
-    - Define `SoundEffect` struct and binary format.
-    - Implement `SFX_Play` routine in Assembly.
+    - Start Phase 25b: Audio - SFX Editor UI Foundation.
+    - Implement Frontend SFX Editor (List, Create, Delete).
+
+### Phase 25a: Audio - SFX Engine Core (Completed)
+- **Implemented**: Sound Effects (SFX) support and Sound Engine Overhaul.
+- **Backend**:
+    - `SoundEffect` struct added to `ProjectAssets`.
+    - `compile_sfx_data` generates SFX Table at `$D900`.
+    - `compile_envelopes` generates implicit envelopes for SFX.
+- **Codegen**:
+    - **Memory Map Updated**:
+        - Sound RAM: `$0300-$037F` (128 bytes, Stride 32 per channel).
+        - VBlank Buffer: `$0380-$03BF` (64 bytes).
+        - String Heap: `$03C0-$04BF` (256 bytes).
+        - User Vars: `$04C0`.
+    - **Addresses**: SFX Table `$D900`, Envelope Table `$DA00`, Nametable `$D500`.
+    - **Sound Engine**:
+        - Refactored to use 32-byte stride per channel to avoid collisions.
+        - Implemented `SFX_Play`, `SndPitchUpdate`, `SndDutyUpdate`.
+        - Fixed `rs6502` compatibility issues (`.db` -> `db`, avoid `LDX abs,Y`).
+- **Verified**: `tests/sfx_compilation_test.rs` passed. All regressions fixed.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -105,22 +123,19 @@ Phase 1-23 are complete. Phase 24 is Next.
     - `$F8`: PPU Ctrl Shadow.
 - **$0100-$01FF**: Stack.
 - **$0200-$02FF**: OAM (Shadow Sprites).
-- **$0300-$034F**: Sound Engine State.
-    - `$0300`-$030F: Channel State.
-    - `$0310`-$0313: Channel Instrument.
-    - `$0314`-$0317: Channel Priority.
-    - `$0318`-$0337: Vol/Pitch Envelope State.
-    - `$0338`-$034B: Arpeggio State (ID, Pos, Timer, Offset, BasePitch).
-    - `$034C`-$034F: LastPeriodH (for phase reset avoidance).
-- **$0350-$044F**: String Heap.
-- **$0450-$048F**: VBlank Buffer (Internal).
-- **$0490-$07FF**: User Variables (DIM).
+- **$0300-$037F**: Sound Engine State (128 bytes).
+    - Stride 32 bytes per channel (0, 32, 64, 96).
+    - Offsets: State(0), Inst(4), Prio(5), Vol(6), Pitch(9), Arp(13), Base(17), Duty(19).
+- **$0380-$03BF**: VBlank Buffer.
+- **$03C0-$04BF**: String Heap (256 bytes).
+- **$04C0-$07FF**: User Variables (DIM).
 - **$8000-$CFFF**: PRG-ROM (Code).
 - **$D000**: NTSC Period Table.
 - **$D100**: Music Data.
 - **$D480**: DPCM Sample Table (Addr, Len).
-- **$D500**: Nametable Data.
-- **$D900**: Envelope Data Table.
+- **$D500**: Nametable Data (Ends at $D900).
+- **$D900**: SFX Table.
+- **$DA00**: Envelope Data Table.
 - **$E000**: Palette Data.
 - **$E040**: DPCM Samples (Start).
 - **$FF00**: Data Tables (Vectors pointers).

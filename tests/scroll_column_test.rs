@@ -37,12 +37,12 @@ mod tests {
 
         // Verify Runtime Helper
         assert!(asm_source.contains("Runtime_Scroll_LoadColumn:"));
-        assert!(asm_source.contains("STA $0451")); // Type
-        assert!(asm_source.contains("STA $0454, Y")); // Data Copy
+        assert!(asm_source.contains("STA $0381")); // Type
+        assert!(asm_source.contains("STA $0384, Y")); // Data Copy
 
         // Verify NMI Processing
         assert!(asm_source.contains("TrampolineNMI:"));
-        assert!(asm_source.contains("LDA $0450")); // Check Flag
+        assert!(asm_source.contains("LDA $0380")); // Check Flag
         assert!(asm_source.contains("STA $2006")); // Set Addr
         assert!(asm_source.contains("ORA #$04")); // Inc 32
         assert!(asm_source.contains("STA $2007")); // Write Data

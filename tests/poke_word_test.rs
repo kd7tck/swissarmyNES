@@ -30,11 +30,11 @@ mod tests {
         let asm_source = asm_lines.join("\n");
 
         // Verify Assembly
-        // Look for assignment of $2006 to Ptr (at $0490)
+        // Look for assignment of $2006 to Ptr (at $04C0)
         let found_assignment = asm_lines.iter().any(|line| line.contains("LDA #$06"))
-            && asm_lines.iter().any(|line| line.contains("STA $0490"))
+            && asm_lines.iter().any(|line| line.contains("STA $04C0"))
             && asm_lines.iter().any(|line| line.contains("LDA #$20"))
-            && asm_lines.iter().any(|line| line.contains("STA $0491"));
+            && asm_lines.iter().any(|line| line.contains("STA $04C1"));
 
         assert!(
             found_assignment,
@@ -47,9 +47,9 @@ mod tests {
         assert!(found_poke, "Did not find indirect store");
 
         // We want to ensure we are loading from the variable
-        let found_ptr_load = asm_lines.iter().any(|line| line.contains("LDA $0490"))
+        let found_ptr_load = asm_lines.iter().any(|line| line.contains("LDA $04C0"))
             && asm_lines.iter().any(|line| line.contains("STA $02"))
-            && asm_lines.iter().any(|line| line.contains("LDA $0491"))
+            && asm_lines.iter().any(|line| line.contains("LDA $04C1"))
             && asm_lines.iter().any(|line| line.contains("STA $03"));
 
         assert!(found_ptr_load, "Did not find 16-bit pointer setup");
@@ -82,11 +82,11 @@ mod tests {
         // Verify assignment of constant to WORD
         // Should load #$07 and store to Low, load #$20 and store to High
         let found_assignment = asm_lines.iter().any(|line| line.contains("LDA #$07"))
-            && asm_lines.iter().any(|line| line.contains("STA $0490"))
+            && asm_lines.iter().any(|line| line.contains("STA $04C0"))
             && ((asm_lines.iter().any(|line| line.contains("LDA #$20"))
-                && asm_lines.iter().any(|line| line.contains("STA $0491")))
+                && asm_lines.iter().any(|line| line.contains("STA $04C1")))
                 || (asm_lines.iter().any(|line| line.contains("LDX #$20"))
-                    && asm_lines.iter().any(|line| line.contains("STX $0491"))));
+                    && asm_lines.iter().any(|line| line.contains("STX $04C1"))));
 
         assert!(
             found_assignment,

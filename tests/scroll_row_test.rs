@@ -36,7 +36,7 @@ mod tests {
 
         // Verify Header Writing (Type 1)
         assert!(asm_source.contains("LDA #1"));
-        assert!(asm_source.contains("STA $0451")); // Type
+        assert!(asm_source.contains("STA $0381")); // Type
 
         // Verify NMI Processing (Row Loop)
         assert!(asm_source.contains("VBlankBufferRowLoop:"));

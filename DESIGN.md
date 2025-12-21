@@ -240,7 +240,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
 ## Phase 28: Visual - Metatile Integration
 **Goal:** Organize game world. Screen editing will be built into the map editor directly. Allowing a person to edit individial tiles or collection of tiles called metatiles.
 - **Action Items:**
-    - Integrate metatiles into other systems more fully.
+    - Integrate metatiles into MAP UI system more fully.
 - **Completion Criteria:** Can edit and work with metatiles in other systems that also use tiles.
 
 ## Phase 29: Visual - World Editor for MAPS

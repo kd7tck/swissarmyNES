@@ -50,24 +50,20 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-18 are complete. Phase 19 is Next.
+Phase 1-20 are complete. Phase 21 is Next.
 
-### Phase 18: Scrolling - Horizontal (Completed)
-- **Implemented**: `Scroll` and `PPU` modules.
+### Phase 20: Random Number Generator (Completed)
+- **Implemented**: `RND(max)` function and `RANDOMIZE seed` statement.
 - **Details**:
-    - **Scroll**:
-        - `Scroll.Set(x, y)`: Updates shadow registers.
-        - `Scroll.LoadColumn(x, array)`: Queues column data for VBlank transfer.
-    - **PPU**:
-        - `PPU.Ctrl(val)`: Updates `$2000` and shadow `$F8`.
-        - `PPU.Mask(val)`: Updates `$2001`.
     - **Runtime**:
-        - Uses ZP `$E0` (Scroll X) and `$E1` (Scroll Y), `$F8` (PPU Ctrl Shadow).
-        - VBlank Buffer at `$0420-$045F`.
-        - `TrampolineNMI` handles OAM DMA, VBlank Buffer, Sound, User NMI, and Scroll.
-    - **Memory Map**:
-        - User Variables moved to `$0460`.
-    - **Verified**: `tests/scroll_test.rs` and `tests/scroll_column_test.rs`.
+        - Uses 16-bit LFSR at Zero Page `$E2`/`$E3`.
+        - `RND(max)` returns `WORD` (0 to max-1).
+        - `RANDOMIZE(seed)` initializes the LFSR. If seed is 0, defaults to `$FFFF` (non-zero required for LFSR).
+    - **Codegen**:
+        - Added `Runtime_Random` (LFSR logic).
+        - Added `Runtime_Randomize`.
+        - `Expression::Call("RND")` generates code to call `Runtime_Random` and then `Math_Mod16`.
+    - **Verified**: `tests/rng_test.rs`.
 
 ### Miscellaneous Fixes
 - **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
@@ -80,25 +76,14 @@ Phase 1-18 are complete. Phase 19 is Next.
 - **RAM Overflow Check**: Added explicit check in `allocate_memory` to error if user variables exceed `$07FF`.
 
 - **Next Steps**:
-    - Finish Phase 19: Vertical Scrolling (if specific camera logic needed) or Start Phase 20: Random Number Generator.
-
-### Phase 19: Vertical Scrolling (Completed)
-- **Implemented**: `Scroll.LoadRow(y, array)`.
-- **Details**:
-    - **Scroll.LoadRow**:
-        - Updates a 32-tile row in VRAM during VBlank.
-        - Calculates target address: Base `$2000` or `$2800` (if Y >= 240/High Bit 0 set), Offset `(Y & $F8) << 2`.
-        - Uses VBlank Buffer Type 1.
-    - **TrampolineNMI**:
-        - Updated to handle Type 0 (Column, Inc 32, Len 30) and Type 1 (Row, Inc 1, Len 32).
-        - Correctly manages PPU Increment mode via `$2000`.
-    - **Fix**:
-        - Fixed `Scroll.LoadColumn` and `Scroll.LoadRow` argument marshalling to correctly handle `INT` (8-bit signed) as 16-bit values on stack, preserving high-byte/sign-extension for proper coordinate calculation.
-    - **Verified**: `tests/scroll_row_test.rs`.
+    - Start Phase 21: Audio - DPCM Support.
+    - Implement DPCM sample import (WAV -> 1-bit Delta).
+    - Audio Compiler support for DPCM.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
     - `$E0`: Scroll X, `$E1`: Scroll Y.
+    - `$E2`-$E3`: Random Seed (LFSR).
     - `$F8`: PPU Ctrl Shadow.
 - **$0100-$01FF**: Stack.
 - **$0200-$02FF**: OAM (Shadow Sprites).

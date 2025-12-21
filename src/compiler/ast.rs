@@ -63,6 +63,7 @@ pub enum Statement {
         Option<Vec<Statement>>,
     ), // SELECT CASE expr, cases, case_else
     WaitVBlank,
+    Randomize(Expression), // RANDOMIZE seed
 }
 
 #[derive(Debug, PartialEq, Clone)]

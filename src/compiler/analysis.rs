@@ -727,6 +727,9 @@ impl SemanticAnalyzer {
                 self.unsafe_return_depth -= 1;
             }
             Statement::WaitVBlank => {}
+            Statement::Randomize(expr) => {
+                self.analyze_expression(expr);
+            }
             _ => {}
         }
     }
@@ -927,6 +930,13 @@ impl SemanticAnalyzer {
                             }
                         }
                         return;
+                    } else if name.eq_ignore_ascii_case("RND") {
+                        if args.len() != 1 {
+                            self.errors.push("RND expects 1 argument (max)".to_string());
+                        } else {
+                            self.analyze_expression(&args[0]);
+                        }
+                        return;
                     }
                 }
 
@@ -1082,6 +1092,8 @@ impl SemanticAnalyzer {
                         || name.eq_ignore_ascii_case("MID")
                     {
                         return Some(DataType::String);
+                    } else if name.eq_ignore_ascii_case("RND") {
+                        return Some(DataType::Word);
                     }
                 }
 

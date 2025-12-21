@@ -151,7 +151,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Y-scroll register split handling (if status bar exists).
 - **Completion Criteria:** Map scrolls up/down correctly.
 
-## Phase 20: Random Number Generator
+## Phase 20: Random Number Generator (Completed)
 **Goal:** Procedural generation and unpredictable gameplay.
 - **Action Items:**
     - Implement a fast 8-bit or 16-bit Linear Congruential Generator (LCG) or LFSR.

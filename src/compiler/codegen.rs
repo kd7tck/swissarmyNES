@@ -836,6 +836,35 @@ impl CodeGenerator {
         self.output.push("  PLA".to_string());
         self.output.push("Math_DivSigned_Done:".to_string());
         self.output.push("  RTS".to_string());
+
+        // Runtime_Random
+        self.output.push("Runtime_Random:".to_string());
+        self.output.push("  LDY #8".to_string());
+        self.output.push("Random_Loop:".to_string());
+        self.output.push("  LDA $E2".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ROL $E3".to_string());
+        self.output.push("  BCC Random_NoEor".to_string());
+        self.output.push("  EOR #$39".to_string());
+        self.output.push("Random_NoEor:".to_string());
+        self.output.push("  STA $E2".to_string());
+        self.output.push("  DEY".to_string());
+        self.output.push("  BNE Random_Loop".to_string());
+        self.output.push("  LDA $E2".to_string());
+        self.output.push("  LDX $E3".to_string());
+        self.output.push("  RTS".to_string());
+
+        // Runtime_Randomize
+        self.output.push("Runtime_Randomize:".to_string());
+        self.output.push("  STA $E2".to_string());
+        self.output.push("  STX $E3".to_string());
+        self.output.push("  ORA $E3".to_string());
+        self.output.push("  BNE Randomize_Ret".to_string());
+        self.output.push("  LDA #$FF".to_string());
+        self.output.push("  STA $E2".to_string());
+        self.output.push("  STA $E3".to_string());
+        self.output.push("Randomize_Ret:".to_string());
+        self.output.push("  RTS".to_string());
     }
 
     fn generate_animation_helpers(&mut self) {
@@ -2985,6 +3014,10 @@ impl CodeGenerator {
                 self.output.push("  BIT $2002".to_string());
                 self.output.push(format!("  BPL {}", lbl));
             }
+            Statement::Randomize(expr) => {
+                self.generate_expression(expr)?;
+                self.output.push("  JSR Runtime_Randomize".to_string());
+            }
             Statement::Select(expr, cases, case_else) => {
                 let end_select_label = self.new_label();
 
@@ -3637,6 +3670,35 @@ impl CodeGenerator {
                         self.generate_expression(&args[0])?;
                         self.output.push("  JSR Runtime_Mid".to_string());
                         return Ok(DataType::String);
+                    } else if name.eq_ignore_ascii_case("RND") {
+                        // Arg 0: Max (Stack or Temp)
+                        self.generate_expression(&args[0])?;
+                        // Save Max to Stack
+                        self.output.push("  PHA".to_string()); // Low
+                        self.output.push("  TXA".to_string());
+                        self.output.push("  PHA".to_string()); // High
+
+                        // Get Random
+                        self.output.push("  JSR Runtime_Random".to_string());
+
+                        // Setup Div16: Random (A/X) / Max ($00/$01)
+                        // Pop Max to $00/$01
+                        self.output.push("  STX $07".to_string()); // Save Random High
+                        self.output.push("  STA $06".to_string()); // Save Random Low
+
+                        self.output.push("  PLA".to_string()); // Max High
+                        self.output.push("  STA $01".to_string());
+                        self.output.push("  PLA".to_string()); // Max Low
+                        self.output.push("  STA $00".to_string());
+
+                        self.output.push("  LDA $06".to_string()); // Restore Random
+                        self.output.push("  LDX $07".to_string());
+
+                        self.output.push("  JSR Math_Div16".to_string());
+                        // Remainder is in $08/$09
+                        self.output.push("  LDA $08".to_string());
+                        self.output.push("  LDX $09".to_string());
+                        return Ok(DataType::Word);
                     }
                 }
 

@@ -100,6 +100,11 @@ class ProjectManager {
                 window.sfxEditor.loadData(this.assets.sound_effects || []);
             }
 
+            // Load Sprites
+            if (window.spriteEditor) {
+                window.spriteEditor.loadData(this.assets || {});
+            }
+
             // Dispatch an event to let other components know the project loaded
             window.dispatchEvent(new CustomEvent('project-loaded', { detail: { assets: this.assets } }));
 
@@ -226,6 +231,13 @@ class ProjectManager {
         // Collect World Data
         if (window.worldEditor) {
             this.assets.world = window.worldEditor.getData();
+        }
+
+        // Collect Sprite Data
+        if (window.spriteEditor) {
+            const spriteData = window.spriteEditor.getData();
+            this.assets.metasprites = spriteData.metasprites;
+            this.assets.animations = spriteData.animations;
         }
 
         const payload = {

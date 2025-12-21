@@ -40,7 +40,7 @@ mod tests {
         let mut codegen = CodeGenerator::new(symbol_table);
         // This is expected to fail or generate incorrect code if support is missing
         let asm_lines = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let _asm_source = asm_lines.join("\n");
 
         // Verify constant index access
         // pool(0) is at Base. .x is Base+1.

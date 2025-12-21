@@ -202,6 +202,8 @@ class SFXEditor {
         this.currentIndex = -1;
         this.currentTab = 'vol';
         this.seqEditor = null;
+        this.synth = new SynthEngine();
+        this.oscillatorAnimationId = null;
         this.initUI();
     }
 
@@ -248,6 +250,12 @@ class SFXEditor {
                         </div>
                     </div>
 
+                    <div class="sfx-synth-controls" style="margin-top:10px; padding:10px; background:#222; border-radius:4px; display:flex; gap:10px; align-items:center;">
+                        <button id="btn-play-sfx" style="background:#4CAF50; color:white; border:none; padding:5px 15px; cursor:pointer;">Play</button>
+                        <button id="btn-stop-sfx" style="background:#f44336; color:white; border:none; padding:5px 15px; cursor:pointer;">Stop</button>
+                        <canvas id="oscillator-canvas" width="200" height="40" style="background:#000; border:1px solid #444; flex-grow:1;"></canvas>
+                    </div>
+
                     <div class="sfx-seq-tabs">
                         <button id="tab-vol" class="active">Volume</button>
                         <button id="tab-pitch">Pitch</button>
@@ -274,6 +282,10 @@ class SFXEditor {
     bindEvents() {
         document.getElementById('btn-add-sfx').onclick = () => this.addSFX();
         document.getElementById('btn-delete-sfx').onclick = () => this.deleteSFX();
+
+        // Play/Stop
+        document.getElementById('btn-play-sfx').onclick = () => this.playSFX();
+        document.getElementById('btn-stop-sfx').onclick = () => this.stopSFX();
 
         // Import Button (trigger hidden input)
         const fileInput = document.createElement('input');
@@ -319,6 +331,73 @@ class SFXEditor {
                 this.renderSequenceEditor();
             };
         });
+    }
+
+    playSFX() {
+        if (this.currentIndex >= 0 && this.sfxList[this.currentIndex]) {
+            this.synth.play(this.sfxList[this.currentIndex]);
+            this.startOscillator();
+        }
+    }
+
+    stopSFX() {
+        this.synth.stop();
+        this.stopOscillator();
+    }
+
+    startOscillator() {
+        this.stopOscillator();
+        const canvas = document.getElementById('oscillator-canvas');
+        const ctx = canvas.getContext('2d');
+        const analyser = this.synth.getAnalyser();
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        const draw = () => {
+            this.oscillatorAnimationId = requestAnimationFrame(draw);
+            analyser.getByteTimeDomainData(dataArray);
+
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#0f0';
+            ctx.beginPath();
+
+            const sliceWidth = canvas.width * 1.0 / bufferLength;
+            let x = 0;
+
+            for(let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * canvas.height / 2;
+
+                if(i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            ctx.lineTo(canvas.width, canvas.height/2);
+            ctx.stroke();
+        };
+
+        draw();
+    }
+
+    stopOscillator() {
+        if (this.oscillatorAnimationId) {
+            cancelAnimationFrame(this.oscillatorAnimationId);
+            this.oscillatorAnimationId = null;
+        }
+        // Clear canvas
+        const canvas = document.getElementById('oscillator-canvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
     }
 
     updateTabs() {
@@ -392,6 +471,7 @@ class SFXEditor {
         } else {
             panel.style.display = 'none';
             emptyState.style.display = 'flex';
+            this.stopSFX();
 
             // Ensure editor is cleaned up
             if (this.seqEditor) {

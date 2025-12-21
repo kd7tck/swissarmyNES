@@ -188,12 +188,37 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Engine cycles pitch offsets every frame (0, 4, 7 semitones).
 - **Completion Criteria:** A single channel produces a major chord sound.
 
-## Phase 25: Audio - Full Scale Synth System and UI
-**Goal:** Full Synth system and User Interface in GUI for creating, editing, importing sound effects. This new UI system is seperate from the current UI audio system used for music tracks.
+## Phase 25a: Audio - SFX Engine Core
+**Goal:** Define the binary format for Sound Effects and implement the runtime playback logic (Assembler/ASM).
 - **Action Items:**
-    - Create Full scale synth sound effect system.
-    - Create robust UI for creating, editing and importing.
-- **Completion Criteria:** Drag-and-drop a import file to populate the GUI system.
+    - Define `SoundEffect` struct in Rust (Channel, Priority, Speed, Sequences for Vol/Pitch/Duty).
+    - Implement `SFX_Play` routine in ASM that supports playing these "macro-based" effects.
+    - Ensure SFX engine handles priority correctly.
+- **Completion Criteria:** Manually defined SFX data can be compiled and played via `PLAY_SFX` in a test ROM.
+
+## Phase 25b: Audio - SFX Editor UI Foundation
+**Goal:** Create the dedicated workspace for Sound Effect creation, separate from the Music Tracker.
+- **Action Items:**
+    - Add "SFX" tab to the Audio Editor.
+    - Implement list management (Create, Rename, Delete SFX).
+    - Basic properties panel (Channel selection, Loop settings).
+- **Completion Criteria:** User can create a named SFX entry and save the project.
+
+## Phase 25c: Audio - Visual Envelope Designers
+**Goal:** Intuitive visual editing of sound parameters over time.
+- **Action Items:**
+    - Implement "Draw" canvas for Volume envelopes.
+    - Implement "Draw" canvas for Pitch sweeps and Duty cycles.
+    - Implement "Arpeggio" macro editor (specific sequence of note offsets).
+- **Completion Criteria:** User can draw a volume fade-out curve and a pitch slide visually.
+
+## Phase 25d: Audio - Import/Export & Full Integration
+**Goal:** Asset sharing and final polish.
+- **Action Items:**
+    - Implement JSON Import/Export for individual SFX patches.
+    - Implement Drag-and-Drop support to load SFX files.
+    - Hook up the Compile pipeline to generate the binary data from the UI.
+- **Completion Criteria:** Drag-and-drop a `.sfx.json` file to populate the GUI, compile, and hear the sound in the game.
 
 ---
 

@@ -2766,8 +2766,7 @@ impl CodeGenerator {
                                 self.output.push("  LDA $02".to_string());
                                 self.output.push("  LDX $03".to_string());
 
-                                self.output
-                                    .push("  JSR Runtime_Scroll_LoadRow".to_string());
+                                self.output.push("  JSR Runtime_Scroll_LoadRow".to_string());
                                 return Ok(());
                             }
                         } else if base_name.eq_ignore_ascii_case("PPU") {

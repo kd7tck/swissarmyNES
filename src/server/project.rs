@@ -22,6 +22,8 @@ pub struct Nametable {
     pub data: Vec<u8>,
     #[serde(default)]
     pub attrs: Vec<u8>,
+    #[serde(default)]
+    pub metatile_grid: Vec<i32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -164,6 +164,7 @@ class MetatileEditor {
         if (!this.assets || this.currentMetatileIndex < 0) return;
         this.assets.metatiles[this.currentMetatileIndex].attr = idx;
         this.render();
+        window.dispatchEvent(new CustomEvent('metatile-changed', { detail: { index: this.currentMetatileIndex } }));
     }
 
     selectMetatile(index) {
@@ -222,6 +223,7 @@ class MetatileEditor {
             }
             this.assets.metatiles[this.currentMetatileIndex].tiles[idx] = selectedTile;
             this.render();
+            window.dispatchEvent(new CustomEvent('metatile-changed', { detail: { index: this.currentMetatileIndex } }));
         }
     }
 

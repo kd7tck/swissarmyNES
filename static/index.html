@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/css/palette.css">
     <link rel="stylesheet" href="/css/chr.css">
     <link rel="stylesheet" href="/css/map.css">
+    <link rel="stylesheet" href="/css/screen.css">
     <link rel="stylesheet" href="/css/audio.css">
     <link rel="stylesheet" href="/css/sfx.css">
     <link rel="stylesheet" href="/css/file_explorer.css">
@@ -57,6 +58,9 @@
                 <li class="nav-item" data-target="map">
                     <a href="#map">Map</a>
                 </li>
+                <li class="nav-item" data-target="screens">
+                    <a href="#screens">Screens</a>
+                </li>
                 <li class="nav-item" data-target="music">
                     <a href="#music">Music</a>
                 </li>
@@ -100,6 +104,10 @@
                 <h1>Map Editor</h1>
                 <div id="metatile-editor-root" style="border: 1px solid #444; padding: 10px; margin-bottom: 20px; height: 300px;"></div>
                 <div id="map-editor-root"></div>
+            </section>
+            <section id="screens" class="view">
+                <h1>Screen Editor</h1>
+                <div id="screen-editor-root"></div>
             </section>
             <section id="music" class="view">
                 <h1>Music Tracker</h1>
@@ -165,6 +173,7 @@
     <script src="/js/chr.js"></script>
     <script src="/js/metatile.js"></script>
     <script src="/js/map.js"></script>
+    <script src="/js/screen.js"></script>
     <script src="/js/audio.js"></script>
     <script src="/js/synth.js"></script>
     <script src="/js/sfx.js"></script>

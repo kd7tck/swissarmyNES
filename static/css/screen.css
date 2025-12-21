@@ -1,0 +1,131 @@
+/* Screen Editor Styles */
+
+#screen-editor-root {
+    display: flex;
+    flex-direction: row;
+    gap: 1rem;
+    height: 100%;
+    padding: 10px;
+}
+
+.screen-list-panel {
+    width: 200px;
+    background: #252526;
+    border: 1px solid #3e3e42;
+    display: flex;
+    flex-direction: column;
+}
+
+.screen-list-header {
+    padding: 8px;
+    background: #333;
+    border-bottom: 1px solid #3e3e42;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.screen-list {
+    flex: 1;
+    overflow-y: auto;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.screen-list-item {
+    padding: 6px 10px;
+    cursor: pointer;
+    border-bottom: 1px solid #2d2d2d;
+    display: flex;
+    justify-content: space-between;
+}
+
+.screen-list-item:hover {
+    background: #2a2d2e;
+}
+
+.screen-list-item.active {
+    background: #37373d;
+    color: white;
+}
+
+.screen-editor-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.screen-toolbar {
+    padding: 8px;
+    background: #333;
+    border-radius: 4px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.screen-workspace {
+    display: flex;
+    flex: 1;
+    gap: 10px;
+    overflow: hidden;
+}
+
+.screen-canvas-container {
+    flex: 1;
+    background: #1e1e1e;
+    border: 1px solid #3e3e42;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: auto;
+}
+
+.screen-canvas {
+    background: #000;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    image-rendering: pixelated;
+}
+
+.metatile-palette {
+    width: 280px; /* Fits roughly 8 metatiles (32px rendered size) across? */
+    background: #252526;
+    border: 1px solid #3e3e42;
+    display: flex;
+    flex-direction: column;
+}
+
+.metatile-palette-header {
+    padding: 8px;
+    background: #333;
+    font-weight: bold;
+    text-align: center;
+}
+
+.metatile-palette-grid {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
+    gap: 4px;
+    align-content: start;
+}
+
+.metatile-swatch {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #444;
+    cursor: pointer;
+    background: #000;
+}
+
+.metatile-swatch.selected {
+    border: 2px solid #007fd4;
+}
+
+.metatile-swatch:hover {
+    border-color: #888;
+}

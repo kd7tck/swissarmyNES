@@ -72,6 +72,12 @@ pub struct Metatile {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Screen {
+    pub name: String,
+    pub data: Vec<u8>, // 16x15 = 240 bytes, indices into metatiles
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SoundEffect {
     pub name: String,
     pub channel: u8,
@@ -104,6 +110,8 @@ pub struct ProjectAssets {
     pub sound_effects: Vec<SoundEffect>,
     #[serde(default)]
     pub metatiles: Vec<Metatile>,
+    #[serde(default)]
+    pub screens: Vec<Screen>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -172,6 +180,7 @@ pub fn create_project(name: &str) -> Result<(), String> {
         samples: vec![],         // Start empty
         sound_effects: vec![],   // Start empty
         metatiles: vec![],       // Start empty
+        screens: vec![],         // Start empty
     };
     let assets_json = serde_json::to_string_pretty(&default_assets).map_err(|e| e.to_string())?;
     fs::write(project_path.join("assets.json"), assets_json).map_err(|e| e.to_string())?;

@@ -114,4 +114,32 @@ mod tests {
 
         cleanup(name);
     }
+
+    #[test]
+    fn test_screen_persistence() {
+        use swissarmynes::server::project::Screen;
+
+        let name = "test_project_screens";
+        cleanup(name);
+        create_project(name).unwrap();
+
+        let project = get_project(name).unwrap();
+        let mut assets = project.assets.unwrap();
+
+        assets.screens.push(Screen {
+            name: "Level1".to_string(),
+            data: vec![0; 240], // 16x15
+        });
+
+        assert!(save_project(name, None, Some(&assets)).is_ok());
+
+        let project = get_project(name).unwrap();
+        let loaded_assets = project.assets.unwrap();
+
+        assert_eq!(loaded_assets.screens.len(), 1);
+        assert_eq!(loaded_assets.screens[0].name, "Level1");
+        assert_eq!(loaded_assets.screens[0].data.len(), 240);
+
+        cleanup(name);
+    }
 }

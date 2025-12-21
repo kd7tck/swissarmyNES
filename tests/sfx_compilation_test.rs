@@ -25,6 +25,7 @@ mod tests {
             samples: vec![],
             sound_effects: vec![sfx1],
             metatiles: vec![],
+            screens: vec![],
         };
 
         // 1. Check Envelopes
@@ -115,6 +116,7 @@ mod tests {
             samples: vec![],
             sound_effects: vec![sfx1],
             metatiles: vec![],
+            screens: vec![],
         };
 
         let env_blob = compile_envelopes(&Some(assets));

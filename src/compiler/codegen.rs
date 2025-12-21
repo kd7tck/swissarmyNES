@@ -1514,7 +1514,8 @@ impl CodeGenerator {
         self.output.push("  ADC #0".to_string());
         self.output.push("  TAX".to_string());
         self.output.push("  PLA".to_string());
-        self.output.push("Math_DivSigned_AbsDividend_Done:".to_string());
+        self.output
+            .push("Math_DivSigned_AbsDividend_Done:".to_string());
         self.output.push("  PHA".to_string());
         self.output.push("  TXA".to_string());
         self.output.push("  PHA".to_string());

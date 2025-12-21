@@ -50,44 +50,21 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-25c are complete. Phase 25d is Next.
+Phase 1-25d are complete. Phase 26 is Next.
 
-### Phase 25a: Audio - SFX Engine Core (Completed)
-- **Implemented**: Sound Effects (SFX) support and Sound Engine Overhaul.
-- **Backend**:
-    - `SoundEffect` struct added to `ProjectAssets`.
-    - `compile_sfx_data` generates SFX Table at `$D900`.
-    - `compile_envelopes` generates implicit envelopes for SFX.
-- **Codegen**:
-    - **Memory Map Updated**:
-        - Sound RAM: `$0300-$037F` (128 bytes, Stride 32 per channel).
-        - VBlank Buffer: `$0380-$03BF` (64 bytes).
-        - String Heap: `$03C0-$04BF` (256 bytes).
-        - User Vars: `$04C0`.
-    - **Addresses**: SFX Table `$D900`, Envelope Table `$DA00`, Nametable `$D500`.
-    - **Sound Engine**:
-        - Refactored to use 32-byte stride per channel to avoid collisions.
-        - Implemented `SFX_Play`, `SndPitchUpdate`, `SndDutyUpdate`.
-        - Fixed `rs6502` compatibility issues (`.db` -> `db`, avoid `LDX abs,Y`).
-- **Verified**: `tests/sfx_compilation_test.rs` passed.
-
-### Phase 25b: Audio - SFX Editor UI Foundation (Completed)
-- **Implemented**: Frontend SFX Editor.
-- **Frontend**:
-    - `static/js/sfx.js`: Implemented `SFXEditor` class.
-    - `static/css/sfx.css`: Added styling for SFX list and property panel.
-    - `static/index.html`: Added SFX tab structure.
-    - `static/js/app.js`: Instantiated `SFXEditor`.
-    - `static/js/project.js`: Integrated SFX load/save logic.
-- **Features**: Create, Delete, Rename SFX; Edit Channel, Priority, Speed, Loop.
-
-### Phase 25c: Audio - Visual Envelope Designers (Completed)
-- **Implemented**: Visual editors for Volume, Pitch, and Duty sequences within the SFX Editor.
-- **Frontend**:
-    - Added `SequenceCanvas` class to `sfx.js` for interactive drawing of envelope data.
-    - Added Tab system to `SFXEditor` to switch between Volume, Pitch, and Duty editors.
-    - Updated CSS to support canvas and tabs.
-- **Features**: Draw SFX sequences visually with mouse.
+### Phase 25: Audio System (Completed)
+- **Implemented**: Full 4-channel Audio Engine with SFX support.
+- **Components**:
+    - **Compiler**: Generates optimized music data (`$D100`) and SFX data (`$D900`). Supports Samples (`$E040`/`$D480`) and Envelopes (`$DA00`).
+    - **Frontend**: `AudioTracker` for music, `SFXEditor` for sound effects.
+    - **UI Features**:
+        - Piano roll for music.
+        - Visual Envelope Editors (Canvas) for Volume, Pitch, Duty.
+        - SFX Import/Export (JSON) and Drag-and-Drop support.
+- **Integration**:
+    - `ProjectManager` handles saving all audio assets.
+    - `CompileRequest` injects audio binaries into the ROM.
+    - Runtime uses priority system to manage SFX vs Music channel usage.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -120,8 +97,11 @@ Phase 1-25c are complete. Phase 25d is Next.
     - **Audio Labels**: When injecting assembly strings in loops or multiple blocks, ensure labels are unique or use local labels if assembler supports it. `rs6502` global label reuse caused "Branch too far".
     - **DPCM Alignment**: Samples must start on 64-byte boundaries. Compiler handles padding.
     - **OAM Overflow**: `Sprite.Draw` drops sprites if 64 limit reached. Enable `Sprite.SetFlicker(1)` to mitigate limits via cycling.
-    - **SFX Sequences**: `SequenceCanvas` modifies arrays in place. Ensure `onChange` handles any side effects if necessary (currently just triggers redraw).
+    - **SFX Sequences**: `SequenceCanvas` modifies arrays in place.
+    - **Frontend Validation**: When importing JSON, always validate fields exist to avoid `undefined` crashes in the editor.
 
 - **Next Steps**:
-    - Start Phase 25d: Audio - Import/Export & Full Integration.
-    - Implement Drag-and-Drop for `.sfx.json` files.
+    - Start Phase 26: Visual - CHR Import.
+    - Implement PNG parser in JS.
+    - Implement Color Quantization (match nearest NES color).
+    - Slice images into tiles and populate the CHR Bank.

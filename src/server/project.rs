@@ -41,6 +41,8 @@ pub struct AudioTrack {
     pub channel: u8, // 0=Pulse1, 1=Pulse2, 2=Triangle, 3=Noise (Renamed from envelope)
     #[serde(default)]
     pub instrument: u8, // Envelope/Duty setting (e.g. $9F for Max Vol, 50% Duty)
+    #[serde(default)]
+    pub priority: u8,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -421,7 +421,7 @@ impl CodeGenerator {
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START));
         self.output.push("  INX".to_string());
-        self.output.push("  CPX #$10".to_string());
+        self.output.push("  CPX #$20".to_string());
         self.output.push("  BNE SndClear".to_string());
         self.output.push("  RTS".to_string());
 
@@ -442,16 +442,28 @@ impl CodeGenerator {
         self.output.push("  LDA ($F0), Y".to_string());
         self.output.push("  AND #$03".to_string());
         self.output.push("  STA $F2".to_string());
-        self.output.push("  INC $F0".to_string());
-        self.output.push("  BNE SndPtrInc1".to_string());
-        self.output.push("  INC $F1".to_string());
-        self.output.push("SndPtrInc1:".to_string());
+
+        self.output.push("  LDX $F2".to_string());
+        self.output.push("  LDY #$02".to_string());
+        self.output.push("  LDA ($F0), Y".to_string());
+        self.output
+            .push(format!("  CMP ${:04X}, X", SOUND_RAM_START + 0x14));
+        self.output.push("  BCC SndPlayEnd".to_string());
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x14));
+
+        self.output.push("  LDY #$01".to_string());
         self.output.push("  LDA ($F0), Y".to_string());
         self.output.push("  STA $F3".to_string());
-        self.output.push("  INC $F0".to_string());
-        self.output.push("  BNE SndPtrInc2".to_string());
+
+        self.output.push("  LDA $F0".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #3".to_string());
+        self.output.push("  STA $F0".to_string());
+        self.output.push("  BCC SndPtrInc2".to_string());
         self.output.push("  INC $F1".to_string());
         self.output.push("SndPtrInc2:".to_string());
+
         self.output.push("  LDA $F2".to_string());
         self.output.push("  ASL".to_string());
         self.output.push("  ASL".to_string());
@@ -545,6 +557,15 @@ impl CodeGenerator {
         self.output.push("  BNE SndNextNote".to_string());
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START));
+        self.output.push("  PHA".to_string());
+        self.output.push("  TXA".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  TAY".to_string());
+        self.output.push("  LDA #0".to_string());
+        self.output
+            .push(format!("  STA ${:04X}, Y", SOUND_RAM_START + 0x14));
+        self.output.push("  PLA".to_string());
         self.output.push("  CPX #$00".to_string());
         self.output.push("  BEQ SilenceP1".to_string());
         self.output.push("  CPX #$04".to_string());

@@ -50,7 +50,20 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-21 are complete. Phase 22 is Next.
+Phase 1-22 are complete. Phase 23 is Next.
+
+### Phase 22: Audio - SFX Priority (Completed)
+- **Implemented**: Priority system for sound channels.
+- **Backend**:
+    - `AudioTrack` now has a `priority` field (u8).
+    - `compile_audio_data` injects the priority byte into the track header (after instrument).
+- **Codegen**:
+    - `Sound_Init`: Clears extended sound RAM range ($0300-$031F) to include priority/instrument storage.
+    - `Sound_Play`: Checks if `NewPriority >= CurrentPriority` (stored at `$0314` + ChannelIndex). If not, aborts. Updates priority if proceeding.
+    - `SndChUpdate`: Clears priority (sets to 0) when a track finishes (Terminator).
+- **Frontend**:
+    - Added "Priority" input to `AudioTracker` UI.
+- **Verified**: `tests/audio_priority_test.rs`.
 
 ### Phase 21: Audio - DPCM Support (Completed)
 - **Implemented**: Full support for NES Delta Modulation Channel (DMC).
@@ -68,19 +81,6 @@ Phase 1-21 are complete. Phase 22 is Next.
     - Implemented simple WAV import and DPCM (1-bit delta) encoding in JS.
 - **Verified**: `tests/audio_dpcm_test.rs` and `tests/audio_compilation_test.rs`.
 
-### Phase 20: Random Number Generator (Completed)
-- **Implemented**: `RND(max)` function and `RANDOMIZE seed` statement.
-- **Details**:
-    - **Runtime**:
-        - Uses 16-bit LFSR at Zero Page `$E2`/`$E3`.
-        - `RND(max)` returns `WORD` (0 to max-1).
-        - `RANDOMIZE(seed)` initializes the LFSR. If seed is 0, defaults to `$FFFF` (non-zero required for LFSR).
-    - **Codegen**:
-        - Added `Runtime_Random` (LFSR logic).
-        - Added `Runtime_Randomize`.
-        - `Expression::Call("RND")` generates code to call `Runtime_Random` and then `Math_Mod16`.
-    - **Verified**: `tests/rng_test.rs`.
-
 ### Miscellaneous Fixes
 - **Assembler**: Fixed "Branch too far" error in `Sound_Update` by fixing duplicate labels (`SndPtrInc3` vs `SndPtrInc4`).
 - **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
@@ -90,9 +90,9 @@ Phase 1-21 are complete. Phase 22 is Next.
 - **Signed Assignment Bug**: Fixed `Statement::Let` to correctly sign-extend `INT` values when assigning to `WORD` variables (using `STX` instead of zero-filling).
 
 - **Next Steps**:
-    - Start Phase 22: Audio - SFX Priority.
-    - Implement priority flag for SFX tracks.
-    - Sound engine only interrupts music channel if SFX priority > current note priority.
+    - Start Phase 23: Audio - Envelope Editor UI.
+    - Create a graph editor for Volume and Pitch envelopes.
+    - Export envelope data to Audio Compiler format.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -102,6 +102,9 @@ Phase 1-21 are complete. Phase 22 is Next.
 - **$0100-$01FF**: Stack.
 - **$0200-$02FF**: OAM (Shadow Sprites).
 - **$0300-$031F**: Sound Engine State.
+    - `$0300`-$030F: Channel State (4 bytes each).
+    - `$0310`-$0313: Channel Instrument.
+    - `$0314`-$0317: Channel Priority.
 - **$0320-$041F**: String Heap.
 - **$0420-$045F**: VBlank Buffer (Internal).
 - **$0460-$07FF**: User Variables (DIM).

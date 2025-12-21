@@ -114,4 +114,39 @@ mod tests {
 
         cleanup(name);
     }
+
+    #[test]
+    fn test_world_persistence() {
+        use swissarmynes::server::project::WorldLayout;
+
+        let name = "test_project_world";
+        cleanup(name);
+        create_project(name).unwrap();
+
+        let project = get_project(name).unwrap();
+        let mut assets = project.assets.unwrap();
+
+        // Check default is None
+        assert!(assets.world.is_none());
+
+        // Set World
+        assets.world = Some(WorldLayout {
+            width: 2,
+            height: 2,
+            data: vec![0, 1, 0xFF, 0],
+        });
+
+        assert!(save_project(name, None, Some(&assets)).is_ok());
+
+        let project = get_project(name).unwrap();
+        let loaded_assets = project.assets.unwrap();
+
+        assert!(loaded_assets.world.is_some());
+        let world = loaded_assets.world.unwrap();
+        assert_eq!(world.width, 2);
+        assert_eq!(world.height, 2);
+        assert_eq!(world.data, vec![0, 1, 0xFF, 0]);
+
+        cleanup(name);
+    }
 }

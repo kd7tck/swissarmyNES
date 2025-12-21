@@ -50,15 +50,19 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-27 are complete. Phase 28 is Next.
+Phase 1-29 are complete. Phase 30 is Next.
 
-### Phase 27: Visual - Metatile Editor (Completed)
-- **Implemented**: `MetatileEditor` in frontend and `Metatile` struct in backend.
+### Phase 29: Visual - World Editor (Completed)
+- **Implemented**: `WorldLayout` struct in backend and `WorldEditor` in frontend.
 - **Key Features**:
-    - **Metatile Struct**: Defines 2x2 tile blocks (4 tile indices) and 1 palette attribute index.
-    - **Editor UI**: Create, Delete, Rename metatiles. Visual 2x2 grid editor to assign tiles from the CHR bank.
-    - **Map Integration**: "Metatile Mode" in Map Editor allows painting with 16x16 metatiles, automatically updating both nametable data and attribute table (aligned to 2x2 grid).
-    - **Persistence**: Saved to `assets.json` under `metatiles`.
+    - **World Struct**: Defines grid dimensions (`width`, `height`) and `data` (indices to Nametables).
+    - **Editor UI**: Visual grid allowing placement of Nametables to create a larger world map.
+    - **Persistence**: Saved to `assets.json` under `world`.
+
+### Phase 28: Visual - Metatile Integration (Completed)
+- **Implemented**: `Metatile` painting integrated into `MapEditor`.
+- **Key Features**:
+    - **Metatile Mode**: Allows painting 2x2 blocks on the nametable, updating tiles and attributes simultaneously.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -96,6 +100,7 @@ Phase 1-27 are complete. Phase 28 is Next.
     - **CHR Import**: Requires a 128x128 PNG for full bank import. Alpha channel is treated as color 0 (transparent). Nearest neighbor matching uses the *current* 4-color palette, not the full NES palette, so ensure the correct sub-palette is selected before importing.
 
 - **Next Steps**:
-    - Start Phase 27: Visual - Metatile Editor.
-    - Create UI for defining 16x16 or 32x32 blocks.
-    - Implement attribute assignment for metatiles.
+    - Start Phase 30: Visual - Sprite Editor.
+    - Create canvas for free placement of 8x8 sprite tiles or metatiles.
+    - Implement Timeline UI for animation frames.
+    - Export to `Metasprite` data format.

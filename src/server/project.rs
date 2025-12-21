@@ -72,6 +72,13 @@ pub struct Metatile {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WorldLayout {
+    pub width: u8,
+    pub height: u8,
+    pub data: Vec<u8>, // Indices into nametables. 0xFF = Empty
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SoundEffect {
     pub name: String,
     pub channel: u8,
@@ -104,6 +111,8 @@ pub struct ProjectAssets {
     pub sound_effects: Vec<SoundEffect>,
     #[serde(default)]
     pub metatiles: Vec<Metatile>,
+    #[serde(default)]
+    pub world: Option<WorldLayout>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -172,6 +181,7 @@ pub fn create_project(name: &str) -> Result<(), String> {
         samples: vec![],         // Start empty
         sound_effects: vec![],   // Start empty
         metatiles: vec![],       // Start empty
+        world: None,
     };
     let assets_json = serde_json::to_string_pretty(&default_assets).map_err(|e| e.to_string())?;
     fs::write(project_path.join("assets.json"), assets_json).map_err(|e| e.to_string())?;

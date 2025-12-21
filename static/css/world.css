@@ -1,0 +1,73 @@
+/* World Editor Styles */
+
+#world-editor-root {
+    display: flex;
+    flex-direction: row;
+    gap: 1rem;
+    height: 100%;
+}
+
+.world-sidebar {
+    width: 250px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border-right: 1px solid #444;
+    padding-right: 10px;
+}
+
+.world-nt-list {
+    flex: 1;
+    overflow-y: auto;
+    background: #222;
+    border: 1px solid #444;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.world-nt-list li {
+    padding: 5px 10px;
+    cursor: pointer;
+    border-bottom: 1px solid #333;
+}
+
+.world-nt-list li:hover {
+    background: #333;
+}
+
+.world-nt-list li.selected {
+    background: #444;
+    font-weight: bold;
+}
+
+.world-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.world-toolbar {
+    display: flex;
+    gap: 10px;
+    background: #333;
+    padding: 5px;
+    align-items: center;
+}
+
+.world-canvas-wrapper {
+    flex: 1;
+    overflow: auto;
+    background: #111;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid #444;
+}
+
+.world-canvas {
+    background: #000;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    cursor: pointer;
+}

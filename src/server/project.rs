@@ -54,6 +54,8 @@ pub struct AudioTrack {
     pub vol_env: Option<u8>,
     #[serde(default)]
     pub pitch_env: Option<u8>,
+    #[serde(default)]
+    pub arpeggio_env: Option<u8>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -71,6 +71,7 @@ fn test_compile_audio_dmc() {
         priority: 0,
         vol_env: None,
         pitch_env: None,
+        arpeggio_env: None,
         notes: vec![
             AudioNote {
                 col: 0,
@@ -113,9 +114,11 @@ fn test_compile_audio_dmc() {
     assert_eq!(blob[6], 0xFF);
     // PitchEnv = FF
     assert_eq!(blob[7], 0xFF);
+    // ArpEnv = FF
+    assert_eq!(blob[8], 0xFF);
     // Note: Duration 8, Pitch 0
-    assert_eq!(blob[8], 8);
-    assert_eq!(blob[9], 0);
-    // Terminator
+    assert_eq!(blob[9], 8);
     assert_eq!(blob[10], 0);
+    // Terminator
+    assert_eq!(blob[11], 0);
 }

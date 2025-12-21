@@ -33,6 +33,7 @@ mod tests {
             priority: 0,
             vol_env: None,
             pitch_env: None,
+            arpeggio_env: None,
         };
 
         let assets = ProjectAssets {
@@ -53,24 +54,25 @@ mod tests {
         assert_eq!(blob[2], 0xD1); // Ptr High -> D1
 
         // Track Data
-        // Channel (1) + Inst (1) + Prio (1) + VolEnv (1) + PitchEnv (1)
+        // Channel (1) + Inst (1) + Prio (1) + VolEnv (1) + PitchEnv (1) + ArpEnv (1)
         assert_eq!(blob[3], 0); // Channel 0
         assert_eq!(blob[4], 0x9F); // Instrument
         assert_eq!(blob[5], 0); // Priority
         assert_eq!(blob[6], 0xFF); // VolEnv (None)
         assert_eq!(blob[7], 0xFF); // PitchEnv (None)
+        assert_eq!(blob[8], 0xFF); // ArpEnv (None)
 
         // Notes
         // Note 1: Dur(8), Pitch(10)
-        assert_eq!(blob[8], 8);
-        assert_eq!(blob[9], 10);
+        assert_eq!(blob[9], 8);
+        assert_eq!(blob[10], 10);
 
         // Note 2: Dur(8), Pitch(12)
-        assert_eq!(blob[10], 8);
-        assert_eq!(blob[11], 12);
+        assert_eq!(blob[11], 8);
+        assert_eq!(blob[12], 12);
 
         // Terminator
-        assert_eq!(blob[12], 0);
+        assert_eq!(blob[13], 0);
     }
 
     #[test]
@@ -99,6 +101,7 @@ mod tests {
             priority: 0,
             vol_env: None,
             pitch_env: None,
+            arpeggio_env: None,
         };
 
         let assets = ProjectAssets {
@@ -112,18 +115,18 @@ mod tests {
 
         let blob = compile_audio_data(&Some(assets));
 
-        // Offset: 3 (Header) + 5 (Chan/Inst/Prio/VolEnv/PitchEnv) = 8
-        // Note 1: 8,9 -> Time ends at 8.
-        assert_eq!(blob[8], 8);
-        assert_eq!(blob[9], 10);
+        // Offset: 3 (Header) + 6 (Chan/Inst/Prio/VolEnv/PitchEnv/ArpEnv) = 9
+        // Note 1: 9,10 -> Time ends at 8.
+        assert_eq!(blob[9], 8);
+        assert_eq!(blob[10], 10);
 
         // Gap: 16 ticks (8 to 24).
         // Silence: Dur(16), Pitch(0xFF)
-        assert_eq!(blob[10], 16);
-        assert_eq!(blob[11], 0xFF);
+        assert_eq!(blob[11], 16);
+        assert_eq!(blob[12], 0xFF);
         // Note 2:
-        assert_eq!(blob[12], 4);
-        assert_eq!(blob[13], 12);
+        assert_eq!(blob[13], 4);
+        assert_eq!(blob[14], 12);
     }
 
     #[test]

@@ -21,8 +21,8 @@ fn test_string_compilation() {
     let code = cg.generate(&program).expect("Codegen failed");
 
     // Check RAM allocation
-    // s @ $0480 (2 bytes)
-    assert!(code.iter().any(|line| line.contains("s @ $0480")));
+    // s @ $0490 (2 bytes)
+    assert!(code.iter().any(|line| line.contains("s @ $0490")));
 
     // Check String Data
     // GEN_L1: db ..., ...

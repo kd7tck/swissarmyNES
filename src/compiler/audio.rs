@@ -220,8 +220,10 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
             blob.push(track.vol_env.unwrap_or(0xFF));
             // 5. PitchEnv
             blob.push(track.pitch_env.unwrap_or(0xFF));
+            // 6. ArpeggioEnv
+            blob.push(track.arpeggio_env.unwrap_or(0xFF));
 
-            current_offset += 5;
+            current_offset += 6;
 
             // 3. Notes
             // We need to sort notes by `col` and insert silence/rests for gaps.

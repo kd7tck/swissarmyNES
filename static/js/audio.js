@@ -32,6 +32,7 @@ class AudioTracker {
         const instrumentSelect = document.getElementById('audio-instrument-select');
         const volEnvSelect = document.getElementById('audio-vol-env-select');
         const pitchEnvSelect = document.getElementById('audio-pitch-env-select');
+        const arpEnvSelect = document.getElementById('audio-arp-env-select');
 
         if (trackSelect) {
             trackSelect.addEventListener('change', (e) => {
@@ -58,6 +59,13 @@ class AudioTracker {
             pitchEnvSelect.addEventListener('change', (e) => {
                 const val = parseInt(e.target.value);
                 this.tracks[this.currentTrackIndex].pitch_env = (val < 0) ? null : val;
+            });
+        }
+
+        if (arpEnvSelect) {
+            arpEnvSelect.addEventListener('change', (e) => {
+                const val = parseInt(e.target.value);
+                this.tracks[this.currentTrackIndex].arpeggio_env = (val < 0) ? null : val;
             });
         }
 
@@ -212,6 +220,7 @@ class AudioTracker {
 
         updateEnvSelect('audio-vol-env-select', track.vol_env);
         updateEnvSelect('audio-pitch-env-select', track.pitch_env);
+        updateEnvSelect('audio-arp-env-select', track.arpeggio_env);
 
         track.notes.forEach(note => {
             const cell = this.root.querySelector(`.tracker-cell[data-row="${note.row}"][data-col="${note.col}"]`);
@@ -247,7 +256,8 @@ class AudioTracker {
                 instrument: (t.instrument !== undefined) ? t.instrument : ((i===2)?0xFF:((i===3)?0x0F:0x9F)),
                 priority: (t.priority !== undefined) ? t.priority : 0,
                 vol_env: t.vol_env,
-                pitch_env: t.pitch_env
+                pitch_env: t.pitch_env,
+                arpeggio_env: t.arpeggio_env
             }));
 
             // Fill up to 4 if missing
@@ -260,15 +270,16 @@ class AudioTracker {
                     instrument: (i===2)?0xFF:((i===3)?0x0F:0x9F),
                     priority: 0,
                     vol_env: null,
-                    pitch_env: null
+                    pitch_env: null,
+                    arpeggio_env: null
                 });
             }
         } else {
              this.tracks = [
-                { name: "Track 1", notes: [], channel: 0, instrument: 0x9F, priority: 0, vol_env: null, pitch_env: null },
-                { name: "Track 2", notes: [], channel: 1, instrument: 0x9F, priority: 0, vol_env: null, pitch_env: null },
-                { name: "Track 3", notes: [], channel: 2, instrument: 0xFF, priority: 0, vol_env: null, pitch_env: null },
-                { name: "Track 4", notes: [], channel: 3, instrument: 0x0F, priority: 0, vol_env: null, pitch_env: null }
+                { name: "Track 1", notes: [], channel: 0, instrument: 0x9F, priority: 0, vol_env: null, pitch_env: null, arpeggio_env: null },
+                { name: "Track 2", notes: [], channel: 1, instrument: 0x9F, priority: 0, vol_env: null, pitch_env: null, arpeggio_env: null },
+                { name: "Track 3", notes: [], channel: 2, instrument: 0xFF, priority: 0, vol_env: null, pitch_env: null, arpeggio_env: null },
+                { name: "Track 4", notes: [], channel: 3, instrument: 0x0F, priority: 0, vol_env: null, pitch_env: null, arpeggio_env: null }
             ];
         }
 

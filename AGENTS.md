@@ -52,30 +52,27 @@ This document serves as the primary instruction manual for AI agents working on 
 ## Brain
 Phase 1-23 are complete. Phase 24 is Next.
 
-### Phase 23: Audio - Envelope Editor UI (Completed)
-- **Implemented**: Volume and Pitch Envelope support.
+### Phase 24: Audio - Arpeggios (Completed)
+- **Implemented**: Arpeggio support for audio tracks.
 - **Backend**:
-    - `AudioEnvelope` struct added to `ProjectAssets`.
-    - `AudioTrack` updated to reference `vol_env` and `pitch_env`.
-    - `compile_envelopes` implemented in `src/compiler/audio.rs`, injecting data at `$D900`.
-    - `compile_audio_data` updated to include envelope IDs in track headers (Header size 5).
+    - `AudioTrack` updated to include `arpeggio_env` field.
+    - `compile_audio_data` updated to inject Arpeggio ID into track header (Header size 6).
 - **Codegen**:
     - **Memory Map Updated**:
-        - Sound RAM expanded to `$0300-$033F` (64 bytes).
-        - String Heap moved to `$0340-$043F` (256 bytes).
-        - VBlank Buffer moved to `$0440-$047F` (64 bytes).
-        - User Variables start at `$0480`.
-    - `Sound_Init` clears `$0300-$033F`.
-    - `Sound_Play` reads Envelope IDs and resets envelope state.
-    - `Sound_Update` calls `SndEnvUpdate` to process envelopes per frame.
-    - **Assembly Logic**: Implemented Volume Envelope processing (Looping, Hold, Step Timer). Pitch Envelope logic structure exists but assembly implementation focused on Volume for stability.
+        - Sound RAM expanded to `$0300-$034F` (80 bytes).
+        - String Heap moved to `$0350-$044F` (256 bytes).
+        - VBlank Buffer moved to `$0450-$048F` (64 bytes).
+        - User Variables start at `$0490`.
+    - `Sound_Init`: Clears extended sound RAM range ($0300-$034F).
+    - `Sound_Play`: Reads Arpeggio ID and resets Arp state.
+    - `Sound_Update`: Calls `SndArpUpdate` after `SndEnvUpdate`.
+    - `SndChUpdate`: Stores `BasePitch` index instead of calculating Period directly.
+    - `SndArpUpdate`: Processes Arpeggio envelope, updates `ArpNoteOffset`, and recalculates Period (Base + Offset). Writes to hardware registers with optimization to avoid phase reset (checking High Byte change).
 - **Frontend**:
-    - Created `static/js/envelopes.js`: `EnvelopeEditor` class with SVG graph editor.
-    - Updated `static/js/audio.js` to integrate `EnvelopeEditor` and track assignment UI.
-    - Updated `static/index.html` to add Envelope Editor UI container.
-- **Verified**: `tests/audio_compilation_test.rs`, `tests/array_test.rs`, `tests/scroll_column_test.rs`, `tests/control_flow_test.rs`, `tests/poke_word_test.rs` updated and passing.
+    - Updated `static/js/audio.js` and `static/index.html` to add Arpeggio dropdown selector.
+- **Verified**: `tests/audio_compilation_test.rs`, `tests/audio_priority_test.rs`, and all other integration tests passed with new memory layout.
 
-### Phase 22: Audio - SFX Priority (Completed)
+### Phase 23: Audio - Envelope Editor UI (Completed)
 - **Implemented**: Priority system for sound channels.
 - **Backend**:
     - `AudioTrack` now has a `priority` field (u8).
@@ -97,9 +94,9 @@ Phase 1-23 are complete. Phase 24 is Next.
 - **Signed Assignment Bug**: Fixed `Statement::Let` to correctly sign-extend `INT` values when assigning to `WORD` variables (using `STX` instead of zero-filling).
 
 - **Next Steps**:
-    - Start Phase 24: Audio - Arpeggios.
-    - Implement Pitch Envelope Assembly Logic (currently basic structure is there).
-    - Add "Arp" macro support to Tracker.
+    - Start Phase 25a: Audio - SFX Engine Core.
+    - Define `SoundEffect` struct and binary format.
+    - Implement `SFX_Play` routine in Assembly.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -108,14 +105,16 @@ Phase 1-23 are complete. Phase 24 is Next.
     - `$F8`: PPU Ctrl Shadow.
 - **$0100-$01FF**: Stack.
 - **$0200-$02FF**: OAM (Shadow Sprites).
-- **$0300-$033F**: Sound Engine State.
-    - `$0300`-$030F: Channel State (4 bytes each).
+- **$0300-$034F**: Sound Engine State.
+    - `$0300`-$030F: Channel State.
     - `$0310`-$0313: Channel Instrument.
     - `$0314`-$0317: Channel Priority.
-    - `$0318`-$033F: Envelope State (IDs, Pos, Timers).
-- **$0340-$043F**: String Heap.
-- **$0440-$047F**: VBlank Buffer (Internal).
-- **$0480-$07FF**: User Variables (DIM).
+    - `$0318`-$0337: Vol/Pitch Envelope State.
+    - `$0338`-$034B: Arpeggio State (ID, Pos, Timer, Offset, BasePitch).
+    - `$034C`-$034F: LastPeriodH (for phase reset avoidance).
+- **$0350-$044F**: String Heap.
+- **$0450-$048F**: VBlank Buffer (Internal).
+- **$0490-$07FF**: User Variables (DIM).
 - **$8000-$CFFF**: PRG-ROM (Code).
 - **$D000**: NTSC Period Table.
 - **$D100**: Music Data.

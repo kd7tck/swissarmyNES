@@ -197,7 +197,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
 - **Completion Criteria:** Manually defined SFX data can be compiled and played via `PLAY_SFX` in a test ROM.
 
 ## Phase 25b: Audio - SFX Editor UI Foundation
-**Goal:** Create the dedicated workspace for Sound Effect creation, separate from the Music Tracker.
+**Goal:** Create the dedicated workspace for Sound Effect creation, separate from the Music Tracker, rename Audio tab to music to make sure there is no future confusion.
 - **Action Items:**
     - Add "SFX" tab to the Audio Editor.
     - Implement list management (Create, Rename, Delete SFX).

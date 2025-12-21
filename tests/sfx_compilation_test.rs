@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use swissarmynes::compiler::audio::{compile_envelopes, compile_sfx_data, SFX_TABLE_ADDR};
-    use swissarmynes::compiler::codegen::ENVELOPE_TABLE_ADDR;
+    use swissarmynes::compiler::audio::{compile_envelopes, compile_sfx_data};
     use swissarmynes::server::project::{ProjectAssets, SoundEffect};
 
     #[test]
@@ -91,4 +90,5 @@ mod tests {
         // DutyEnvID: 2
         assert_eq!(sfx_blob[7], 2);
     }
+
 }

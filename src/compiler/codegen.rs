@@ -419,9 +419,6 @@ impl CodeGenerator {
     fn generate_sound_engine(&mut self) {
         self.output.push("; --- Sound Engine (Phase 25a) ---".to_string());
 
-        self.output.push("SndChannelOffsets:".to_string());
-        self.output.push("  .db $00, $20, $40, $60".to_string());
-
         self.output.push("Sound_Init:".to_string());
         self.output.push("  LDA #$0F".to_string());
         self.output.push("  STA $4015".to_string());
@@ -456,8 +453,13 @@ impl CodeGenerator {
         self.output.push("  AND #$03".to_string());
         self.output.push("  STA $F2".to_string());
 
-        self.output.push("  LDY $F2".to_string());
-        self.output.push("  LDX SndChannelOffsets, Y".to_string());
+        self.output.push("  LDA $F2".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  TAX".to_string());
 
         self.output.push("  LDY #$02".to_string());
         self.output.push("  LDA ($F0), Y".to_string());
@@ -543,8 +545,13 @@ impl CodeGenerator {
         self.output.push("  AND #$03".to_string());
         self.output.push("  STA $F2".to_string());
 
-        self.output.push("  LDY $F2".to_string());
-        self.output.push("  LDX SndChannelOffsets, Y".to_string());
+        self.output.push("  LDA $F2".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  TAX".to_string());
 
         self.output.push("  LDY #1".to_string());
         self.output.push("  LDA ($F0), Y".to_string());

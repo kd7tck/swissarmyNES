@@ -16,6 +16,7 @@ fn test_audio_priority_compilation() {
         priority: 0,
         vol_env: None,
         pitch_env: None,
+        arpeggio_env: None,
     };
 
     let track2 = AudioTrack {
@@ -31,6 +32,7 @@ fn test_audio_priority_compilation() {
         priority: 10,
         vol_env: None,
         pitch_env: None,
+        arpeggio_env: None,
     };
 
     let assets = ProjectAssets {

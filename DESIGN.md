@@ -237,23 +237,23 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Assign palette attributes to the metatile.
 - **Completion Criteria:** User paints with 16x16 blocks instead of single tiles.
 
-## Phase 28: Visual - Screen Editor
+## Phase 28: Visual - Metatile Integration
 **Goal:** Organize game world. Screen editing will be built into the map editor directly. Allowing a person to edit individial tiles or collection of tiles called metatiles.
 - **Action Items:**
     - Integrate metatiles into other systems more fully.
 - **Completion Criteria:** Can edit and work with metatiles in other systems that also use tiles.
 
-## Phase 29: Visual - World Editor
-**Goal:** Stitch screens together.
+## Phase 29: Visual - World Editor for MAPS
+**Goal:** Stitch Maps together.
 - **Action Items:**
-    - 2D Grid view of Screens.
-    - Define adjacency (which screen is Right/Up/Down/Left).
+    - 2D Grid view of tiles or metatiles in vast grid map able to be stored in ROM.
+    - Define adjacency (which MAP is Right/Up/Down/Left).
 - **Completion Criteria:** Visual map of the entire game world.
 
 ## Phase 30: Visual - Sprite Editor
 **Goal:** Dedicated character design tool.
 - **Action Items:**
-    - Canvas allowing free placement of 8x8 sprite tiles.
+    - Canvas allowing free placement of 8x8 sprite tiles or metatiles.
     - Timeline UI for animation frames.
     - Export to `Metasprite` data format (Phase 13).
 - **Completion Criteria:** Create a "Walking Link" animation in UI and use it in code.

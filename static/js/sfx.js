@@ -213,6 +213,7 @@ class SFXEditor {
                     <h3>Sound Effects</h3>
                     <div class="sfx-buttons">
                          <button id="btn-add-sfx">New</button>
+                         <button id="btn-import-sfx" title="Import .sfx.json">Imp</button>
                          <button id="btn-delete-sfx" disabled>Delete</button>
                     </div>
                     <ul class="sfx-list" id="sfx-list"></ul>
@@ -256,6 +257,10 @@ class SFXEditor {
                     <div id="sfx-seq-editor-container" class="sfx-seq-editor">
                         <!-- Sequence Canvas Injected Here -->
                     </div>
+
+                    <div class="sfx-import-export-row">
+                        <button id="btn-export-sfx">Export SFX</button>
+                    </div>
                 </div>
                 <div id="sfx-empty-state" style="flex-grow: 1; display: flex; justify-content: center; align-items: center; color: #666; background: #2e2e2e;">
                     Select or create a Sound Effect
@@ -269,6 +274,24 @@ class SFXEditor {
     bindEvents() {
         document.getElementById('btn-add-sfx').onclick = () => this.addSFX();
         document.getElementById('btn-delete-sfx').onclick = () => this.deleteSFX();
+
+        // Import Button (trigger hidden input)
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.json';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) this.processImportFile(file);
+            fileInput.value = ''; // Reset
+        };
+
+        document.getElementById('btn-import-sfx').onclick = () => fileInput.click();
+        document.getElementById('btn-export-sfx').onclick = () => this.exportSFX();
+
+        this.setupDragAndDrop();
 
         const updateCurrent = () => {
              if (this.currentIndex >= 0 && this.sfxList[this.currentIndex]) {
@@ -425,6 +448,106 @@ class SFXEditor {
                 this.updateEditor();
             }
         }
+    }
+
+    setupDragAndDrop() {
+        const panel = this.root.querySelector('.sfx-list-panel');
+        if (!panel) return;
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            panel.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        panel.addEventListener('dragenter', () => panel.classList.add('drag-over'), false);
+        panel.addEventListener('dragover', () => panel.classList.add('drag-over'), false);
+        panel.addEventListener('dragleave', () => panel.classList.remove('drag-over'), false);
+        panel.addEventListener('drop', (e) => {
+            panel.classList.remove('drag-over');
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length > 0) {
+                this.processImportFile(files[0]);
+            }
+        }, false);
+    }
+
+    processImportFile(file) {
+        if (!file.name.endsWith('.json')) {
+            alert('Please drop a valid .json file.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const json = JSON.parse(e.target.result);
+                this.importSFX(json, file.name.replace('.json', '').replace('.sfx', ''));
+            } catch (err) {
+                alert('Error parsing JSON: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    importSFX(data, filename) {
+        // Validate it looks like an SFX object
+        if (typeof data !== 'object') {
+             alert('Invalid SFX file format.');
+             return;
+        }
+
+        // Sanitize / Default
+        const newSFX = {
+            name: data.name || filename || `SFX ${this.sfxList.length + 1}`,
+            channel: data.channel !== undefined ? data.channel : 0,
+            priority: data.priority !== undefined ? data.priority : 10,
+            speed: data.speed !== undefined ? data.speed : 1,
+            does_loop: !!data.does_loop,
+            vol_sequence: Array.isArray(data.vol_sequence) ? data.vol_sequence : [15, 0],
+            pitch_sequence: Array.isArray(data.pitch_sequence) ? data.pitch_sequence : [0, 0],
+            duty_sequence: Array.isArray(data.duty_sequence) ? data.duty_sequence : [0, 0]
+        };
+
+        this.sfxList.push(newSFX);
+        this.currentIndex = this.sfxList.length - 1;
+        this.renderList();
+        this.updateEditor();
+    }
+
+    exportSFX() {
+        if (this.currentIndex < 0) return;
+        const sfx = this.sfxList[this.currentIndex];
+
+        // Create a clean copy to export
+        const exportData = {
+            name: sfx.name,
+            channel: sfx.channel,
+            priority: sfx.priority,
+            speed: sfx.speed,
+            does_loop: sfx.does_loop,
+            vol_sequence: sfx.vol_sequence,
+            pitch_sequence: sfx.pitch_sequence,
+            duty_sequence: sfx.duty_sequence
+        };
+
+        const json = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        // Clean name for filename
+        const cleanName = sfx.name.replace(/[^a-zA-Z0-9-_]/g, '_');
+        a.download = `${cleanName}.sfx.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 }
 window.SFXEditor = SFXEditor;

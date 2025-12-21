@@ -45,7 +45,7 @@ mod tests {
             samples: vec![],
             sound_effects: vec![],
             metatiles: vec![],
-            world: None,
+            world: None, metasprites: vec![], animations: vec![],
         };
 
         let blob = compile_audio_data(&Some(assets));
@@ -116,7 +116,7 @@ mod tests {
             samples: vec![],
             sound_effects: vec![],
             metatiles: vec![],
-            world: None,
+            world: None, metasprites: vec![], animations: vec![],
         };
 
         let blob = compile_audio_data(&Some(assets));

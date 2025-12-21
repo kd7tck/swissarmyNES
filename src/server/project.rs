@@ -74,6 +74,33 @@ pub struct Metatile {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SpriteTile {
+    pub x: i8,
+    pub y: i8,
+    pub tile: u8,
+    pub attr: u8,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Metasprite {
+    pub name: String,
+    pub tiles: Vec<SpriteTile>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AnimationFrame {
+    pub metasprite: String,
+    pub duration: u8,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Animation {
+    pub name: String,
+    pub frames: Vec<AnimationFrame>,
+    pub does_loop: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SoundEffect {
     pub name: String,
     pub channel: u8,
@@ -115,6 +142,10 @@ pub struct ProjectAssets {
     pub metatiles: Vec<Metatile>,
     #[serde(default)]
     pub world: Option<WorldLayout>,
+    #[serde(default)]
+    pub metasprites: Vec<Metasprite>,
+    #[serde(default)]
+    pub animations: Vec<Animation>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -184,6 +215,8 @@ pub fn create_project(name: &str) -> Result<(), String> {
         sound_effects: vec![],   // Start empty
         metatiles: vec![],       // Start empty
         world: None,
+        metasprites: vec![], // Start empty
+        animations: vec![],  // Start empty
     };
     let assets_json = serde_json::to_string_pretty(&default_assets).map_err(|e| e.to_string())?;
     fs::write(project_path.join("assets.json"), assets_json).map_err(|e| e.to_string())?;

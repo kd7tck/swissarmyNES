@@ -50,7 +50,16 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-29 are complete. Phase 30 is Next.
+Phase 1-30 are complete. Phase 31 is Next.
+
+### Phase 30: Visual - Sprite Editor (Completed)
+- **Implemented**: `Metasprite`, `SpriteTile`, `Animation`, `AnimationFrame` structs in backend; `SpriteEditor` in frontend.
+- **Key Features**:
+    - **Metasprite**: Collection of 8x8 tiles with relative offsets (X, Y) and attributes.
+    - **Animation**: Sequence of Metasprites with durations.
+    - **Compiler Injection**: Automatically converts assets to `TopLevel::Metasprite` and `TopLevel::Animation` AST nodes.
+    - **Editor UI**: Two-pane editor for Sprites and Animations. Canvas for placing tiles (using CHR bank). Timeline for frame sequencing.
+    - **Persistence**: Saved to `assets.json` under `metasprites` and `animations`.
 
 ### Phase 29: Visual - World Editor (Completed)
 - **Implemented**: `WorldLayout` in backend and `WorldEditor` in frontend.
@@ -104,7 +113,7 @@ Phase 1-29 are complete. Phase 30 is Next.
     - **CHR Import**: Requires a 128x128 PNG for full bank import. Alpha channel is treated as color 0 (transparent). Nearest neighbor matching uses the *current* 4-color palette, not the full NES palette, so ensure the correct sub-palette is selected before importing.
 
 - **Next Steps**:
-    - Start Phase 30: Visual - Sprite Editor.
-    - Create dedicated character design tool (`SpriteEditor`).
-    - Implement canvas for free placement of 8x8 sprite tiles or metatiles.
-    - Add Timeline UI for animation frames.
+    - Start Phase 31: Emulator - WASM Integration.
+    - Select a Rust NES emulator crate.
+    - Compile emulator to WASM.
+    - Integrate WASM module into `editor.js`.

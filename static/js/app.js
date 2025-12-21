@@ -46,6 +46,11 @@ document.addEventListener('DOMContentLoaded', () => {
         window.sfxEditor = new window.SFXEditor('sfx-editor-root');
     }
 
+    // Initialize Sprite Editor
+    if (window.SpriteEditor) {
+        window.spriteEditor = new window.SpriteEditor();
+    }
+
     const initialHash = window.location.hash.replace('#', '');
     if (initialHash && document.getElementById(initialHash)) {
         navigateTo(initialHash);

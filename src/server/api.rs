@@ -1,6 +1,7 @@
 use crate::compiler::{
     analysis::SemanticAnalyzer,
     assembler::Assembler,
+    ast::{AnimationFrame, Expression, MetaspriteTile, TopLevel},
     audio,
     codegen::{CodeGenerator, ENVELOPE_TABLE_ADDR, NAMETABLE_ADDR},
     lexer::Lexer,
@@ -115,6 +116,42 @@ pub fn compile_source(
     // 2c. Preprocessing (Macros)
     let program = preprocessor::expand_macros(program)
         .map_err(|e| format!("Macro Expansion Error: {}", e))?;
+
+    // 2d. Inject Assets (Metasprites/Animations)
+    let mut program = program;
+    if let Some(assets) = &resolved_assets {
+        for ms in &assets.metasprites {
+            let tiles: Vec<MetaspriteTile> = ms
+                .tiles
+                .iter()
+                .map(|t| MetaspriteTile {
+                    x: Expression::Integer(t.x as i32),
+                    y: Expression::Integer(t.y as i32),
+                    tile: Expression::Integer(t.tile as i32),
+                    attr: Expression::Integer(t.attr as i32),
+                })
+                .collect();
+            program
+                .declarations
+                .push(TopLevel::Metasprite(ms.name.clone(), tiles));
+        }
+
+        for anim in &assets.animations {
+            let frames: Vec<AnimationFrame> = anim
+                .frames
+                .iter()
+                .map(|f| AnimationFrame {
+                    metasprite: f.metasprite.clone(),
+                    duration: f.duration,
+                })
+                .collect();
+            program.declarations.push(TopLevel::Animation(
+                anim.name.clone(),
+                frames,
+                anim.does_loop,
+            ));
+        }
+    }
 
     // 3. Analysis
     let mut analyzer = SemanticAnalyzer::new();

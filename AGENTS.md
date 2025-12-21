@@ -111,6 +111,12 @@ Phase 1-30 are complete. Phase 31 is Next.
     - **SFX Sequences**: `SequenceCanvas` modifies arrays in place.
     - **Frontend Validation**: When importing JSON, always validate fields exist to avoid `undefined` crashes in the editor.
     - **CHR Import**: Requires a 128x128 PNG for full bank import. Alpha channel is treated as color 0 (transparent). Nearest neighbor matching uses the *current* 4-color palette, not the full NES palette, so ensure the correct sub-palette is selected before importing.
+    - **16-bit Pointers**: When calculating addresses (like Heap Offset), always handle 16-bit Carry (`BCC +; INX`) for the High Byte.
+
+- **Debugging Review (Phases 1-30)**:
+    - Fixed a critical bug in `Runtime_GetHeapSlot` where String Heap pointers would wrap incorrectly (fail to carry to high byte) and corrupt memory at `$0300` (Sound Engine).
+    - Renamed confusing labels in `Math_Div16_Signed` to improve maintainability.
+    - Verified signed math, audio compilation, and memory layout.
 
 - **Next Steps**:
     - Start Phase 31: Emulator - WASM Integration.

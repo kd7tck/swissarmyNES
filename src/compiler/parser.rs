@@ -633,6 +633,11 @@ impl Parser {
             return Ok(Statement::WaitVBlank);
         }
 
+        if self.match_token(Token::Randomize) {
+            let expr = self.parse_expression()?;
+            return Ok(Statement::Randomize(expr));
+        }
+
         // Implicit Let or Call
         if matches!(
             self.peek(),

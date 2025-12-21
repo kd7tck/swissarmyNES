@@ -1504,7 +1504,7 @@ impl CodeGenerator {
         self.output.push("  LDX $07".to_string());
         self.output.push("  LDY $0B".to_string());
         self.output
-            .push("  BPL Math_DivSigned_AbsDivisor".to_string());
+            .push("  BPL Math_DivSigned_AbsDividend_Done".to_string());
         self.output.push("  EOR #$FF".to_string());
         self.output.push("  CLC".to_string());
         self.output.push("  ADC #1".to_string());
@@ -1514,7 +1514,8 @@ impl CodeGenerator {
         self.output.push("  ADC #0".to_string());
         self.output.push("  TAX".to_string());
         self.output.push("  PLA".to_string());
-        self.output.push("Math_DivSigned_AbsDivisor:".to_string());
+        self.output
+            .push("Math_DivSigned_AbsDividend_Done:".to_string());
         self.output.push("  PHA".to_string());
         self.output.push("  TXA".to_string());
         self.output.push("  PHA".to_string());
@@ -2179,6 +2180,9 @@ impl CodeGenerator {
             "  LDX #${:02X}",
             ((STRING_HEAP_START >> 8) & 0xFF) as u8
         ));
+        self.output.push("  BCC Heap_NoCarry".to_string());
+        self.output.push("  INX".to_string());
+        self.output.push("Heap_NoCarry:".to_string());
         self.output.push("  RTS".to_string());
 
         // Runtime_Asc

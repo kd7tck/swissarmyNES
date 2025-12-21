@@ -177,7 +177,8 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Vec<u8> {
                     blob.push(speed);
                     current_offset += 2;
                 }
-                blob.push(0); blob.push(0);
+                blob.push(0);
+                blob.push(0);
                 current_offset += 2;
             }
 
@@ -197,7 +198,8 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Vec<u8> {
                     blob.push(speed);
                     current_offset += 2;
                 }
-                blob.push(0); blob.push(0);
+                blob.push(0);
+                blob.push(0);
                 current_offset += 2;
             }
 
@@ -217,7 +219,8 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Vec<u8> {
                     blob.push(speed);
                     current_offset += 2;
                 }
-                blob.push(0); blob.push(0);
+                blob.push(0);
+                blob.push(0);
                 current_offset += 2;
             }
         }

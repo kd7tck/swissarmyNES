@@ -90,5 +90,4 @@ mod tests {
         // DutyEnvID: 2
         assert_eq!(sfx_blob[7], 2);
     }
-
 }

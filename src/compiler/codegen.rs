@@ -471,21 +471,29 @@ impl CodeGenerator {
         // Read VolEnv (Offset 3)
         self.output.push("  LDY #$03".to_string());
         self.output.push("  LDA ($F0), Y".to_string());
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x18));
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x18));
 
         // Read PitchEnv (Offset 4)
         self.output.push("  LDY #$04".to_string());
         self.output.push("  LDA ($F0), Y".to_string());
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x24));
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x24));
 
         // Reset Envelopes
         self.output.push("  LDA #0".to_string());
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x1C)); // VolEnvPos
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x20)); // VolEnvTimer
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x28)); // PitchEnvPos
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x2C)); // PitchEnvTimer
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x30)); // PitchAccumL
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x34)); // PitchAccumH
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x1C)); // VolEnvPos
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x20)); // VolEnvTimer
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x28)); // PitchEnvPos
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x2C)); // PitchEnvTimer
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x30)); // PitchAccumL
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x34)); // PitchAccumH
 
         // Advance Ptr (Header Size 5)
         self.output.push("  LDA $F0".to_string());
@@ -504,10 +512,10 @@ impl CodeGenerator {
         self.output.push("  LDA $F3".to_string());
         self.output
             .push(format!("  STA ${:04X}, Y", SOUND_RAM_START + 0x10)); // Store Inst in Inst Array? Wait, $0310 + Y (0-3).
-            // Wait, previous code used 0x10 + Y for Instrument storage?
-            // "STA ${:04X}, Y", SOUND_RAM_START + 0x10. Y is Channel ID.
-            // X is Channel Index (0,4,8,12).
-            // But Inst Config is at $0310-$0313. So Y is correct.
+                                                                        // Wait, previous code used 0x10 + Y for Instrument storage?
+                                                                        // "STA ${:04X}, Y", SOUND_RAM_START + 0x10. Y is Channel ID.
+                                                                        // X is Channel Index (0,4,8,12).
+                                                                        // But Inst Config is at $0310-$0313. So Y is correct.
         self.output.push("  LDA #$01".to_string());
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START));
@@ -649,10 +657,14 @@ impl CodeGenerator {
         self.output.push("  STA $F7".to_string());
 
         self.output.push("  LDA #0".to_string());
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x1C));
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x20));
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x28));
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x2C));
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x1C));
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x20));
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x28));
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x2C));
 
         self.output.push("  CPX #$00".to_string());
         self.output.push("  BEQ PlayP1".to_string());
@@ -728,27 +740,34 @@ impl CodeGenerator {
         self.output.push("  RTS".to_string());
 
         self.output.push("SndEnvUpdate:".to_string());
-        self.output.push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x18)); // VolEnvID
+        self.output
+            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x18)); // VolEnvID
         self.output.push("  CMP #$FF".to_string());
         self.output.push("  BNE SndEnvProcess".to_string());
         self.output.push("  RTS".to_string());
         self.output.push("SndEnvProcess:".to_string());
 
-        self.output.push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x20)); // Timer
+        self.output
+            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x20)); // Timer
         self.output.push("  BEQ SndEnvNextStep".to_string());
-        self.output.push(format!("  DEC ${:04X}, X", SOUND_RAM_START + 0x20));
+        self.output
+            .push(format!("  DEC ${:04X}, X", SOUND_RAM_START + 0x20));
         self.output.push("  JMP SndEnvUpdate_Done".to_string());
 
         self.output.push("SndEnvNextStep:".to_string());
-        self.output.push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x18));
+        self.output
+            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x18));
         self.output.push("  ASL".to_string());
         self.output.push("  TAY".to_string());
-        self.output.push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
+        self.output
+            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
         self.output.push("  STA $F0".to_string());
-        self.output.push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
+        self.output
+            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
         self.output.push("  STA $F1".to_string());
 
-        self.output.push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x1C)); // Pos
+        self.output
+            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x1C)); // Pos
         self.output.push("  STA $F2".to_string());
 
         self.output.push("  LDA $F0".to_string());
@@ -779,21 +798,26 @@ impl CodeGenerator {
         self.output.push("  BNE SndEnvApply".to_string());
 
         // Loop
-        self.output.push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x18));
+        self.output
+            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x18));
         self.output.push("  ASL".to_string());
         self.output.push("  TAY".to_string());
-        self.output.push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
+        self.output
+            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
         self.output.push("  STA $F0".to_string());
-        self.output.push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
+        self.output
+            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
         self.output.push("  STA $F1".to_string());
         self.output.push("  LDY #0".to_string());
         self.output.push("  LDA ($F0), Y".to_string());
         self.output.push("  CMP #$FF".to_string());
         self.output.push("  BEQ SndEnvHold".to_string());
 
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x1C));
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x1C));
         self.output.push("  LDA #1".to_string());
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x20));
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x20));
         self.output.push("  JMP SndEnvUpdate_Done".to_string());
 
         self.output.push("SndEnvHold:".to_string());
@@ -801,10 +825,13 @@ impl CodeGenerator {
 
         self.output.push("SndEnvApply:".to_string());
         self.output.push("  LDA $F4".to_string());
-        self.output.push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x20));
-        self.output.push(format!("  INC ${:04X}, X", SOUND_RAM_START + 0x1C));
+        self.output
+            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x20));
+        self.output
+            .push(format!("  INC ${:04X}, X", SOUND_RAM_START + 0x1C));
 
-        self.output.push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x10));
+        self.output
+            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x10));
         self.output.push("  AND #$F0".to_string());
         self.output.push("  ORA $F3".to_string());
         self.output.push("  STA $F5".to_string());

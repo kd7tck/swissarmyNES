@@ -93,11 +93,7 @@ class CHREditor {
         btnFill.textContent = 'Fill';
         btnFill.title = 'Flood Fill';
         btnFill.onclick = () => this.activateFillTool();
-        // Since fill is a mode (click on canvas), we might need state.
-        // But for simplicity, let's keep it as "Pencil" default, and maybe a "Fill Mode" toggle?
-        // Or simpler: Just a button that fills the whole tile? No, prompt says "Flood Fill Tool".
-        // Usually that means "click to fill area".
-        // Let's add a tool state.
+
         this.toolMode = 'pencil'; // pencil, fill
         btnFill.onclick = () => {
             this.toolMode = this.toolMode === 'fill' ? 'pencil' : 'fill';
@@ -189,11 +185,39 @@ class CHREditor {
         header.className = 'bank-view-header';
         const title = document.createElement('h3');
         title.textContent = 'CHR Bank';
+
+        // Import Button
+        const btnImport = document.createElement('label');
+        btnImport.className = 'import-btn';
+        btnImport.textContent = 'Import PNG';
+        btnImport.title = 'Import 128x128 PNG (nearest color)';
+        btnImport.style.cursor = 'pointer';
+        btnImport.style.marginLeft = '10px';
+        btnImport.style.background = '#444';
+        btnImport.style.padding = '2px 6px';
+        btnImport.style.border = '1px solid #666';
+        btnImport.style.fontSize = '12px';
+        btnImport.style.color = '#fff';
+
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.png';
+        fileInput.style.display = 'none';
+        fileInput.onchange = (e) => {
+            if (e.target.files && e.target.files[0]) {
+                this.processImportedImage(e.target.files[0]);
+            }
+        };
+        btnImport.appendChild(fileInput);
+
+
         const closeBtn = document.createElement('button');
         closeBtn.className = 'close-modal-btn';
         closeBtn.textContent = '×';
         closeBtn.onclick = () => this.toggleBankView(false);
+
         header.appendChild(title);
+        header.appendChild(btnImport);
         header.appendChild(closeBtn);
         content.appendChild(header);
 
@@ -222,6 +246,22 @@ class CHREditor {
             }
         });
 
+        // Drag and Drop support
+        this.bankCanvas.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            this.bankCanvas.style.borderColor = '#fff';
+        });
+        this.bankCanvas.addEventListener('dragleave', (e) => {
+             this.bankCanvas.style.borderColor = '#444';
+        });
+        this.bankCanvas.addEventListener('drop', (e) => {
+            e.preventDefault();
+            this.bankCanvas.style.borderColor = '#444';
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                this.processImportedImage(e.dataTransfer.files[0]);
+            }
+        });
+
         content.appendChild(this.bankCanvas);
         this.modal.appendChild(content);
         document.body.appendChild(this.modal);
@@ -238,6 +278,110 @@ class CHREditor {
         } else {
             this.modal.classList.remove('active');
         }
+    }
+
+    processImportedImage(file) {
+        if (file.type !== 'image/png') {
+            alert("Only PNG images are supported.");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = 128;
+                tempCanvas.height = 128;
+                const tempCtx = tempCanvas.getContext('2d');
+                // Draw image. If larger, it will be cropped? No, drawImage scales if we provide w,h.
+                // But we want 1:1 pixel mapping.
+                // We'll just draw at 0,0 and whatever fits fits.
+                tempCtx.drawImage(img, 0, 0);
+
+                const imageData = tempCtx.getImageData(0, 0, 128, 128);
+                const data = imageData.data; // RGBA array
+
+                if (!this.assets || !this.assets.chr_bank) {
+                    if (this.assets) this.assets.chr_bank = new Array(4096).fill(0);
+                    else return;
+                }
+
+                for (let tileY = 0; tileY < 16; tileY++) {
+                    for (let tileX = 0; tileX < 16; tileX++) {
+                        const tileIdx = tileY * 16 + tileX;
+                        const bankOffset = tileIdx * 16;
+
+                        // Zero out this tile
+                        for(let k=0; k<16; k++) this.assets.chr_bank[bankOffset+k] = 0;
+
+                        for (let y = 0; y < 8; y++) {
+                            for (let x = 0; x < 8; x++) {
+                                // Pixel coord in image
+                                const px = tileX * 8 + x;
+                                const py = tileY * 8 + y;
+
+                                const i = (py * 128 + px) * 4;
+                                const r = data[i];
+                                const g = data[i+1];
+                                const b = data[i+2];
+                                const a = data[i+3];
+
+                                let colorIdx = 0;
+                                if (a < 128) {
+                                    colorIdx = 0; // Transparent -> Color 0
+                                } else {
+                                    colorIdx = this.findNearestColorIndex(r, g, b);
+                                }
+
+                                const bitMask = 1 << (7 - x);
+                                if (colorIdx & 1) this.assets.chr_bank[bankOffset + y] |= bitMask;
+                                if (colorIdx & 2) this.assets.chr_bank[bankOffset + y + 8] |= bitMask;
+                            }
+                        }
+                    }
+                }
+                this.render();
+                this.renderBank();
+                window.dispatchEvent(new Event('chr-changed'));
+                // alert("Imported CHR Bank.");
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    hexToRgb(hex) {
+        var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+        hex = hex.replace(shorthandRegex, function(m, r, g, b) {
+            return r + r + g + g + b + b;
+        });
+
+        var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : null;
+    }
+
+    findNearestColorIndex(r, g, b) {
+        let bestDist = Infinity;
+        let bestIdx = 0;
+
+        for (let i = 0; i < 4; i++) {
+            const hex = this.renderPalette[i];
+            const rgb = this.hexToRgb(hex);
+            if (!rgb) continue;
+
+            // Euclidean distance squared
+            const dist = (r - rgb.r) ** 2 + (g - rgb.g) ** 2 + (b - rgb.b) ** 2;
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIdx = i;
+            }
+        }
+        return bestIdx;
     }
 
     onProjectLoaded(assets) {
@@ -364,8 +508,6 @@ class CHREditor {
         }
 
         // Write back
-        // Optimization: updatePixel calls render() every time, which is slow.
-        // Better to write raw bytes then render once.
         const tileOffset = this.currentTileIndex * 16;
         // Zero out tile
         for(let i=0; i<16; i++) this.assets.chr_bank[tileOffset+i] = 0;
@@ -387,11 +529,7 @@ class CHREditor {
         if (sourceColor === targetColor) return;
 
         const stack = [[startX, startY]];
-        // Avoid infinite loops just in case, though source!=target prevents it
         const seen = new Set();
-
-        // We need to batch updates to avoid render flickering
-        // So we'll update the data model first, then render once.
 
         // Copy tile data to local buffer for fast access
         let buffer = new Array(64);

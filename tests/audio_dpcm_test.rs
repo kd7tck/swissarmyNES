@@ -32,6 +32,7 @@ fn test_compile_samples() {
         envelopes: vec![],
         sound_effects: vec![],
         metatiles: vec![],
+        screens: vec![],
     };
 
     let (samples_blob, table_blob) = audio::compile_samples(&Some(assets));
@@ -93,6 +94,7 @@ fn test_compile_audio_dmc() {
         envelopes: vec![],
         sound_effects: vec![],
         metatiles: vec![],
+        screens: vec![],
     };
 
     let blob = audio::compile_audio_data(&Some(assets));

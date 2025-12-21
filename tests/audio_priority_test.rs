@@ -44,6 +44,7 @@ fn test_audio_priority_compilation() {
         samples: vec![],
         sound_effects: vec![],
         metatiles: vec![],
+        screens: vec![],
     };
 
     let blob = compile_audio_data(&Some(assets));

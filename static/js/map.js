@@ -4,21 +4,17 @@ class MapEditor {
         this.canvas = null;
         this.ctx = null;
         this.assets = null;
-        this.currentNametableIndex = 0;
+
+        this.targetType = 'nametable'; // 'nametable' or 'screen'
+        this.currentIndex = 0;
         this.scale = 2; // 256x240 -> 512x480
 
-        // Default to showing grid
         this.showGrid = true;
         this.currentPalette = 0; // 0-3
-        this.mode = 'tile'; // 'tile', 'attribute', 'metatile'
+        this.mode = 'tile'; // 'tile', 'attribute', 'metatile' (Only applies to Nametables)
 
-        // Listen for project load
         window.addEventListener('project-loaded', (e) => this.onProjectLoaded(e.detail.assets));
-
-        // Listen for palette changes to re-render
         window.addEventListener('palette-changed', () => this.render());
-
-        // We also need to listen for CHR changes.
         window.addEventListener('chr-changed', () => this.render());
 
         this.init();
@@ -28,50 +24,45 @@ class MapEditor {
         if (!this.container) return;
         this.container.innerHTML = '';
 
-        // Controls
         const controls = document.createElement('div');
         controls.className = 'map-controls';
 
-        // Nametable Selector (placeholder for now)
-        this.lblNametable = document.createElement('span');
-        this.lblNametable.textContent = 'Nametable 0';
-        controls.appendChild(this.lblNametable);
+        // Target Selector
+        this.selTarget = document.createElement('select');
+        this.selTarget.onchange = (e) => {
+            const val = e.target.value;
+            const parts = val.split(':');
+            this.targetType = parts[0];
+            this.currentIndex = parseInt(parts[1]);
+            this.updateModeUI();
+            this.render();
+        };
+        controls.appendChild(this.selTarget);
 
-        // Add Nametable Button
-        const btnAdd = document.createElement('button');
-        btnAdd.textContent = '+';
-        btnAdd.title = "Add Nametable";
-        btnAdd.onclick = () => this.addNametable();
-        controls.appendChild(btnAdd);
+        // Add Buttons
+        const btnAddNT = document.createElement('button');
+        btnAddNT.textContent = '+ NT';
+        btnAddNT.title = "Add Nametable";
+        btnAddNT.onclick = () => this.addNametable();
+        controls.appendChild(btnAddNT);
+
+        const btnAddSC = document.createElement('button');
+        btnAddSC.textContent = '+ Scr';
+        btnAddSC.title = "Add Screen";
+        btnAddSC.onclick = () => this.addScreen();
+        controls.appendChild(btnAddSC);
 
         // Separator
-        const sep1 = document.createElement('span');
-        sep1.style.width = '20px';
-        sep1.style.display = 'inline-block';
-        controls.appendChild(sep1);
+        controls.appendChild(this.createSep());
 
-        // Mode Toggle
-        const btnMode = document.createElement('button');
-        btnMode.textContent = 'Mode: Tiles';
-        btnMode.onclick = () => {
-            if (this.mode === 'tile') this.mode = 'attribute';
-            else if (this.mode === 'attribute') this.mode = 'metatile';
-            else this.mode = 'tile';
-
-            let label = 'Tiles';
-            if (this.mode === 'attribute') label = 'Attributes';
-            if (this.mode === 'metatile') label = 'Metatiles';
-            btnMode.textContent = `Mode: ${label}`;
-
-            this.render(); // Redraw grid
-        };
-        controls.appendChild(btnMode);
+        // Mode Toggle (Only for Nametables)
+        this.btnMode = document.createElement('button');
+        this.btnMode.textContent = 'Mode: Tiles';
+        this.btnMode.onclick = () => this.toggleMode();
+        controls.appendChild(this.btnMode);
 
          // Separator
-         const sep2 = document.createElement('span');
-         sep2.style.width = '20px';
-         sep2.style.display = 'inline-block';
-         controls.appendChild(sep2);
+         controls.appendChild(this.createSep());
 
         // Palette Selector
         const lblPal = document.createElement('span');
@@ -81,22 +72,18 @@ class MapEditor {
         for(let i=0; i<4; i++) {
             const btnPal = document.createElement('button');
             btnPal.textContent = `${i}`;
+            btnPal.className = 'pal-btn';
             btnPal.onclick = () => {
                 this.currentPalette = i;
-                // Highlight active
                 Array.from(controls.querySelectorAll('.pal-btn')).forEach(b => b.style.fontWeight = 'normal');
                 btnPal.style.fontWeight = 'bold';
             };
-            btnPal.className = 'pal-btn';
             if (i === 0) btnPal.style.fontWeight = 'bold';
             controls.appendChild(btnPal);
         }
 
         // Separator
-        const sep3 = document.createElement('span');
-        sep3.style.width = '20px';
-        sep3.style.display = 'inline-block';
-        controls.appendChild(sep3);
+        controls.appendChild(this.createSep());
 
         // Grid Toggle
         const btnGrid = document.createElement('button');
@@ -109,13 +96,12 @@ class MapEditor {
 
         this.container.appendChild(controls);
 
-        // Canvas Wrapper
+        // Canvas
         const wrapper = document.createElement('div');
         wrapper.className = 'map-canvas-wrapper';
         wrapper.style.overflow = 'auto';
         wrapper.style.maxHeight = '600px';
 
-        // Canvas
         this.canvas = document.createElement('canvas');
         this.canvas.width = 256 * this.scale;
         this.canvas.height = 240 * this.scale;
@@ -128,123 +114,186 @@ class MapEditor {
 
         // Mouse Events
         let isDrawing = false;
-
         const handleMouse = (e, type) => {
-            if (!this.assets || !this.assets.nametables || this.assets.nametables.length === 0) return;
-
+            if (!this.assets) return;
             const rect = this.canvas.getBoundingClientRect();
             const x = Math.floor((e.clientX - rect.left) / this.scale);
             const y = Math.floor((e.clientY - rect.top) / this.scale);
 
             if (x >= 0 && x < 256 && y >= 0 && y < 240) {
-                const tileX = Math.floor(x / 8);
-                const tileY = Math.floor(y / 8);
-
                 if (type === 'down') {
                     isDrawing = true;
-                    if (this.mode === 'tile') {
-                        this.placeTile(tileX, tileY);
-                    } else if (this.mode === 'attribute') {
-                        this.placeAttribute(tileX, tileY);
-                    } else if (this.mode === 'metatile') {
-                        this.placeMetatile(tileX, tileY);
-                    }
+                    this.handlePaint(x, y);
                 } else if (type === 'move' && isDrawing) {
-                    if (this.mode === 'tile') {
-                        this.placeTile(tileX, tileY);
-                    } else if (this.mode === 'attribute') {
-                        this.placeAttribute(tileX, tileY);
-                    } else if (this.mode === 'metatile') {
-                        this.placeMetatile(tileX, tileY);
-                    }
+                    this.handlePaint(x, y);
                 }
             }
         };
-
         this.canvas.addEventListener('mousedown', (e) => handleMouse(e, 'down'));
         this.canvas.addEventListener('mousemove', (e) => handleMouse(e, 'move'));
         window.addEventListener('mouseup', () => { isDrawing = false; });
     }
 
+    createSep() {
+        const sep = document.createElement('span');
+        sep.style.width = '20px';
+        sep.style.display = 'inline-block';
+        return sep;
+    }
+
     onProjectLoaded(assets) {
         this.assets = assets;
-        if (!this.assets.nametables) {
-            this.assets.nametables = [];
-        }
+        if (!this.assets.nametables) this.assets.nametables = [];
+        if (!this.assets.screens) this.assets.screens = [];
 
-        // Initialize attrs if missing for existing nametables
+        // Ensure attrs for Nametables
         this.assets.nametables.forEach(nt => {
-            if (!nt.attrs || nt.attrs.length !== 64) {
-                nt.attrs = new Array(64).fill(0);
-            }
+            if (!nt.attrs || nt.attrs.length !== 64) nt.attrs = new Array(64).fill(0);
         });
 
-        if (this.assets.nametables.length === 0) {
-            this.addNametable();
+        // Default: Nametable 0 if exists, else add one
+        if (this.assets.nametables.length === 0 && this.assets.screens.length === 0) {
+            this.addNametable(); // Adds NT 0
         }
 
-        this.currentNametableIndex = 0;
+        // Update Selector
+        this.updateSelector();
+
+        // Select first available
+        if (this.assets.nametables.length > 0) {
+            this.targetType = 'nametable';
+            this.currentIndex = 0;
+        } else {
+            this.targetType = 'screen';
+            this.currentIndex = 0;
+        }
+
+        this.updateModeUI();
         this.render();
+    }
+
+    updateSelector() {
+        this.selTarget.innerHTML = '';
+
+        if (this.assets.nametables) {
+            this.assets.nametables.forEach((nt, i) => {
+                const opt = document.createElement('option');
+                opt.value = `nametable:${i}`;
+                opt.textContent = nt.name || `Nametable ${i}`;
+                if (this.targetType === 'nametable' && this.currentIndex === i) opt.selected = true;
+                this.selTarget.appendChild(opt);
+            });
+        }
+
+        if (this.assets.screens) {
+            this.assets.screens.forEach((sc, i) => {
+                const opt = document.createElement('option');
+                opt.value = `screen:${i}`;
+                opt.textContent = sc.name || `Screen ${i}`;
+                if (this.targetType === 'screen' && this.currentIndex === i) opt.selected = true;
+                this.selTarget.appendChild(opt);
+            });
+        }
     }
 
     addNametable() {
         if (!this.assets) return;
-
         const newData = new Array(960).fill(0);
         const newAttrs = new Array(64).fill(0);
-
         this.assets.nametables.push({
             name: `Nametable ${this.assets.nametables.length}`,
             data: newData,
             attrs: newAttrs
         });
-
-        this.currentNametableIndex = this.assets.nametables.length - 1;
+        this.targetType = 'nametable';
+        this.currentIndex = this.assets.nametables.length - 1;
+        this.updateSelector();
+        this.updateModeUI();
         this.render();
     }
 
-    placeTile(tx, ty) {
-        if (!this.assets || !this.assets.nametables[this.currentNametableIndex]) return;
+    addScreen() {
+        if (!this.assets) return;
+        // 16x15 = 240 bytes
+        const newData = new Array(240).fill(0);
+        this.assets.screens.push({
+            name: `Screen ${this.assets.screens.length}`,
+            data: newData
+        });
+        this.targetType = 'screen';
+        this.currentIndex = this.assets.screens.length - 1;
+        this.updateSelector();
+        this.updateModeUI();
+        this.render();
+    }
 
-        // Get selected tile from CHR Editor
-        let tileIndex = 0;
-        if (window.chrEditor) {
-            tileIndex = window.chrEditor.currentTileIndex;
+    toggleMode() {
+        if (this.targetType === 'screen') return; // Locked
+
+        if (this.mode === 'tile') this.mode = 'attribute';
+        else if (this.mode === 'attribute') this.mode = 'metatile';
+        else this.mode = 'tile';
+
+        this.updateModeUI();
+        this.render();
+    }
+
+    updateModeUI() {
+        if (this.targetType === 'screen') {
+            this.btnMode.textContent = 'Mode: Screen (Metatiles)';
+            this.btnMode.disabled = true;
+            this.mode = 'metatile'; // Implicitly metatile mode
+        } else {
+            this.btnMode.disabled = false;
+            let label = 'Tiles';
+            if (this.mode === 'attribute') label = 'Attributes';
+            if (this.mode === 'metatile') label = 'Metatiles';
+            this.btnMode.textContent = `Mode: ${label}`;
         }
+    }
 
-        const nt = this.assets.nametables[this.currentNametableIndex];
+    handlePaint(x, y) {
+        if (this.targetType === 'nametable') {
+            const tileX = Math.floor(x / 8);
+            const tileY = Math.floor(y / 8);
+            if (this.mode === 'tile') this.placeTile(tileX, tileY);
+            else if (this.mode === 'attribute') this.placeAttribute(tileX, tileY);
+            else if (this.mode === 'metatile') this.placeMetatileOnNametable(tileX, tileY);
+        } else {
+            // Screen
+            const metaX = Math.floor(x / 16);
+            const metaY = Math.floor(y / 16);
+            this.placeMetatileOnScreen(metaX, metaY);
+        }
+    }
+
+    placeTile(tx, ty) {
+        if (!this.assets.nametables[this.currentIndex]) return;
+        let tileIndex = window.chrEditor ? window.chrEditor.currentTileIndex : 0;
+        const nt = this.assets.nametables[this.currentIndex];
         const idx = ty * 32 + tx;
-
-        if (idx < nt.data.length) {
-            if (nt.data[idx] !== tileIndex) {
-                nt.data[idx] = tileIndex;
-                this.render();
-            }
+        if (idx < nt.data.length && nt.data[idx] !== tileIndex) {
+            nt.data[idx] = tileIndex;
+            this.render();
         }
     }
 
     placeAttribute(tx, ty) {
-        if (!this.assets || !this.assets.nametables[this.currentNametableIndex]) return;
-
+        if (!this.assets.nametables[this.currentIndex]) return;
         const attrX = Math.floor(tx / 4);
         const attrY = Math.floor(ty / 4);
         const attrIdx = attrY * 8 + attrX;
+        const nt = this.assets.nametables[this.currentIndex];
 
-        if (attrIdx >= 64) return;
-
-        const nt = this.assets.nametables[this.currentNametableIndex];
-        let byte = nt.attrs[attrIdx];
-
+        // logic same as before
         const isRight = (tx % 4) >= 2;
         const isBottom = (ty % 4) >= 2;
-
         let shift = 0;
         if (isRight) shift += 2;
         if (isBottom) shift += 4;
 
-        // Mask out the old value
         const mask = ~(0x03 << shift);
-        byte = (byte & mask) | ((this.currentPalette & 0x03) << shift);
+        const byte = (nt.attrs[attrIdx] & mask) | ((this.currentPalette & 0x03) << shift);
 
         if (nt.attrs[attrIdx] !== byte) {
             nt.attrs[attrIdx] = byte;
@@ -252,171 +301,170 @@ class MapEditor {
         }
     }
 
-    placeMetatile(tx, ty) {
-        if (!this.assets || !this.assets.nametables[this.currentNametableIndex]) return;
+    placeMetatileOnNametable(tx, ty) {
+        if (!window.metatileEditor || window.metatileEditor.currentMetatileIndex < 0) return;
+        const metaIdx = window.metatileEditor.currentMetatileIndex;
+        if (!this.assets.metatiles[metaIdx]) return;
 
-        // Metatile mode works on 2x2 grid (16x16 pixel blocks).
-        // So we snap to even tile coordinates.
+        const meta = this.assets.metatiles[metaIdx];
+        const nt = this.assets.nametables[this.currentIndex];
+
         const metaX = Math.floor(tx / 2) * 2;
         const metaY = Math.floor(ty / 2) * 2;
 
-        // Get current metatile
-        if (!window.metatileEditor || window.metatileEditor.currentMetatileIndex < 0) return;
-        if (!this.assets.metatiles || !this.assets.metatiles[window.metatileEditor.currentMetatileIndex]) return;
+        // Set tiles
+        nt.data[metaY * 32 + metaX] = meta.tiles[0];
+        nt.data[metaY * 32 + metaX + 1] = meta.tiles[1];
+        nt.data[(metaY + 1) * 32 + metaX] = meta.tiles[2];
+        nt.data[(metaY + 1) * 32 + metaX + 1] = meta.tiles[3];
 
-        const meta = this.assets.metatiles[window.metatileEditor.currentMetatileIndex];
-        const nt = this.assets.nametables[this.currentNametableIndex];
-
-        // 1. Place 4 tiles
-        // Top-Left
-        const idxTL = metaY * 32 + metaX;
-        // Top-Right
-        const idxTR = metaY * 32 + (metaX + 1);
-        // Bottom-Left
-        const idxBL = (metaY + 1) * 32 + metaX;
-        // Bottom-Right
-        const idxBR = (metaY + 1) * 32 + (metaX + 1);
-
-        // Check bounds
-        if (idxTL < nt.data.length) nt.data[idxTL] = meta.tiles[0];
-        if (idxTR < nt.data.length) nt.data[idxTR] = meta.tiles[1];
-        if (idxBL < nt.data.length) nt.data[idxBL] = meta.tiles[2];
-        if (idxBR < nt.data.length) nt.data[idxBR] = meta.tiles[3];
-
-        // 2. Set Attribute
-        // Since we are aligned to 2x2 grid (16x16 pixels), this corresponds EXACTLY to one attribute region (2 bits).
-        // Re-use placeAttribute logic but forcing the palette from the metatile.
-
-        // Temporarily override current palette with metatile palette
-        const originalPalette = this.currentPalette;
+        // Set Attribute (use override)
+        const oldPal = this.currentPalette;
         this.currentPalette = meta.attr;
-
-        // Call placeAttribute on any tile within the block (e.g., metaX, metaY)
-        this.placeAttribute(metaX, metaY);
-
-        // Restore palette
-        this.currentPalette = originalPalette;
+        this.placeAttribute(metaX, metaY); // Updates 16x16 region attr
+        this.currentPalette = oldPal;
 
         this.render();
     }
 
-    // Returns palette index (0-3) for a given tile coordinate
+    placeMetatileOnScreen(mx, my) {
+        if (!this.assets.screens[this.currentIndex]) return;
+        if (mx >= 16 || my >= 15) return;
+
+        if (!window.metatileEditor || window.metatileEditor.currentMetatileIndex < 0) return;
+        const metaIdx = window.metatileEditor.currentMetatileIndex;
+
+        const sc = this.assets.screens[this.currentIndex];
+        const idx = my * 16 + mx;
+
+        if (sc.data[idx] !== metaIdx) {
+            sc.data[idx] = metaIdx;
+            this.render();
+        }
+    }
+
     getAttribute(tx, ty) {
-         if (!this.assets || !this.assets.nametables[this.currentNametableIndex]) return 0;
-         const nt = this.assets.nametables[this.currentNametableIndex];
-         if (!nt.attrs) return 0;
+        // Only for Nametables
+        if (this.targetType !== 'nametable') return 0;
+        const nt = this.assets.nametables[this.currentIndex];
+        if (!nt || !nt.attrs) return 0;
 
-         const attrX = Math.floor(tx / 4);
-         const attrY = Math.floor(ty / 4);
-         const attrIdx = attrY * 8 + attrX;
+        const attrX = Math.floor(tx / 4);
+        const attrY = Math.floor(ty / 4);
+        const idx = attrY * 8 + attrX;
+        if (idx >= nt.attrs.length) return 0;
 
-         if (attrIdx >= nt.attrs.length) return 0;
+        const isRight = (tx % 4) >= 2;
+        const isBottom = (ty % 4) >= 2;
+        let shift = 0;
+        if (isRight) shift += 2;
+        if (isBottom) shift += 4;
 
-         const byte = nt.attrs[attrIdx];
-
-         const isRight = (tx % 4) >= 2;
-         const isBottom = (ty % 4) >= 2;
-
-         let shift = 0;
-         if (isRight) shift += 2;
-         if (isBottom) shift += 4;
-
-         return (byte >> shift) & 0x03;
+        return (nt.attrs[idx] >> shift) & 0x03;
     }
 
     render() {
-        if (!this.ctx) return;
+        if (!this.ctx || !this.assets) return;
 
         // Clear
         this.ctx.fillStyle = '#000';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        if (!this.assets || !this.assets.nametables || this.assets.nametables.length === 0) return;
-
-        const nt = this.assets.nametables[this.currentNametableIndex];
         const chrBank = this.assets.chr_bank;
 
-        // Precompute palettes
+        // Get Sub-Palettes
         const subPalettes = [];
-        if (window.paletteEditor && this.assets.palettes) {
-             for(let i=0; i<4; i++) {
-                 let colors = ['#000000', '#666666', '#aaaaaa', '#ffffff'];
-                 if (this.assets.palettes && this.assets.palettes[i]) {
-                     colors = this.assets.palettes[i].colors.map(c => {
-                        if (window.paletteEditor && window.paletteEditor.nesPalette) {
-                            return '#' + window.paletteEditor.nesPalette[c & 0x3F];
-                        }
-                        return '#fff';
-                     });
-                 }
-                 subPalettes.push(colors);
+        for(let i=0; i<4; i++) {
+             let colors = ['#000', '#555', '#aaa', '#fff'];
+             if (window.paletteEditor && this.assets.palettes && this.assets.palettes[i]) {
+                 colors = this.assets.palettes[i].colors.map(c => {
+                    if (window.paletteEditor.nesPalette) return '#' + window.paletteEditor.nesPalette[c & 0x3F];
+                    return '#fff';
+                 });
              }
-        } else {
-             // Fallback
-             for(let i=0; i<4; i++) subPalettes.push(['#000', '#555', '#aaa', '#fff']);
+             subPalettes.push(colors);
         }
 
-        // Render Tiles
-        for (let r = 0; r < 30; r++) {
-            for (let c = 0; c < 32; c++) {
-                const tileIdx = nt.data[r * 32 + c];
-                const palIdx = this.getAttribute(c, r);
-                this.drawTile(c * 8, r * 8, tileIdx, chrBank, subPalettes[palIdx]);
+        if (this.targetType === 'nametable') {
+            const nt = this.assets.nametables[this.currentIndex];
+            if (!nt) return;
+
+            for (let r = 0; r < 30; r++) {
+                for (let c = 0; c < 32; c++) {
+                    const tileIdx = nt.data[r * 32 + c];
+                    const palIdx = this.getAttribute(c, r);
+                    this.drawTile(c * 8, r * 8, tileIdx, chrBank, subPalettes[palIdx]);
+                }
+            }
+        } else {
+            // Screen
+            const sc = this.assets.screens[this.currentIndex];
+            if (!sc) return;
+
+            for (let r = 0; r < 15; r++) {
+                for (let c = 0; c < 16; c++) {
+                    const metaIdx = sc.data[r * 16 + c];
+                    const meta = this.assets.metatiles ? this.assets.metatiles[metaIdx] : null;
+                    if (meta) {
+                        const px = c * 16;
+                        const py = r * 16;
+                        // Draw 4 tiles
+                        this.drawTile(px, py, meta.tiles[0], chrBank, subPalettes[meta.attr]);
+                        this.drawTile(px+8, py, meta.tiles[1], chrBank, subPalettes[meta.attr]);
+                        this.drawTile(px, py+8, meta.tiles[2], chrBank, subPalettes[meta.attr]);
+                        this.drawTile(px+8, py+8, meta.tiles[3], chrBank, subPalettes[meta.attr]);
+                    }
+                }
             }
         }
 
-        // Draw Grid
+        // Grid
         if (this.showGrid) {
             this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
             this.ctx.lineWidth = 1;
             this.ctx.beginPath();
 
-            // Vertical lines
-            for (let c = 0; c <= 32; c++) {
-                this.ctx.moveTo(c * 8 * this.scale, 0);
-                this.ctx.lineTo(c * 8 * this.scale, 240 * this.scale);
+            // Standard 8x8 grid or 16x16 depending on mode?
+            // Nametable: 8x8 is useful.
+            // Screen: 16x16 is the base unit.
+
+            // Draw 8x8 first (faint)
+            if (this.targetType === 'nametable') {
+                 for (let c = 0; c <= 32; c++) {
+                    this.ctx.moveTo(c * 8 * this.scale, 0);
+                    this.ctx.lineTo(c * 8 * this.scale, 240 * this.scale);
+                }
+                for (let r = 0; r <= 30; r++) {
+                    this.ctx.moveTo(0, r * 8 * this.scale);
+                    this.ctx.lineTo(256 * this.scale, r * 8 * this.scale);
+                }
+                this.ctx.stroke();
             }
 
-            // Horizontal lines
-            for (let r = 0; r <= 30; r++) {
-                this.ctx.moveTo(0, r * 8 * this.scale);
-                this.ctx.lineTo(256 * this.scale, r * 8 * this.scale);
-            }
-
-            // If in Attribute or Metatile Mode, draw coarser grid (16x16 pixels -> 2x2 tiles)
-            if (this.mode === 'attribute' || this.mode === 'metatile') {
-                 this.ctx.stroke(); // Draw normal grid first
-
-                 this.ctx.beginPath();
-                 this.ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
-                 this.ctx.lineWidth = 2;
-
-                 // Vertical attr lines (every 16 pixels)
-                 for (let c = 0; c <= 16; c++) {
-                    this.ctx.moveTo(c * 16 * this.scale, 0);
-                    this.ctx.lineTo(c * 16 * this.scale, 240 * this.scale);
-                 }
-                 // Horizontal attr lines
-                 for (let r = 0; r <= 15; r++) {
-                    this.ctx.moveTo(0, r * 16 * this.scale);
-                    this.ctx.lineTo(256 * this.scale, r * 16 * this.scale);
-                 }
-            }
-
+            // Draw 16x16 grid (stronger)
+            this.ctx.beginPath();
+            this.ctx.strokeStyle = 'rgba(0, 255, 0, 0.4)';
+            this.ctx.lineWidth = 1;
+             for (let c = 0; c <= 16; c++) {
+                this.ctx.moveTo(c * 16 * this.scale, 0);
+                this.ctx.lineTo(c * 16 * this.scale, 240 * this.scale);
+             }
+             for (let r = 0; r <= 15; r++) {
+                this.ctx.moveTo(0, r * 16 * this.scale);
+                this.ctx.lineTo(256 * this.scale, r * 16 * this.scale);
+             }
             this.ctx.stroke();
         }
     }
 
     drawTile(x, y, tileIdx, chrBank, palette) {
         if (!chrBank) return;
-
         const tileOffset = tileIdx * 16;
         const scale = this.scale;
 
         for (let py = 0; py < 8; py++) {
             const lowByte = chrBank[tileOffset + py];
             const highByte = chrBank[tileOffset + py + 8];
-
             for (let px = 0; px < 8; px++) {
                 const bitMask = 1 << (7 - px);
                 const bit0 = (lowByte & bitMask) ? 1 : 0;
@@ -424,11 +472,7 @@ class MapEditor {
                 const colorVal = bit0 + (bit1 << 1);
 
                 this.ctx.fillStyle = palette[colorVal];
-                this.ctx.fillRect(
-                    (x + px) * scale,
-                    (y + py) * scale,
-                    scale, scale
-                );
+                this.ctx.fillRect((x + px) * scale, (y + py) * scale, scale, scale);
             }
         }
     }

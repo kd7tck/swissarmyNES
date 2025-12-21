@@ -188,12 +188,12 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Engine cycles pitch offsets every frame (0, 4, 7 semitones).
 - **Completion Criteria:** A single channel produces a major chord sound.
 
-## Phase 25: Audio - Import
-**Goal:** Migrate from other tools.
+## Phase 25: Audio - Full Scale Synth System and UI
+**Goal:** Full Synth system and User Interface in GUI for creating, editing, importing sound effects
 - **Action Items:**
-    - Importer for FamiTracker text export or generic MIDI.
-    - Map MIDI channels to NES Pulse/Tri.
-- **Completion Criteria:** Drag-and-drop a `.txt` file to populate the Tracker.
+    - Create Full scale synth sound effect system.
+    - Create robust UI for creating, editing and importing.
+- **Completion Criteria:** Drag-and-drop a import file to populate the GUI system.
 
 ---
 

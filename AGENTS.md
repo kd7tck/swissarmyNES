@@ -50,21 +50,15 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-25d are complete. Phase 26 is Next.
+Phase 1-26 are complete. Phase 27 is Next.
 
-### Phase 25: Audio System (Completed)
-- **Implemented**: Full 4-channel Audio Engine with SFX support.
-- **Components**:
-    - **Compiler**: Generates optimized music data (`$D100`) and SFX data (`$D900`). Supports Samples (`$E040`/`$D480`) and Envelopes (`$DA00`).
-    - **Frontend**: `AudioTracker` for music, `SFXEditor` for sound effects.
-    - **UI Features**:
-        - Piano roll for music.
-        - Visual Envelope Editors (Canvas) for Volume, Pitch, Duty.
-        - SFX Import/Export (JSON) and Drag-and-Drop support.
-- **Integration**:
-    - `ProjectManager` handles saving all audio assets.
-    - `CompileRequest` injects audio binaries into the ROM.
-    - Runtime uses priority system to manage SFX vs Music channel usage.
+### Phase 26: Visual - CHR Import (Completed)
+- **Implemented**: Frontend JS logic to import PNG images into the CHR Bank.
+- **Key Features**:
+    - **PNG Parsing**: Uses Browser `Image` and `Canvas` API to read pixel data.
+    - **Color Quantization**: Maps 24-bit RGB pixels to the nearest of the 4 currently active palette colors using Euclidean distance.
+    - **Slicing**: Automatically slices 128x128 images into 16x16 tiles (8x8 pixels each) and populates `assets.chr_bank`.
+    - **UI**: Added "Import PNG" button and Drag-and-Drop support in the Bank View modal.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -99,9 +93,9 @@ Phase 1-25d are complete. Phase 26 is Next.
     - **OAM Overflow**: `Sprite.Draw` drops sprites if 64 limit reached. Enable `Sprite.SetFlicker(1)` to mitigate limits via cycling.
     - **SFX Sequences**: `SequenceCanvas` modifies arrays in place.
     - **Frontend Validation**: When importing JSON, always validate fields exist to avoid `undefined` crashes in the editor.
+    - **CHR Import**: Requires a 128x128 PNG for full bank import. Alpha channel is treated as color 0 (transparent). Nearest neighbor matching uses the *current* 4-color palette, not the full NES palette, so ensure the correct sub-palette is selected before importing.
 
 - **Next Steps**:
-    - Start Phase 26: Visual - CHR Import.
-    - Implement PNG parser in JS.
-    - Implement Color Quantization (match nearest NES color).
-    - Slice images into tiles and populate the CHR Bank.
+    - Start Phase 27: Visual - Metatile Editor.
+    - Create UI for defining 16x16 or 32x32 blocks.
+    - Implement attribute assignment for metatiles.

@@ -8,8 +8,8 @@ mod tests {
     #[test]
     fn test_rng() {
         let source = "
+            DIM x AS WORD
             SUB Main()
-                DIM x AS WORD
                 RANDOMIZE 1234
                 x = RND(100)
             END SUB

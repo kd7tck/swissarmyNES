@@ -1,0 +1,9 @@
+CONST BG_COLOR = $0F
+
+SUB Main()
+    ' Set Palette Address $3F00
+    POKE($2006, $3F)
+    POKE($2006, $00)
+    ' Write Color
+    POKE($2007, BG_COLOR)
+END SUB

@@ -41,6 +41,11 @@ document.addEventListener('DOMContentLoaded', () => {
         window.audioTracker = new window.AudioTracker('audio-tracker-root');
     }
 
+    // Initialize SFX Editor
+    if (window.SFXEditor) {
+        window.sfxEditor = new window.SFXEditor('sfx-editor-root');
+    }
+
     const initialHash = window.location.hash.replace('#', '');
     if (initialHash && document.getElementById(initialHash)) {
         navigateTo(initialHash);

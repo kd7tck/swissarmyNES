@@ -13,6 +13,7 @@ mod tests {
             vol_sequence: vec![15, 10, 5, 0],
             pitch_sequence: vec![0, 1, 2],
             duty_sequence: vec![0, 1],
+            does_loop: false,
         };
 
         let assets = ProjectAssets {
@@ -89,5 +90,35 @@ mod tests {
         assert_eq!(sfx_blob[6], 1);
         // DutyEnvID: 2
         assert_eq!(sfx_blob[7], 2);
+    }
+
+    #[test]
+    fn test_sfx_looping() {
+        let sfx1 = SoundEffect {
+            name: "Loop".to_string(),
+            channel: 0,
+            priority: 10,
+            speed: 2,
+            vol_sequence: vec![15],
+            pitch_sequence: vec![0],
+            duty_sequence: vec![0],
+            does_loop: true,
+        };
+
+        let assets = ProjectAssets {
+            chr_bank: vec![],
+            palettes: vec![],
+            nametables: vec![],
+            audio_tracks: vec![],
+            envelopes: vec![],
+            samples: vec![],
+            sound_effects: vec![sfx1],
+        };
+
+        let env_blob = compile_envelopes(&Some(assets));
+
+        // Ptr1 (Vol) at Start+7
+        // Vol Loop should be 0 (Start index) instead of 0xFF
+        assert_eq!(env_blob[7], 0);
     }
 }

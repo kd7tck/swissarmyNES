@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/css/chr.css">
     <link rel="stylesheet" href="/css/map.css">
     <link rel="stylesheet" href="/css/audio.css">
+    <link rel="stylesheet" href="/css/sfx.css">
     <link rel="stylesheet" href="/css/file_explorer.css">
 </head>
 <body>
@@ -56,8 +57,11 @@
                 <li class="nav-item" data-target="map">
                     <a href="#map">Map</a>
                 </li>
-                <li class="nav-item" data-target="audio">
-                    <a href="#audio">Audio</a>
+                <li class="nav-item" data-target="music">
+                    <a href="#music">Music</a>
+                </li>
+                <li class="nav-item" data-target="sfx">
+                    <a href="#sfx">SFX</a>
                 </li>
                 <li class="nav-item" data-target="settings">
                     <a href="#settings">Settings</a>
@@ -96,8 +100,8 @@
                 <h1>Map Editor</h1>
                 <div id="map-editor-root"></div>
             </section>
-            <section id="audio" class="view">
-                <h1>Audio Tracker</h1>
+            <section id="music" class="view">
+                <h1>Music Tracker</h1>
                 <div class="audio-container">
                     <div class="audio-toolbar">
                         <select id="audio-track-select">
@@ -144,6 +148,10 @@
                     </div>
                 </div>
             </section>
+            <section id="sfx" class="view">
+                <h1>SFX Editor</h1>
+                <div id="sfx-editor-root"></div>
+            </section>
             <section id="settings" class="view">
                 <h1>Settings</h1>
                 <p>Project settings and configuration.</p>
@@ -156,6 +164,7 @@
     <script src="/js/chr.js"></script>
     <script src="/js/map.js"></script>
     <script src="/js/audio.js"></script>
+    <script src="/js/sfx.js"></script>
     <script src="/js/envelopes.js"></script>
     <script src="/js/app.js"></script>
 </body>

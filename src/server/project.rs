@@ -78,6 +78,8 @@ pub struct SoundEffect {
     pub pitch_sequence: Vec<i8>,
     #[serde(default)]
     pub duty_sequence: Vec<u8>,
+    #[serde(default)]
+    pub does_loop: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -189,7 +189,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
 - **Completion Criteria:** A single channel produces a major chord sound.
 
 ## Phase 25: Audio - Full Scale Synth System and UI
-**Goal:** Full Synth system and User Interface in GUI for creating, editing, importing sound effects. This new system is seperate from the current audio system used for music tracks.
+**Goal:** Full Synth system and User Interface in GUI for creating, editing, importing sound effects. This new UI system is seperate from the current UI audio system used for music tracks.
 - **Action Items:**
     - Create Full scale synth sound effect system.
     - Create robust UI for creating, editing and importing.

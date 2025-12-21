@@ -37,6 +37,7 @@ mod tests {
             palettes: vec![],
             nametables: vec![],
             audio_tracks: vec![track1],
+            samples: vec![],
         };
 
         let blob = compile_audio_data(&Some(assets));
@@ -95,6 +96,7 @@ mod tests {
             palettes: vec![],
             nametables: vec![],
             audio_tracks: vec![track1],
+            samples: vec![],
         };
 
         let blob = compile_audio_data(&Some(assets));

@@ -487,6 +487,8 @@ impl CodeGenerator {
         self.output.push("  JSR SndChUpdate".to_string());
         self.output.push("  LDX #$08".to_string());
         self.output.push("  JSR SndChUpdate".to_string());
+        self.output.push("  LDX #$0C".to_string());
+        self.output.push("  JSR SndChUpdate".to_string());
         self.output.push("  PLA".to_string());
         self.output.push("  TAY".to_string());
         self.output.push("  PLA".to_string());
@@ -549,6 +551,8 @@ impl CodeGenerator {
         self.output.push("  BEQ SilenceP2".to_string());
         self.output.push("  CPX #$08".to_string());
         self.output.push("  BEQ SilenceTri".to_string());
+        self.output.push("  CPX #$0C".to_string());
+        self.output.push("  BEQ SilenceDMC".to_string());
         self.output.push("  JMP SndChEnd".to_string());
         self.output.push("SilenceP1:".to_string());
         self.output.push("  LDA #$30".to_string());
@@ -561,6 +565,10 @@ impl CodeGenerator {
         self.output.push("SilenceTri:".to_string());
         self.output.push("  LDA #$80".to_string());
         self.output.push("  STA $4008".to_string());
+        self.output.push("  JMP SndChEnd".to_string());
+        self.output.push("SilenceDMC:".to_string());
+        self.output.push("  LDA #$0F".to_string());
+        self.output.push("  STA $4015".to_string());
         self.output.push("  JMP SndChEnd".to_string());
         self.output.push("SndNextNote:".to_string());
         self.output
@@ -584,6 +592,8 @@ impl CodeGenerator {
         self.output.push("  BEQ PlayP2".to_string());
         self.output.push("  CPX #$08".to_string());
         self.output.push("  BEQ PlayTri".to_string());
+        self.output.push("  CPX #$0C".to_string());
+        self.output.push("  BEQ PlayDMC".to_string());
         self.output.push("  JMP SndAdvance".to_string());
         self.output.push("SndPlaySilence:".to_string());
         self.output.push("  CPX #$00".to_string());
@@ -592,6 +602,8 @@ impl CodeGenerator {
         self.output.push("  BEQ SilenceP2".to_string());
         self.output.push("  CPX #$08".to_string());
         self.output.push("  BEQ SilenceTri".to_string());
+        self.output.push("  CPX #$0C".to_string());
+        self.output.push("  BEQ SilenceDMC".to_string());
         self.output.push("  JMP SndAdvance".to_string());
         self.output.push("PlayP1:".to_string());
         self.output
@@ -618,11 +630,26 @@ impl CodeGenerator {
         self.output.push("  STA $400A".to_string());
         self.output.push("  LDA $F7".to_string());
         self.output.push("  STA $400B".to_string());
+        self.output.push("  JMP SndAdvance".to_string());
+        self.output.push("PlayDMC:".to_string());
+        self.output.push("  LDA $F6".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  TAY".to_string());
+        self.output.push("  LDA $D480, Y".to_string());
+        self.output.push("  STA $4012".to_string());
+        self.output.push("  INY".to_string());
+        self.output.push("  LDA $D480, Y".to_string());
+        self.output.push("  STA $4013".to_string());
+        self.output.push("  LDA $F7".to_string());
+        self.output.push("  AND #$0F".to_string());
+        self.output.push("  STA $4010".to_string());
+        self.output.push("  LDA #$1F".to_string());
+        self.output.push("  STA $4015".to_string());
         self.output.push("SndAdvance:".to_string());
         self.output.push("  INC $F4".to_string());
-        self.output.push("  BNE SndPtrInc3".to_string());
+        self.output.push("  BNE SndPtrInc4".to_string());
         self.output.push("  INC $F5".to_string());
-        self.output.push("SndPtrInc3:".to_string());
+        self.output.push("SndPtrInc4:".to_string());
         self.output.push("  LDA $F4".to_string());
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 2));

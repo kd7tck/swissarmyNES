@@ -50,9 +50,17 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-27 are complete. Phase 28 is Next.
+Phase 1-29 are complete. Phase 30 is Next.
 
-### Phase 27: Visual - Metatile Editor (Completed)
+### Phase 29: Visual - World Editor (Completed)
+- **Implemented**: `WorldLayout` in backend and `WorldEditor` in frontend.
+- **Key Features**:
+    - **World Struct**: `width`, `height`, `data` (Vec<i32> referencing Nametable indices).
+    - **Editor UI**: Grid view of maps. Select map from list (Nametables) and paint onto grid.
+    - **Persistence**: Saved to `assets.json` under `world`.
+    - **Integration**: "World" tab added to main UI.
+
+### Phase 27-28: Visual - Metatile Editor & Integration (Completed)
 - **Implemented**: `MetatileEditor` in frontend and `Metatile` struct in backend.
 - **Key Features**:
     - **Metatile Struct**: Defines 2x2 tile blocks (4 tile indices) and 1 palette attribute index.
@@ -96,6 +104,7 @@ Phase 1-27 are complete. Phase 28 is Next.
     - **CHR Import**: Requires a 128x128 PNG for full bank import. Alpha channel is treated as color 0 (transparent). Nearest neighbor matching uses the *current* 4-color palette, not the full NES palette, so ensure the correct sub-palette is selected before importing.
 
 - **Next Steps**:
-    - Start Phase 27: Visual - Metatile Editor.
-    - Create UI for defining 16x16 or 32x32 blocks.
-    - Implement attribute assignment for metatiles.
+    - Start Phase 30: Visual - Sprite Editor.
+    - Create dedicated character design tool (`SpriteEditor`).
+    - Implement canvas for free placement of 8x8 sprite tiles or metatiles.
+    - Add Timeline UI for animation frames.

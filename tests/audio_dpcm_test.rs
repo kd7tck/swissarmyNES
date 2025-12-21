@@ -67,6 +67,7 @@ fn test_compile_audio_dmc() {
         name: "DMC Track".to_string(),
         channel: 3,
         instrument: 0x0F, // Rate F
+        priority: 0,
         notes: vec![
             AudioNote {
                 col: 0,
@@ -102,9 +103,11 @@ fn test_compile_audio_dmc() {
     assert_eq!(blob[3], 3);
     // Instrument = 0x0F
     assert_eq!(blob[4], 0x0F);
+    // Priority = 0
+    assert_eq!(blob[5], 0);
     // Note: Duration 8, Pitch 0
-    assert_eq!(blob[5], 8);
-    assert_eq!(blob[6], 0);
-    // Terminator
+    assert_eq!(blob[6], 8);
     assert_eq!(blob[7], 0);
+    // Terminator
+    assert_eq!(blob[8], 0);
 }

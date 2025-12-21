@@ -4,10 +4,10 @@ class AudioTracker {
         this.currentTrackIndex = 0;
         this.currentInstrument = 0x9F; // Default instrument
         this.tracks = [
-            { name: "Track 1", notes: [], channel: 0, instrument: 0x9F },
-            { name: "Track 2", notes: [], channel: 1, instrument: 0x9F },
-            { name: "Track 3", notes: [], channel: 2, instrument: 0xFF },
-            { name: "Track 4", notes: [], channel: 3, instrument: 0x0F } // DMC
+            { name: "Track 1", notes: [], channel: 0, instrument: 0x9F, priority: 0 },
+            { name: "Track 2", notes: [], channel: 1, instrument: 0x9F, priority: 0 },
+            { name: "Track 3", notes: [], channel: 2, instrument: 0xFF, priority: 0 },
+            { name: "Track 4", notes: [], channel: 3, instrument: 0x0F, priority: 0 } // DMC
         ];
         this.samples = [];
 
@@ -40,6 +40,14 @@ class AudioTracker {
             instrumentSelect.addEventListener('change', (e) => {
                 this.currentInstrument = parseInt(e.target.value);
                 this.tracks[this.currentTrackIndex].instrument = this.currentInstrument;
+            });
+        }
+
+        const priorityInput = document.getElementById('audio-priority-input');
+        if (priorityInput) {
+            priorityInput.addEventListener('change', (e) => {
+                const val = parseInt(e.target.value);
+                this.tracks[this.currentTrackIndex].priority = isNaN(val) ? 0 : val;
             });
         }
 
@@ -137,6 +145,13 @@ class AudioTracker {
             instrumentSelect.value = trk.instrument;
         }
 
+        const priorityInput = document.getElementById('audio-priority-input');
+        if (priorityInput) {
+            const trk = this.tracks[this.currentTrackIndex];
+            if (trk.priority === undefined) trk.priority = 0;
+            priorityInput.value = trk.priority;
+        }
+
         const track = this.tracks[this.currentTrackIndex];
         track.notes.forEach(note => {
             const cell = this.root.querySelector(`.tracker-cell[data-row="${note.row}"][data-col="${note.col}"]`);
@@ -164,7 +179,8 @@ class AudioTracker {
                     duration: n.duration
                 })),
                 channel: (t.channel !== undefined) ? t.channel : i,
-                instrument: (t.instrument !== undefined) ? t.instrument : ((i===2)?0xFF:((i===3)?0x0F:0x9F))
+                instrument: (t.instrument !== undefined) ? t.instrument : ((i===2)?0xFF:((i===3)?0x0F:0x9F)),
+                priority: (t.priority !== undefined) ? t.priority : 0
             }));
 
             // Fill up to 4 if missing
@@ -174,15 +190,16 @@ class AudioTracker {
                     name: `Track ${i+1}`,
                     notes: [],
                     channel: i,
-                    instrument: (i===2)?0xFF:((i===3)?0x0F:0x9F)
+                    instrument: (i===2)?0xFF:((i===3)?0x0F:0x9F),
+                    priority: 0
                 });
             }
         } else {
              this.tracks = [
-                { name: "Track 1", notes: [], channel: 0, instrument: 0x9F },
-                { name: "Track 2", notes: [], channel: 1, instrument: 0x9F },
-                { name: "Track 3", notes: [], channel: 2, instrument: 0xFF },
-                { name: "Track 4", notes: [], channel: 3, instrument: 0x0F }
+                { name: "Track 1", notes: [], channel: 0, instrument: 0x9F, priority: 0 },
+                { name: "Track 2", notes: [], channel: 1, instrument: 0x9F, priority: 0 },
+                { name: "Track 3", notes: [], channel: 2, instrument: 0xFF, priority: 0 },
+                { name: "Track 4", notes: [], channel: 3, instrument: 0x0F, priority: 0 }
             ];
         }
 

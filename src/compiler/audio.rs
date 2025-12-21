@@ -130,6 +130,7 @@ pub fn compile_samples(assets: &Option<ProjectAssets>) -> (Vec<u8>, Vec<u8>) {
 ///   - For Pulse: Bits 7-6 = Duty, Bits 3-0 = Volume/Envelope.
 ///   - For Triangle: Linear Counter Load.
 ///   - For DMC: Rate Index (0-15).
+/// - **Priority** (1 byte): The priority level of the track. Higher values interrupt lower values.
 /// - **Note Sequence**: A stream of `[Duration, Pitch]` pairs.
 ///   - **Duration** (1 byte): Frames to play. 0 = End.
 ///   - **Pitch** (1 byte): Period Table Index. For DMC: Sample Index.
@@ -165,7 +166,9 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
             blob.push(track.channel);
             // 2. Instrument
             blob.push(track.instrument);
-            current_offset += 2;
+            // 3. Priority
+            blob.push(track.priority);
+            current_offset += 3;
 
             // 3. Notes
             // We need to sort notes by `col` and insert silence/rests for gaps.

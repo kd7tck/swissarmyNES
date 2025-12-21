@@ -30,6 +30,7 @@ mod tests {
             ],
             channel: 0, // P1
             instrument: 0x9F,
+            priority: 0,
         };
 
         let assets = ProjectAssets {
@@ -49,21 +50,22 @@ mod tests {
         assert_eq!(blob[2], 0xD1); // Ptr High -> D1
 
         // Track Data
-        // Channel (1 byte) + Instrument (1 byte)
+        // Channel (1 byte) + Instrument (1 byte) + Priority (1 byte)
         assert_eq!(blob[3], 0); // Channel 0
         assert_eq!(blob[4], 0x9F); // Instrument
+        assert_eq!(blob[5], 0); // Priority
 
         // Notes
         // Note 1: Dur(8), Pitch(10)
-        assert_eq!(blob[5], 8);
-        assert_eq!(blob[6], 10);
+        assert_eq!(blob[6], 8);
+        assert_eq!(blob[7], 10);
 
         // Note 2: Dur(8), Pitch(12)
-        assert_eq!(blob[7], 8);
-        assert_eq!(blob[8], 12);
+        assert_eq!(blob[8], 8);
+        assert_eq!(blob[9], 12);
 
         // Terminator
-        assert_eq!(blob[9], 0);
+        assert_eq!(blob[10], 0);
     }
 
     #[test]
@@ -89,6 +91,7 @@ mod tests {
             ],
             channel: 0,
             instrument: 0x9F,
+            priority: 0,
         };
 
         let assets = ProjectAssets {
@@ -101,18 +104,18 @@ mod tests {
 
         let blob = compile_audio_data(&Some(assets));
 
-        // Offset: 3 (Header) + 2 (Chan/Inst) = 5
-        // Note 1: 5,6 -> Time ends at 8.
-        assert_eq!(blob[5], 8);
-        assert_eq!(blob[6], 10);
+        // Offset: 3 (Header) + 3 (Chan/Inst/Prio) = 6
+        // Note 1: 6,7 -> Time ends at 8.
+        assert_eq!(blob[6], 8);
+        assert_eq!(blob[7], 10);
 
         // Gap: 16 ticks (8 to 24).
         // Silence: Dur(16), Pitch(0xFF)
-        assert_eq!(blob[7], 16);
-        assert_eq!(blob[8], 0xFF);
+        assert_eq!(blob[8], 16);
+        assert_eq!(blob[9], 0xFF);
         // Note 2:
-        assert_eq!(blob[9], 4);
-        assert_eq!(blob[10], 12);
+        assert_eq!(blob[10], 4);
+        assert_eq!(blob[11], 12);
     }
 
     #[test]

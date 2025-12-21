@@ -12,6 +12,10 @@ class MapEditor {
         this.currentPalette = 0; // 0-3
         this.mode = 'tile'; // 'tile', 'attribute', 'metatile'
 
+        // Cursor tracking
+        this.mouseX = -1;
+        this.mouseY = -1;
+
         // Listen for project load
         window.addEventListener('project-loaded', (e) => this.onProjectLoaded(e.detail.assets));
 
@@ -20,6 +24,9 @@ class MapEditor {
 
         // We also need to listen for CHR changes.
         window.addEventListener('chr-changed', () => this.render());
+
+        // Listen for metatile changes to update instances
+        window.addEventListener('metatile-changed', (e) => this.updateMetatileInstances(e.detail.index));
 
         this.init();
     }
@@ -32,7 +39,7 @@ class MapEditor {
         const controls = document.createElement('div');
         controls.className = 'map-controls';
 
-        // Nametable Selector (placeholder for now)
+        // Nametable Selector
         this.lblNametable = document.createElement('span');
         this.lblNametable.textContent = 'Nametable 0';
         controls.appendChild(this.lblNametable);
@@ -132,9 +139,9 @@ class MapEditor {
         const handleMouse = (e, type) => {
             if (!this.assets || !this.assets.nametables || this.assets.nametables.length === 0) return;
 
-            const rect = this.canvas.getBoundingClientRect();
-            const x = Math.floor((e.clientX - rect.left) / this.scale);
-            const y = Math.floor((e.clientY - rect.top) / this.scale);
+            // Coordinates are updated in mousemove listener below
+            const x = this.mouseX;
+            const y = this.mouseY;
 
             if (x >= 0 && x < 256 && y >= 0 && y < 240) {
                 const tileX = Math.floor(x / 8);
@@ -162,8 +169,31 @@ class MapEditor {
         };
 
         this.canvas.addEventListener('mousedown', (e) => handleMouse(e, 'down'));
-        this.canvas.addEventListener('mousemove', (e) => handleMouse(e, 'move'));
-        window.addEventListener('mouseup', () => { isDrawing = false; });
+        this.canvas.addEventListener('mouseup', () => { isDrawing = false; });
+        this.canvas.addEventListener('mouseleave', () => {
+            isDrawing = false;
+            this.mouseX = -1;
+            this.mouseY = -1;
+            if (this.mode === 'metatile') this.render();
+        });
+
+        this.canvas.addEventListener('mousemove', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            this.mouseX = Math.floor((e.clientX - rect.left) / this.scale);
+            this.mouseY = Math.floor((e.clientY - rect.top) / this.scale);
+
+            if (this.mode === 'metatile') {
+                this.render(); // Redraw for ghost
+            }
+
+            handleMouse(e, 'move');
+        });
+
+        // Picking
+        this.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this.handlePick();
+        });
     }
 
     onProjectLoaded(assets) {
@@ -172,10 +202,13 @@ class MapEditor {
             this.assets.nametables = [];
         }
 
-        // Initialize attrs if missing for existing nametables
+        // Initialize attrs and metatile_grid if missing
         this.assets.nametables.forEach(nt => {
             if (!nt.attrs || nt.attrs.length !== 64) {
                 nt.attrs = new Array(64).fill(0);
+            }
+            if (!nt.metatile_grid || nt.metatile_grid.length !== 240) {
+                nt.metatile_grid = new Array(240).fill(-1);
             }
         });
 
@@ -192,15 +225,71 @@ class MapEditor {
 
         const newData = new Array(960).fill(0);
         const newAttrs = new Array(64).fill(0);
+        const newMetaGrid = new Array(240).fill(-1);
 
         this.assets.nametables.push({
             name: `Nametable ${this.assets.nametables.length}`,
             data: newData,
-            attrs: newAttrs
+            attrs: newAttrs,
+            metatile_grid: newMetaGrid
         });
 
         this.currentNametableIndex = this.assets.nametables.length - 1;
         this.render();
+    }
+
+    handlePick() {
+        if (!this.assets || !this.assets.nametables[this.currentNametableIndex]) return;
+        if (this.mouseX < 0 || this.mouseY < 0) return;
+
+        const tileX = Math.floor(this.mouseX / 8);
+        const tileY = Math.floor(this.mouseY / 8);
+        const nt = this.assets.nametables[this.currentNametableIndex];
+
+        if (this.mode === 'metatile') {
+            // Check metatile grid
+            const metaX = Math.floor(tileX / 2);
+            const metaY = Math.floor(tileY / 2);
+            const gridIdx = metaY * 16 + metaX;
+
+            if (nt.metatile_grid && gridIdx < nt.metatile_grid.length) {
+                const metaIdx = nt.metatile_grid[gridIdx];
+                if (metaIdx >= 0 && window.metatileEditor) {
+                    window.metatileEditor.selectMetatile(metaIdx);
+                }
+            }
+        } else if (this.mode === 'attribute') {
+            const palIdx = this.getAttribute(tileX, tileY);
+            this.currentPalette = palIdx;
+            // Update UI buttons
+            const btns = document.querySelectorAll('.pal-btn');
+            btns.forEach((b, i) => {
+                b.style.fontWeight = (i === palIdx) ? 'bold' : 'normal';
+            });
+        } else {
+            // Tile mode
+            const idx = tileY * 32 + tileX;
+            if (idx < nt.data.length) {
+                const tileVal = nt.data[idx];
+                if (window.chrEditor) {
+                    window.chrEditor.selectTile(tileVal);
+                }
+            }
+        }
+    }
+
+    invalidateMetatileAt(tx, ty) {
+        if (!this.assets || !this.assets.nametables[this.currentNametableIndex]) return;
+        const nt = this.assets.nametables[this.currentNametableIndex];
+        if (!nt.metatile_grid) return;
+
+        const metaX = Math.floor(tx / 2);
+        const metaY = Math.floor(ty / 2);
+        const gridIdx = metaY * 16 + metaX;
+
+        if (gridIdx < nt.metatile_grid.length) {
+            nt.metatile_grid[gridIdx] = -1;
+        }
     }
 
     placeTile(tx, ty) {
@@ -218,6 +307,7 @@ class MapEditor {
         if (idx < nt.data.length) {
             if (nt.data[idx] !== tileIndex) {
                 nt.data[idx] = tileIndex;
+                this.invalidateMetatileAt(tx, ty);
                 this.render();
             }
         }
@@ -248,6 +338,7 @@ class MapEditor {
 
         if (nt.attrs[attrIdx] !== byte) {
             nt.attrs[attrIdx] = byte;
+            this.invalidateMetatileAt(tx, ty); // Attribute change invalidates metatile link too? Yes, strictly speaking.
             this.render();
         }
     }
@@ -256,48 +347,97 @@ class MapEditor {
         if (!this.assets || !this.assets.nametables[this.currentNametableIndex]) return;
 
         // Metatile mode works on 2x2 grid (16x16 pixel blocks).
-        // So we snap to even tile coordinates.
-        const metaX = Math.floor(tx / 2) * 2;
-        const metaY = Math.floor(ty / 2) * 2;
+        const metaX = Math.floor(tx / 2);
+        const metaY = Math.floor(ty / 2);
 
         // Get current metatile
         if (!window.metatileEditor || window.metatileEditor.currentMetatileIndex < 0) return;
         if (!this.assets.metatiles || !this.assets.metatiles[window.metatileEditor.currentMetatileIndex]) return;
 
-        const meta = this.assets.metatiles[window.metatileEditor.currentMetatileIndex];
+        const metaIdx = window.metatileEditor.currentMetatileIndex;
+        const meta = this.assets.metatiles[metaIdx];
         const nt = this.assets.nametables[this.currentNametableIndex];
 
+        // Update metatile grid
+        if (nt.metatile_grid) {
+            const gridIdx = metaY * 16 + metaX;
+            if (gridIdx < nt.metatile_grid.length) {
+                nt.metatile_grid[gridIdx] = metaIdx;
+            }
+        }
+
+        this.applyMetatileToData(nt, metaX, metaY, meta);
+        this.render();
+    }
+
+    applyMetatileToData(nt, metaX, metaY, meta) {
         // 1. Place 4 tiles
         // Top-Left
-        const idxTL = metaY * 32 + metaX;
+        const idxTL = (metaY * 2) * 32 + (metaX * 2);
         // Top-Right
-        const idxTR = metaY * 32 + (metaX + 1);
+        const idxTR = (metaY * 2) * 32 + (metaX * 2 + 1);
         // Bottom-Left
-        const idxBL = (metaY + 1) * 32 + metaX;
+        const idxBL = (metaY * 2 + 1) * 32 + (metaX * 2);
         // Bottom-Right
-        const idxBR = (metaY + 1) * 32 + (metaX + 1);
+        const idxBR = (metaY * 2 + 1) * 32 + (metaX * 2 + 1);
 
-        // Check bounds
         if (idxTL < nt.data.length) nt.data[idxTL] = meta.tiles[0];
         if (idxTR < nt.data.length) nt.data[idxTR] = meta.tiles[1];
         if (idxBL < nt.data.length) nt.data[idxBL] = meta.tiles[2];
         if (idxBR < nt.data.length) nt.data[idxBR] = meta.tiles[3];
 
         // 2. Set Attribute
-        // Since we are aligned to 2x2 grid (16x16 pixels), this corresponds EXACTLY to one attribute region (2 bits).
-        // Re-use placeAttribute logic but forcing the palette from the metatile.
+        // Use logic similar to placeAttribute but for the whole 2x2 block (which is one quadrant of an attribute byte, or full byte? No, attribute byte covers 4x4 tiles (32x32 pixels).)
+        // A Metatile is 2x2 tiles (16x16 pixels).
+        // So a Metatile is exactly one "attribute quadrant" (2 bits).
 
-        // Temporarily override current palette with metatile palette
-        const originalPalette = this.currentPalette;
-        this.currentPalette = meta.attr;
+        // Coords in tiles
+        const tx = metaX * 2;
+        const ty = metaY * 2;
 
-        // Call placeAttribute on any tile within the block (e.g., metaX, metaY)
-        this.placeAttribute(metaX, metaY);
+        const attrX = Math.floor(tx / 4);
+        const attrY = Math.floor(ty / 4);
+        const attrIdx = attrY * 8 + attrX;
 
-        // Restore palette
-        this.currentPalette = originalPalette;
+        if (attrIdx >= 64) return;
 
-        this.render();
+        let byte = nt.attrs[attrIdx];
+
+        const isRight = (tx % 4) >= 2;
+        const isBottom = (ty % 4) >= 2;
+
+        let shift = 0;
+        if (isRight) shift += 2;
+        if (isBottom) shift += 4;
+
+        // Mask out the old value
+        const mask = ~(0x03 << shift);
+        byte = (byte & mask) | ((meta.attr & 0x03) << shift);
+
+        nt.attrs[attrIdx] = byte;
+    }
+
+    updateMetatileInstances(metatileIndex) {
+        if (!this.assets || !this.assets.nametables) return;
+
+        let changed = false;
+        const meta = this.assets.metatiles[metatileIndex];
+        if (!meta) return;
+
+        this.assets.nametables.forEach(nt => {
+            if (!nt.metatile_grid) return;
+
+            for (let i = 0; i < nt.metatile_grid.length; i++) {
+                if (nt.metatile_grid[i] === metatileIndex) {
+                    const metaX = i % 16;
+                    const metaY = Math.floor(i / 16);
+                    this.applyMetatileToData(nt, metaX, metaY, meta);
+                    changed = true;
+                }
+            }
+        });
+
+        if (changed) this.render();
     }
 
     // Returns palette index (0-3) for a given tile coordinate
@@ -362,6 +502,40 @@ class MapEditor {
                 const tileIdx = nt.data[r * 32 + c];
                 const palIdx = this.getAttribute(c, r);
                 this.drawTile(c * 8, r * 8, tileIdx, chrBank, subPalettes[palIdx]);
+            }
+        }
+
+        // Ghost Cursor for Metatile
+        if (this.mode === 'metatile' && this.mouseX >= 0 && this.mouseY >= 0) {
+            if (window.metatileEditor && window.metatileEditor.currentMetatileIndex >= 0) {
+                const metaIdx = window.metatileEditor.currentMetatileIndex;
+                const meta = this.assets.metatiles[metaIdx];
+                if (meta) {
+                    const tileX = Math.floor(this.mouseX / 8);
+                    const tileY = Math.floor(this.mouseY / 8);
+
+                    // Snap to 2x2 grid
+                    const startX = Math.floor(tileX / 2) * 2;
+                    const startY = Math.floor(tileY / 2) * 2;
+
+                    this.ctx.save();
+                    this.ctx.globalAlpha = 0.5;
+
+                    const pal = subPalettes[meta.attr];
+
+                    // Draw the 4 tiles of metatile
+                    this.drawTile(startX * 8, startY * 8, meta.tiles[0], chrBank, pal);
+                    this.drawTile((startX+1) * 8, startY * 8, meta.tiles[1], chrBank, pal);
+                    this.drawTile(startX * 8, (startY+1) * 8, meta.tiles[2], chrBank, pal);
+                    this.drawTile((startX+1) * 8, (startY+1) * 8, meta.tiles[3], chrBank, pal);
+
+                    this.ctx.restore();
+
+                    // Highlight box
+                    this.ctx.strokeStyle = 'yellow';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.strokeRect(startX * 8 * this.scale, startY * 8 * this.scale, 16 * this.scale, 16 * this.scale);
+                }
             }
         }
 

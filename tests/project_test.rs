@@ -49,6 +49,7 @@ mod tests {
             name: "NT1".to_string(),
             data: vec![0; 960],
             attrs: attrs.clone(),
+            metatile_grid: vec![],
         });
 
         assert!(save_project(name, None, Some(&assets)).is_ok());

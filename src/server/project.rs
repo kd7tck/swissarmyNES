@@ -65,6 +65,22 @@ pub struct DpcmSample {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SoundEffect {
+    pub name: String,
+    pub channel: u8,
+    #[serde(default)]
+    pub priority: u8,
+    #[serde(default)]
+    pub speed: u8,
+    #[serde(default)]
+    pub vol_sequence: Vec<u8>,
+    #[serde(default)]
+    pub pitch_sequence: Vec<i8>,
+    #[serde(default)]
+    pub duty_sequence: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProjectAssets {
     pub chr_bank: Vec<u8>,
     pub palettes: Vec<Palette>,
@@ -75,6 +91,8 @@ pub struct ProjectAssets {
     pub envelopes: Vec<AudioEnvelope>,
     #[serde(default)]
     pub samples: Vec<DpcmSample>,
+    #[serde(default)]
+    pub sound_effects: Vec<SoundEffect>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -141,6 +159,7 @@ pub fn create_project(name: &str) -> Result<(), String> {
         audio_tracks: vec![],    // Start empty
         envelopes: vec![],       // Start empty
         samples: vec![],         // Start empty
+        sound_effects: vec![],   // Start empty
     };
     let assets_json = serde_json::to_string_pretty(&default_assets).map_err(|e| e.to_string())?;
     fs::write(project_path.join("assets.json"), assets_json).map_err(|e| e.to_string())?;

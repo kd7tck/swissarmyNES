@@ -43,6 +43,7 @@ mod tests {
             audio_tracks: vec![track1],
             envelopes: vec![],
             samples: vec![],
+            sound_effects: vec![],
         };
 
         let blob = compile_audio_data(&Some(assets));
@@ -111,6 +112,7 @@ mod tests {
             audio_tracks: vec![track1],
             envelopes: vec![],
             samples: vec![],
+            sound_effects: vec![],
         };
 
         let blob = compile_audio_data(&Some(assets));

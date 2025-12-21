@@ -176,6 +176,10 @@ pub fn compile_source(
     let envelope_data = audio::compile_envelopes(&resolved_assets);
     injections.push((ENVELOPE_TABLE_ADDR, envelope_data));
 
+    // 3d. SFX Data
+    let sfx_data = audio::compile_sfx_data(&resolved_assets);
+    injections.push((audio::SFX_TABLE_ADDR, sfx_data));
+
     // 4. Nametable Data at $D500 (NAMETABLE_ADDR)
     // We only support one nametable for now (Nametable 0)
     if let Some(a) = &resolved_assets {

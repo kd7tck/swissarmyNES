@@ -31,6 +31,8 @@ mod tests {
             channel: 0, // P1
             instrument: 0x9F,
             priority: 0,
+            vol_env: None,
+            pitch_env: None,
         };
 
         let assets = ProjectAssets {
@@ -38,6 +40,7 @@ mod tests {
             palettes: vec![],
             nametables: vec![],
             audio_tracks: vec![track1],
+            envelopes: vec![],
             samples: vec![],
         };
 
@@ -50,22 +53,24 @@ mod tests {
         assert_eq!(blob[2], 0xD1); // Ptr High -> D1
 
         // Track Data
-        // Channel (1 byte) + Instrument (1 byte) + Priority (1 byte)
+        // Channel (1) + Inst (1) + Prio (1) + VolEnv (1) + PitchEnv (1)
         assert_eq!(blob[3], 0); // Channel 0
         assert_eq!(blob[4], 0x9F); // Instrument
         assert_eq!(blob[5], 0); // Priority
+        assert_eq!(blob[6], 0xFF); // VolEnv (None)
+        assert_eq!(blob[7], 0xFF); // PitchEnv (None)
 
         // Notes
         // Note 1: Dur(8), Pitch(10)
-        assert_eq!(blob[6], 8);
-        assert_eq!(blob[7], 10);
+        assert_eq!(blob[8], 8);
+        assert_eq!(blob[9], 10);
 
         // Note 2: Dur(8), Pitch(12)
-        assert_eq!(blob[8], 8);
-        assert_eq!(blob[9], 12);
+        assert_eq!(blob[10], 8);
+        assert_eq!(blob[11], 12);
 
         // Terminator
-        assert_eq!(blob[10], 0);
+        assert_eq!(blob[12], 0);
     }
 
     #[test]
@@ -92,6 +97,8 @@ mod tests {
             channel: 0,
             instrument: 0x9F,
             priority: 0,
+            vol_env: None,
+            pitch_env: None,
         };
 
         let assets = ProjectAssets {
@@ -99,23 +106,24 @@ mod tests {
             palettes: vec![],
             nametables: vec![],
             audio_tracks: vec![track1],
+            envelopes: vec![],
             samples: vec![],
         };
 
         let blob = compile_audio_data(&Some(assets));
 
-        // Offset: 3 (Header) + 3 (Chan/Inst/Prio) = 6
-        // Note 1: 6,7 -> Time ends at 8.
-        assert_eq!(blob[6], 8);
-        assert_eq!(blob[7], 10);
+        // Offset: 3 (Header) + 5 (Chan/Inst/Prio/VolEnv/PitchEnv) = 8
+        // Note 1: 8,9 -> Time ends at 8.
+        assert_eq!(blob[8], 8);
+        assert_eq!(blob[9], 10);
 
         // Gap: 16 ticks (8 to 24).
         // Silence: Dur(16), Pitch(0xFF)
-        assert_eq!(blob[8], 16);
-        assert_eq!(blob[9], 0xFF);
+        assert_eq!(blob[10], 16);
+        assert_eq!(blob[11], 0xFF);
         // Note 2:
-        assert_eq!(blob[10], 4);
-        assert_eq!(blob[11], 12);
+        assert_eq!(blob[12], 4);
+        assert_eq!(blob[13], 12);
     }
 
     #[test]

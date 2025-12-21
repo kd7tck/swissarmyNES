@@ -29,6 +29,7 @@ fn test_compile_samples() {
         palettes: vec![],
         nametables: vec![],
         audio_tracks: vec![],
+        envelopes: vec![],
     };
 
     let (samples_blob, table_blob) = audio::compile_samples(&Some(assets));
@@ -68,6 +69,8 @@ fn test_compile_audio_dmc() {
         channel: 3,
         instrument: 0x0F, // Rate F
         priority: 0,
+        vol_env: None,
+        pitch_env: None,
         notes: vec![
             AudioNote {
                 col: 0,
@@ -84,6 +87,7 @@ fn test_compile_audio_dmc() {
         palettes: vec![],
         nametables: vec![],
         samples: vec![],
+        envelopes: vec![],
     };
 
     let blob = audio::compile_audio_data(&Some(assets));
@@ -105,9 +109,13 @@ fn test_compile_audio_dmc() {
     assert_eq!(blob[4], 0x0F);
     // Priority = 0
     assert_eq!(blob[5], 0);
+    // VolEnv = FF
+    assert_eq!(blob[6], 0xFF);
+    // PitchEnv = FF
+    assert_eq!(blob[7], 0xFF);
     // Note: Duration 8, Pitch 0
-    assert_eq!(blob[6], 8);
-    assert_eq!(blob[7], 0);
+    assert_eq!(blob[8], 8);
+    assert_eq!(blob[9], 0);
     // Terminator
-    assert_eq!(blob[8], 0);
+    assert_eq!(blob[10], 0);
 }

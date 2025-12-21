@@ -2,7 +2,7 @@ use crate::compiler::{
     analysis::SemanticAnalyzer,
     assembler::Assembler,
     audio,
-    codegen::{CodeGenerator, NAMETABLE_ADDR},
+    codegen::{CodeGenerator, ENVELOPE_TABLE_ADDR, NAMETABLE_ADDR},
     lexer::Lexer,
     parser::Parser,
     preprocessor,
@@ -171,6 +171,10 @@ pub fn compile_source(
         injections.push((audio::SAMPLE_DATA_ADDR, samples));
     }
     injections.push((audio::SAMPLE_TABLE_ADDR, sample_table));
+
+    // 3c. Envelope Data
+    let envelope_data = audio::compile_envelopes(&resolved_assets);
+    injections.push((ENVELOPE_TABLE_ADDR, envelope_data));
 
     // 4. Nametable Data at $D500 (NAMETABLE_ADDR)
     // We only support one nametable for now (Nametable 0)

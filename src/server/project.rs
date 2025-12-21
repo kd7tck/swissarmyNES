@@ -33,6 +33,13 @@ pub struct AudioNote {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AudioEnvelope {
+    pub name: String,
+    pub steps: Vec<(i8, u8)>, // Value, Duration
+    pub loop_index: Option<u8>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AudioTrack {
     pub name: String,
     pub notes: Vec<AudioNote>,
@@ -43,6 +50,10 @@ pub struct AudioTrack {
     pub instrument: u8, // Envelope/Duty setting (e.g. $9F for Max Vol, 50% Duty)
     #[serde(default)]
     pub priority: u8,
+    #[serde(default)]
+    pub vol_env: Option<u8>,
+    #[serde(default)]
+    pub pitch_env: Option<u8>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -58,6 +69,8 @@ pub struct ProjectAssets {
     pub nametables: Vec<Nametable>,
     #[serde(default)]
     pub audio_tracks: Vec<AudioTrack>,
+    #[serde(default)]
+    pub envelopes: Vec<AudioEnvelope>,
     #[serde(default)]
     pub samples: Vec<DpcmSample>,
 }
@@ -124,6 +137,7 @@ pub fn create_project(name: &str) -> Result<(), String> {
         palettes: vec![],        // Start empty
         nametables: vec![],      // Start empty
         audio_tracks: vec![],    // Start empty
+        envelopes: vec![],       // Start empty
         samples: vec![],         // Start empty
     };
     let assets_json = serde_json::to_string_pretty(&default_assets).map_err(|e| e.to_string())?;

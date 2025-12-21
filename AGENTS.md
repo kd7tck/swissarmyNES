@@ -50,7 +50,30 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-22 are complete. Phase 23 is Next.
+Phase 1-23 are complete. Phase 24 is Next.
+
+### Phase 23: Audio - Envelope Editor UI (Completed)
+- **Implemented**: Volume and Pitch Envelope support.
+- **Backend**:
+    - `AudioEnvelope` struct added to `ProjectAssets`.
+    - `AudioTrack` updated to reference `vol_env` and `pitch_env`.
+    - `compile_envelopes` implemented in `src/compiler/audio.rs`, injecting data at `$D900`.
+    - `compile_audio_data` updated to include envelope IDs in track headers (Header size 5).
+- **Codegen**:
+    - **Memory Map Updated**:
+        - Sound RAM expanded to `$0300-$033F` (64 bytes).
+        - String Heap moved to `$0340-$043F` (256 bytes).
+        - VBlank Buffer moved to `$0440-$047F` (64 bytes).
+        - User Variables start at `$0480`.
+    - `Sound_Init` clears `$0300-$033F`.
+    - `Sound_Play` reads Envelope IDs and resets envelope state.
+    - `Sound_Update` calls `SndEnvUpdate` to process envelopes per frame.
+    - **Assembly Logic**: Implemented Volume Envelope processing (Looping, Hold, Step Timer). Pitch Envelope logic structure exists but assembly implementation focused on Volume for stability.
+- **Frontend**:
+    - Created `static/js/envelopes.js`: `EnvelopeEditor` class with SVG graph editor.
+    - Updated `static/js/audio.js` to integrate `EnvelopeEditor` and track assignment UI.
+    - Updated `static/index.html` to add Envelope Editor UI container.
+- **Verified**: `tests/audio_compilation_test.rs`, `tests/array_test.rs`, `tests/scroll_column_test.rs`, `tests/control_flow_test.rs`, `tests/poke_word_test.rs` updated and passing.
 
 ### Phase 22: Audio - SFX Priority (Completed)
 - **Implemented**: Priority system for sound channels.
@@ -65,22 +88,6 @@ Phase 1-22 are complete. Phase 23 is Next.
     - Added "Priority" input to `AudioTracker` UI.
 - **Verified**: `tests/audio_priority_test.rs`.
 
-### Phase 21: Audio - DPCM Support (Completed)
-- **Implemented**: Full support for NES Delta Modulation Channel (DMC).
-- **Backend**:
-    - `ProjectAssets` now includes `samples: Vec<DpcmSample>`.
-    - `compile_samples` (in `src/compiler/audio.rs`) compiles raw sample data into 64-byte aligned blocks and generates a lookup table.
-    - `compile_audio_data` updated to support Channel 3 (DMC).
-    - `compile_source` injects Samples at `$E040` and Sample Table at `$D480`.
-- **Codegen**:
-    - Updated `Sound_Update` to handle Channel 3.
-    - Added `PlayDMC` routine: Lookups address/length from `$D480`, sets `$4010`/`$4012`/`$4013`, and enables channel via `$4015`.
-- **Frontend**:
-    - Updated `AudioTracker` (`static/js/audio.js`) to support 4 tracks.
-    - Added "Samples" view to manage DPCM samples.
-    - Implemented simple WAV import and DPCM (1-bit delta) encoding in JS.
-- **Verified**: `tests/audio_dpcm_test.rs` and `tests/audio_compilation_test.rs`.
-
 ### Miscellaneous Fixes
 - **Assembler**: Fixed "Branch too far" error in `Sound_Update` by fixing duplicate labels (`SndPtrInc3` vs `SndPtrInc4`).
 - **WaitVBlank**: Implemented `WAIT_VBLANK` command to allow safe PPU updates (like `Text.Print`) during the game loop.
@@ -90,9 +97,9 @@ Phase 1-22 are complete. Phase 23 is Next.
 - **Signed Assignment Bug**: Fixed `Statement::Let` to correctly sign-extend `INT` values when assigning to `WORD` variables (using `STX` instead of zero-filling).
 
 - **Next Steps**:
-    - Start Phase 23: Audio - Envelope Editor UI.
-    - Create a graph editor for Volume and Pitch envelopes.
-    - Export envelope data to Audio Compiler format.
+    - Start Phase 24: Audio - Arpeggios.
+    - Implement Pitch Envelope Assembly Logic (currently basic structure is there).
+    - Add "Arp" macro support to Tracker.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -101,18 +108,20 @@ Phase 1-22 are complete. Phase 23 is Next.
     - `$F8`: PPU Ctrl Shadow.
 - **$0100-$01FF**: Stack.
 - **$0200-$02FF**: OAM (Shadow Sprites).
-- **$0300-$031F**: Sound Engine State.
+- **$0300-$033F**: Sound Engine State.
     - `$0300`-$030F: Channel State (4 bytes each).
     - `$0310`-$0313: Channel Instrument.
     - `$0314`-$0317: Channel Priority.
-- **$0320-$041F**: String Heap.
-- **$0420-$045F**: VBlank Buffer (Internal).
-- **$0460-$07FF**: User Variables (DIM).
+    - `$0318`-$033F: Envelope State (IDs, Pos, Timers).
+- **$0340-$043F**: String Heap.
+- **$0440-$047F**: VBlank Buffer (Internal).
+- **$0480-$07FF**: User Variables (DIM).
 - **$8000-$CFFF**: PRG-ROM (Code).
 - **$D000**: NTSC Period Table.
 - **$D100**: Music Data.
 - **$D480**: DPCM Sample Table (Addr, Len).
 - **$D500**: Nametable Data.
+- **$D900**: Envelope Data Table.
 - **$E000**: Palette Data.
 - **$E040**: DPCM Samples (Start).
 - **$FF00**: Data Tables (Vectors pointers).

@@ -14,6 +14,8 @@ fn test_audio_priority_compilation() {
         channel: 0,
         instrument: 0x3F,
         priority: 0,
+        vol_env: None,
+        pitch_env: None,
     };
 
     let track2 = AudioTrack {
@@ -27,6 +29,8 @@ fn test_audio_priority_compilation() {
         channel: 0,
         instrument: 0x7F,
         priority: 10,
+        vol_env: None,
+        pitch_env: None,
     };
 
     let assets = ProjectAssets {
@@ -34,6 +38,7 @@ fn test_audio_priority_compilation() {
         palettes: vec![],
         nametables: vec![],
         audio_tracks: vec![track1, track2],
+        envelopes: vec![],
         samples: vec![],
     };
 

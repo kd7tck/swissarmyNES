@@ -1,3 +1,5 @@
+use crate::compiler::codegen::ENVELOPE_TABLE_ADDR;
+
 pub const PERIOD_TABLE_ADDR: u16 = 0xD000;
 pub const MUSIC_DATA_ADDR: u16 = 0xD100;
 pub const SAMPLE_TABLE_ADDR: u16 = 0xD480;
@@ -110,6 +112,50 @@ pub fn compile_samples(assets: &Option<ProjectAssets>) -> (Vec<u8>, Vec<u8>) {
     (samples_blob, table_blob)
 }
 
+pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Vec<u8> {
+    let mut blob = Vec::new();
+    if let Some(assets) = assets {
+        let count = assets.envelopes.len();
+        blob.push(count as u8);
+
+        // Pointers
+        let pointer_table_size = count * 2;
+        blob.extend(iter::repeat_n(0, pointer_table_size));
+
+        let start_addr = ENVELOPE_TABLE_ADDR as usize;
+        let mut current_offset = 1 + pointer_table_size;
+
+        for (i, env) in assets.envelopes.iter().enumerate() {
+            let abs_addr = start_addr + current_offset;
+            let ptr_idx = 1 + (i * 2);
+            blob[ptr_idx] = (abs_addr & 0xFF) as u8;
+            blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
+
+            // Data
+            // Loop Index
+            blob.push(env.loop_index.unwrap_or(0xFF));
+            current_offset += 1;
+
+            for (val, dur) in &env.steps {
+                blob.push(*val as u8); // Cast i8 to u8
+                blob.push(*dur);
+                current_offset += 2;
+            }
+
+            // Terminator
+            blob.push(0); // Val
+            blob.push(0); // Dur = 0
+            current_offset += 2;
+        }
+    } else {
+        blob.push(0);
+    }
+    if blob.is_empty() {
+        blob.push(0);
+    }
+    blob
+}
+
 /// Compiles audio tracks into a binary format injected at MUSIC_DATA_ADDR ($D100).
 ///
 /// # Binary Format Specification
@@ -131,6 +177,8 @@ pub fn compile_samples(assets: &Option<ProjectAssets>) -> (Vec<u8>, Vec<u8>) {
 ///   - For Triangle: Linear Counter Load.
 ///   - For DMC: Rate Index (0-15).
 /// - **Priority** (1 byte): The priority level of the track. Higher values interrupt lower values.
+/// - **VolEnv** (1 byte): Index of Volume Envelope ($FF = None).
+/// - **PitchEnv** (1 byte): Index of Pitch Envelope ($FF = None).
 /// - **Note Sequence**: A stream of `[Duration, Pitch]` pairs.
 ///   - **Duration** (1 byte): Frames to play. 0 = End.
 ///   - **Pitch** (1 byte): Period Table Index. For DMC: Sample Index.
@@ -168,7 +216,12 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
             blob.push(track.instrument);
             // 3. Priority
             blob.push(track.priority);
-            current_offset += 3;
+            // 4. VolEnv
+            blob.push(track.vol_env.unwrap_or(0xFF));
+            // 5. PitchEnv
+            blob.push(track.pitch_env.unwrap_or(0xFF));
+
+            current_offset += 5;
 
             // 3. Notes
             // We need to sort notes by `col` and insert silence/rests for gaps.

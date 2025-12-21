@@ -223,6 +223,11 @@ class ProjectManager {
             this.assets.sound_effects = window.sfxEditor.getData();
         }
 
+        // Collect World Data
+        if (window.worldEditor) {
+            this.assets.world = window.worldEditor.getData();
+        }
+
         const payload = {
             assets: this.assets
         };

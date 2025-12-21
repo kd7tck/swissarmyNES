@@ -292,6 +292,10 @@ class MapEditor {
         }
     }
 
+    notifyChange() {
+        window.dispatchEvent(new CustomEvent('nametable-changed', { detail: { index: this.currentNametableIndex } }));
+    }
+
     placeTile(tx, ty) {
         if (!this.assets || !this.assets.nametables[this.currentNametableIndex]) return;
 
@@ -309,6 +313,7 @@ class MapEditor {
                 nt.data[idx] = tileIndex;
                 this.invalidateMetatileAt(tx, ty);
                 this.render();
+                this.notifyChange();
             }
         }
     }
@@ -340,6 +345,7 @@ class MapEditor {
             nt.attrs[attrIdx] = byte;
             this.invalidateMetatileAt(tx, ty); // Attribute change invalidates metatile link too? Yes, strictly speaking.
             this.render();
+            this.notifyChange();
         }
     }
 
@@ -368,6 +374,7 @@ class MapEditor {
 
         this.applyMetatileToData(nt, metaX, metaY, meta);
         this.render();
+        this.notifyChange();
     }
 
     applyMetatileToData(nt, metaX, metaY, meta) {
@@ -437,7 +444,10 @@ class MapEditor {
             }
         });
 
-        if (changed) this.render();
+        if (changed) {
+            this.render();
+            this.notifyChange();
+        }
     }
 
     // Returns palette index (0-3) for a given tile coordinate

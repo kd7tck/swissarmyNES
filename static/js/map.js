@@ -1,4 +1,3 @@
-
 class MapEditor {
     constructor() {
         this.container = document.getElementById('map-editor-root');
@@ -11,7 +10,7 @@ class MapEditor {
         // Default to showing grid
         this.showGrid = true;
         this.currentPalette = 0; // 0-3
-        this.mode = 'tile'; // 'tile' or 'attribute'
+        this.mode = 'tile'; // 'tile', 'attribute', 'metatile'
 
         // Listen for project load
         window.addEventListener('project-loaded', (e) => this.onProjectLoaded(e.detail.assets));
@@ -55,9 +54,16 @@ class MapEditor {
         const btnMode = document.createElement('button');
         btnMode.textContent = 'Mode: Tiles';
         btnMode.onclick = () => {
-            this.mode = this.mode === 'tile' ? 'attribute' : 'tile';
-            btnMode.textContent = `Mode: ${this.mode === 'tile' ? 'Tiles' : 'Attributes'}`;
-            // Optional: Visually indicate mode on the canvas?
+            if (this.mode === 'tile') this.mode = 'attribute';
+            else if (this.mode === 'attribute') this.mode = 'metatile';
+            else this.mode = 'tile';
+
+            let label = 'Tiles';
+            if (this.mode === 'attribute') label = 'Attributes';
+            if (this.mode === 'metatile') label = 'Metatiles';
+            btnMode.textContent = `Mode: ${label}`;
+
+            this.render(); // Redraw grid
         };
         controls.appendChild(btnMode);
 
@@ -131,10 +137,6 @@ class MapEditor {
             const y = Math.floor((e.clientY - rect.top) / this.scale);
 
             if (x >= 0 && x < 256 && y >= 0 && y < 240) {
-                // Determine block coordinates for attributes (16x16 pixels -> 32x30 tiles -> 16x15 blocks)
-                // Actually 256/16 = 16 blocks wide, 240/16 = 15 blocks tall.
-                // Tile coords: 0-31, 0-29.
-
                 const tileX = Math.floor(x / 8);
                 const tileY = Math.floor(y / 8);
 
@@ -142,14 +144,18 @@ class MapEditor {
                     isDrawing = true;
                     if (this.mode === 'tile') {
                         this.placeTile(tileX, tileY);
-                    } else {
+                    } else if (this.mode === 'attribute') {
                         this.placeAttribute(tileX, tileY);
+                    } else if (this.mode === 'metatile') {
+                        this.placeMetatile(tileX, tileY);
                     }
                 } else if (type === 'move' && isDrawing) {
                     if (this.mode === 'tile') {
                         this.placeTile(tileX, tileY);
-                    } else {
+                    } else if (this.mode === 'attribute') {
                         this.placeAttribute(tileX, tileY);
+                    } else if (this.mode === 'metatile') {
+                        this.placeMetatile(tileX, tileY);
                     }
                 }
             }
@@ -220,20 +226,6 @@ class MapEditor {
     placeAttribute(tx, ty) {
         if (!this.assets || !this.assets.nametables[this.currentNametableIndex]) return;
 
-        // Attribute blocks are 2x2 tiles (16x16 pixels).
-        // Each byte in attribute table covers a 4x4 tile area (32x32 pixels).
-        // A byte is split into 4 pairs of bits:
-        //  - bits 0,1: top-left 2x2 block
-        //  - bits 2,3: top-right 2x2 block
-        //  - bits 4,5: bottom-left 2x2 block
-        //  - bits 6,7: bottom-right 2x2 block
-
-        // Grid is 32x30 tiles.
-        // Attribute table is 8x8 bytes (64 bytes).
-        // Each byte covers 4x4 tiles.
-        // x coord in attr table (0-7) = tx / 4
-        // y coord in attr table (0-7) = ty / 4
-
         const attrX = Math.floor(tx / 4);
         const attrY = Math.floor(ty / 4);
         const attrIdx = attrY * 8 + attrX;
@@ -242,12 +234,6 @@ class MapEditor {
 
         const nt = this.assets.nametables[this.currentNametableIndex];
         let byte = nt.attrs[attrIdx];
-
-        // Determine which quadrant of the 4x4 block we are in.
-        // tx % 4 tells us where we are in the 4-tile wide block.
-        // 0,1 -> left, 2,3 -> right
-        // ty % 4
-        // 0,1 -> top, 2,3 -> bottom
 
         const isRight = (tx % 4) >= 2;
         const isBottom = (ty % 4) >= 2;
@@ -266,6 +252,54 @@ class MapEditor {
         }
     }
 
+    placeMetatile(tx, ty) {
+        if (!this.assets || !this.assets.nametables[this.currentNametableIndex]) return;
+
+        // Metatile mode works on 2x2 grid (16x16 pixel blocks).
+        // So we snap to even tile coordinates.
+        const metaX = Math.floor(tx / 2) * 2;
+        const metaY = Math.floor(ty / 2) * 2;
+
+        // Get current metatile
+        if (!window.metatileEditor || window.metatileEditor.currentMetatileIndex < 0) return;
+        if (!this.assets.metatiles || !this.assets.metatiles[window.metatileEditor.currentMetatileIndex]) return;
+
+        const meta = this.assets.metatiles[window.metatileEditor.currentMetatileIndex];
+        const nt = this.assets.nametables[this.currentNametableIndex];
+
+        // 1. Place 4 tiles
+        // Top-Left
+        const idxTL = metaY * 32 + metaX;
+        // Top-Right
+        const idxTR = metaY * 32 + (metaX + 1);
+        // Bottom-Left
+        const idxBL = (metaY + 1) * 32 + metaX;
+        // Bottom-Right
+        const idxBR = (metaY + 1) * 32 + (metaX + 1);
+
+        // Check bounds
+        if (idxTL < nt.data.length) nt.data[idxTL] = meta.tiles[0];
+        if (idxTR < nt.data.length) nt.data[idxTR] = meta.tiles[1];
+        if (idxBL < nt.data.length) nt.data[idxBL] = meta.tiles[2];
+        if (idxBR < nt.data.length) nt.data[idxBR] = meta.tiles[3];
+
+        // 2. Set Attribute
+        // Since we are aligned to 2x2 grid (16x16 pixels), this corresponds EXACTLY to one attribute region (2 bits).
+        // Re-use placeAttribute logic but forcing the palette from the metatile.
+
+        // Temporarily override current palette with metatile palette
+        const originalPalette = this.currentPalette;
+        this.currentPalette = meta.attr;
+
+        // Call placeAttribute on any tile within the block (e.g., metaX, metaY)
+        this.placeAttribute(metaX, metaY);
+
+        // Restore palette
+        this.currentPalette = originalPalette;
+
+        this.render();
+    }
+
     // Returns palette index (0-3) for a given tile coordinate
     getAttribute(tx, ty) {
          if (!this.assets || !this.assets.nametables[this.currentNametableIndex]) return 0;
@@ -276,14 +310,7 @@ class MapEditor {
          const attrY = Math.floor(ty / 4);
          const attrIdx = attrY * 8 + attrX;
 
-         if (attrIdx >= nt.attrs.length) return 0; // Out of bounds (e.g. bottom row 30 is handled by last attr byte usually but partial)
-         // Wait, 30 rows / 4 = 7.5. The last row of attributes covers rows 28, 29, 30, 31.
-         // 240 pixels / 16 = 15 attribute blocks vertically.
-         // 15 attribute blocks / 2 (per byte) = 7.5 bytes.
-         // The attribute table is 64 bytes (8x8).
-         // 8 bytes * 4 tiles/byte = 32 tiles width. Correct.
-         // 8 bytes * 4 tiles/byte = 32 tiles height.
-         // Screen is only 30 tiles high. The last attribute row is partially used.
+         if (attrIdx >= nt.attrs.length) return 0;
 
          const byte = nt.attrs[attrIdx];
 
@@ -310,19 +337,8 @@ class MapEditor {
         const chrBank = this.assets.chr_bank;
 
         // Precompute palettes
-        // We need 4 sub-palettes
         const subPalettes = [];
         if (window.paletteEditor && this.assets.palettes) {
-             // We assume pallets 0-3 correspond to index 0-3 in the palettes array?
-             // Or does the Palette Editor manage a single "System Palette" composed of 4 subpalettes?
-             // Checking palette.js might be needed. Usually "Palette Editor" edits the 4 BG and 4 Sprite palettes.
-             // If assets.palettes is a list of named palettes, we need to know which one is active or "The Project Palette".
-             // DESIGN.md says "Sub-palettes: Interface to assign colors to the 4 background and 4 sprite sub-palettes."
-             // Let's assume assets.palettes[0-3] are the BG palettes.
-
-             // If the user has created palettes, let's try to find 4 of them or use defaults.
-             // Currently project.js defines 'palettes' as Vec<Palette>.
-
              for(let i=0; i<4; i++) {
                  let colors = ['#000000', '#666666', '#aaaaaa', '#ffffff'];
                  if (this.assets.palettes && this.assets.palettes[i]) {
@@ -367,8 +383,8 @@ class MapEditor {
                 this.ctx.lineTo(256 * this.scale, r * 8 * this.scale);
             }
 
-            // If in Attribute Mode, draw coarser grid for attributes (16x16 pixels -> 2x2 tiles)
-            if (this.mode === 'attribute') {
+            // If in Attribute or Metatile Mode, draw coarser grid (16x16 pixels -> 2x2 tiles)
+            if (this.mode === 'attribute' || this.mode === 'metatile') {
                  this.ctx.stroke(); // Draw normal grid first
 
                  this.ctx.beginPath();
@@ -406,10 +422,6 @@ class MapEditor {
                 const bit0 = (lowByte & bitMask) ? 1 : 0;
                 const bit1 = (highByte & bitMask) ? 1 : 0;
                 const colorVal = bit0 + (bit1 << 1);
-
-                // Transparent pixel (color 0) typically renders the background color (palette[0]),
-                // which is usually the universal background color.
-                // For the editor, we just draw opaque.
 
                 this.ctx.fillStyle = palette[colorVal];
                 this.ctx.fillRect(

@@ -4,11 +4,11 @@
 
 ## Current Status
 The project is currently in active development, following a strict roadmap defined in `DESIGN.md`.
-**Completed Phases:** 1 through 11.
+**Completed Phases:** 1 through 27.
 - **Core Compiler**: Lexer, Parser, AST, Symbol Table, Code Generation, Assembly.
 - **Language Features**: Strings, Arrays (`DIM`), Structures (`TYPE`), Enums (`ENUM`), Macros (`DEF MACRO`), Advanced Math (16-bit, Signed), Control Flow (`SELECT CASE`, `FOR`, `WHILE`).
 - **Standard Library**: Controller Input (`Controller.Read`, `IsPressed`).
-- **Tools**: Palette Editor, Tile (CHR) Editor, Map (Nametable) Editor, Audio Tracker.
+- **Tools**: Palette Editor, Tile (CHR) Editor, Map (Nametable) Editor, Metatile Editor, Audio Tracker.
 
 ## Features
 
@@ -42,6 +42,7 @@ A hybrid language designed for the NES, combining BASIC simplicity with low-leve
   - **Palette**: Edit system colors and sub-palettes.
   - **Tile (CHR)**: Draw 8x8 sprites and tiles with real-time feedback.
   - **Map**: Paint tiles onto a 32x30 nametable grid.
+  - **Metatile**: Create 16x16 reusable tile blocks with attributes.
 - **Audio Tracker**:
   - Compose music and SFX for Pulse 1, Pulse 2, and Triangle channels.
   - Custom envelopes for Volume and Duty Cycle.

@@ -50,15 +50,15 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-26 are complete. Phase 27 is Next.
+Phase 1-27 are complete. Phase 28 is Next.
 
-### Phase 26: Visual - CHR Import (Completed)
-- **Implemented**: Frontend JS logic to import PNG images into the CHR Bank.
+### Phase 27: Visual - Metatile Editor (Completed)
+- **Implemented**: `MetatileEditor` in frontend and `Metatile` struct in backend.
 - **Key Features**:
-    - **PNG Parsing**: Uses Browser `Image` and `Canvas` API to read pixel data.
-    - **Color Quantization**: Maps 24-bit RGB pixels to the nearest of the 4 currently active palette colors using Euclidean distance.
-    - **Slicing**: Automatically slices 128x128 images into 16x16 tiles (8x8 pixels each) and populates `assets.chr_bank`.
-    - **UI**: Added "Import PNG" button and Drag-and-Drop support in the Bank View modal.
+    - **Metatile Struct**: Defines 2x2 tile blocks (4 tile indices) and 1 palette attribute index.
+    - **Editor UI**: Create, Delete, Rename metatiles. Visual 2x2 grid editor to assign tiles from the CHR bank.
+    - **Map Integration**: "Metatile Mode" in Map Editor allows painting with 16x16 metatiles, automatically updating both nametable data and attribute table (aligned to 2x2 grid).
+    - **Persistence**: Saved to `assets.json` under `metatiles`.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.

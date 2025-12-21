@@ -84,4 +84,34 @@ mod tests {
         assert!(create_project("invalid name").is_err());
         assert!(create_project("test/../test").is_err());
     }
+
+    #[test]
+    fn test_metatile_persistence() {
+        use swissarmynes::server::project::Metatile;
+
+        let name = "test_project_metatiles";
+        cleanup(name);
+        create_project(name).unwrap();
+
+        let project = get_project(name).unwrap();
+        let mut assets = project.assets.unwrap();
+
+        assets.metatiles.push(Metatile {
+            name: "Grass".to_string(),
+            tiles: [0, 1, 2, 3],
+            attr: 1,
+        });
+
+        assert!(save_project(name, None, Some(&assets)).is_ok());
+
+        let project = get_project(name).unwrap();
+        let loaded_assets = project.assets.unwrap();
+
+        assert_eq!(loaded_assets.metatiles.len(), 1);
+        assert_eq!(loaded_assets.metatiles[0].name, "Grass");
+        assert_eq!(loaded_assets.metatiles[0].tiles, [0, 1, 2, 3]);
+        assert_eq!(loaded_assets.metatiles[0].attr, 1);
+
+        cleanup(name);
+    }
 }

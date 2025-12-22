@@ -50,7 +50,7 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 31 and 32 are complete.
+Phase 31, 32, and 33 are complete.
 
 ### Phase 31: Emulator - WASM Integration (Completed)
 - **Implemented**: `swiss-emulator` crate in `emulator/` directory using `tetanes-core`.
@@ -70,6 +70,15 @@ Phase 31 and 32 are complete.
     - **Scaling**: 1x, 2x, Fullscreen buttons.
     - **Volume**: Slider controlling Web Audio GainNode.
     - **Integration**: `app.js` now handles the "Run" button by compiling the project (without downloading) and dispatching `emulator-load-rom`.
+
+### Phase 33: Emulator - Input (Completed)
+- **Implemented**: Gamepad support in `static/js/editor.js`.
+- **Features**:
+    - **Gamepad Polling**: Checks `navigator.getGamepads()` every frame in `emulatorLoop`.
+    - **Mapping**: Xbox A -> NES A, Xbox B/X -> NES B, Back -> Select, Start -> Start, D-Pad/Axes -> D-Pad.
+    - **Input Mixing**: Keyboard and Gamepad inputs are merged (Logical OR), allowing simultaneous use.
+    - **State Management**: Updates are only sent to WASM when the combined state changes to minimize overhead.
+    - **Hot-plugging**: Detects connection/disconnection of gamepads.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -107,8 +116,11 @@ Phase 31 and 32 are complete.
     - **Frontend Validation**: When importing JSON, always validate fields exist to avoid `undefined` crashes in the editor.
     - **CHR Import**: Requires a 128x128 PNG for full bank import. Alpha channel is treated as color 0 (transparent). Nearest neighbor matching uses the *current* 4-color palette, not the full NES palette, so ensure the correct sub-palette is selected before importing.
     - **16-bit Pointers**: When calculating addresses (like Heap Offset), always handle 16-bit Carry (`BCC +; INX`) for the High Byte.
+    - **Gamepad Polling**: `navigator.getGamepads` returns a snapshot. It must be polled in `requestAnimationFrame`.
+    - **Input State**: When modifying input logic, ensure keyboard and gamepad don't conflict (e.g., releasing a button on one device shouldn't clear the hold on the other). Use a "last sent state" tracker.
+    - **WASM Crash**: If the emulator crashes (e.g. `CpuCorrupted`), the loop stops and input polling ceases. Ensure robustness or handle errors gracefully if you need input to restart.
 
 - **Next Steps**:
-    - Start Phase 33: Emulator - Input.
-    - Implement Gamepad API integration for USB controllers (e.g. Xbox/PS4 controllers).
-    - Add visual indicator of controller state in UI (optional but helpful).
+    - Start Phase 34: Debugging - Protocol.
+    - Define shared memory or message passing interface (WASM <-> JS).
+    - Expose CPU RAM and Registers to JS.

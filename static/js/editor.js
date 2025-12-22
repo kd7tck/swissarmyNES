@@ -14,6 +14,12 @@ class SwissEditor {
         this.wasmLoaded = false;
         this.wasmMemory = null;
 
+        // Input State
+        this.gamepadIndex = null;
+        this.keyboardState = new Array(8).fill(false);
+        this.gamepadState = new Array(8).fill(false);
+        this.lastSentState = new Array(8).fill(false);
+
         this.init();
     }
 
@@ -37,6 +43,24 @@ class SwissEditor {
         // Listen for compile event
         window.addEventListener('emulator-load-rom', (e) => {
              this.startEmulatorWithRom(e.detail);
+        });
+
+        // Gamepad Events
+        window.addEventListener("gamepadconnected", (e) => {
+            console.log("Gamepad connected at index %d: %s. %d buttons, %d axes.",
+                e.gamepad.index, e.gamepad.id,
+                e.gamepad.buttons.length, e.gamepad.axes.length);
+            if (this.gamepadIndex === null) {
+                this.gamepadIndex = e.gamepad.index;
+            }
+        });
+
+        window.addEventListener("gamepaddisconnected", (e) => {
+            console.log("Gamepad disconnected from index %d: %s",
+                e.gamepad.index, e.gamepad.id);
+            if (this.gamepadIndex === e.gamepad.index) {
+                this.gamepadIndex = null;
+            }
         });
     }
 
@@ -132,23 +156,14 @@ class SwissEditor {
         if (!this.wasmLoaded) {
             try {
                 const module = await import('/wasm/swiss_emulator.js');
-                // Depending on the target, module.default might be an init function or the instance
-                // For 'web' target, it's an init function.
-                // For 'bundler', it's usually the exports directly?
-                // We will assume 'web' target standard (init function).
-
                 const initResult = await module.default();
-                // initResult is usually the wasm instance (containing .memory)
-
                 this.EmulatorClass = module.Emulator;
 
-                // Try to grab memory from initResult or module
                 if (initResult && initResult.memory) {
                     this.wasmMemory = initResult.memory;
                 } else if (module.memory) {
                     this.wasmMemory = module.memory;
                 } else if (window.wasm_bindgen && window.wasm_bindgen.memory) {
-                    // Fallback for some setups
                     this.wasmMemory = window.wasm_bindgen.memory;
                 }
 
@@ -178,13 +193,17 @@ class SwissEditor {
 
         try {
             if (this.emulator) {
-                // free() if implemented
                 if (this.emulator.free) this.emulator.free();
             }
             this.emulator = new this.EmulatorClass();
             this.emulator.load_rom(romData);
             this.emulator.set_sample_rate(this.audioContext.sampleRate);
             this.nextStartTime = this.audioContext.currentTime;
+
+            // Reset Input State
+            this.keyboardState.fill(false);
+            this.gamepadState.fill(false);
+            this.lastSentState.fill(false);
 
             this.createEmulatorOverlay();
 
@@ -220,7 +239,7 @@ class SwissEditor {
 
             const btnPlay = document.createElement('button');
             btnPlay.id = 'emu-play';
-            btnPlay.innerText = 'Pause'; // Initially running
+            btnPlay.innerText = 'Pause';
             btnPlay.onclick = () => this.togglePause();
 
             const btnReset = document.createElement('button');
@@ -307,9 +326,8 @@ class SwissEditor {
         this.scale = s;
         if (!this.canvas) return;
         if (s === 0) {
-            // Fullscreen style
             this.canvas.style.width = '100vw';
-            this.canvas.style.height = '100vh'; // Preserve aspect ratio?
+            this.canvas.style.height = '100vh';
             this.canvas.style.objectFit = 'contain';
         } else {
             this.canvas.style.width = (256 * s) + 'px';
@@ -336,12 +354,73 @@ class SwissEditor {
 
         if (btn !== -1) {
             e.preventDefault();
-            this.emulator.set_button(0, btn, pressed);
+            this.keyboardState[btn] = pressed;
+            this.syncInputs();
+        }
+    }
+
+    pollGamepads() {
+        if (!this.emulator) return;
+
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        if (!gamepads) return;
+
+        if (this.gamepadIndex === null) {
+            for (let i = 0; i < gamepads.length; i++) {
+                if (gamepads[i]) {
+                    this.gamepadIndex = i;
+                    break;
+                }
+            }
+        }
+
+        if (this.gamepadIndex === null) return;
+        const gp = gamepads[this.gamepadIndex];
+        if (!gp || !gp.connected) return;
+
+        const b = gp.buttons;
+        const axes = gp.axes;
+        const PRESSED = (btn) => btn && (typeof btn === 'object' ? btn.pressed : btn > 0.5);
+
+        // Map to NES: A, B, Sel, Start, Up, Down, Left, Right
+        // A=0, B=1 or 2, Sel=8, Start=9
+        const newState = [
+            PRESSED(b[0]), // A
+            PRESSED(b[1]) || PRESSED(b[2]), // B
+            PRESSED(b[8]), // Select
+            PRESSED(b[9]), // Start
+            PRESSED(b[12]) || (axes.length > 1 && axes[1] < -0.5), // Up
+            PRESSED(b[13]) || (axes.length > 1 && axes[1] > 0.5),  // Down
+            PRESSED(b[14]) || (axes.length > 0 && axes[0] < -0.5), // Left
+            PRESSED(b[15]) || (axes.length > 0 && axes[0] > 0.5)   // Right
+        ];
+
+        let changed = false;
+        for (let i=0; i<8; i++) {
+            if (this.gamepadState[i] !== newState[i]) {
+                this.gamepadState[i] = newState[i];
+                changed = true;
+            }
+        }
+        if (changed) this.syncInputs();
+    }
+
+    syncInputs() {
+        if (!this.emulator) return;
+        for (let i = 0; i < 8; i++) {
+            const pressed = this.keyboardState[i] || this.gamepadState[i];
+            if (pressed !== this.lastSentState[i]) {
+                this.emulator.set_button(0, i, pressed);
+                this.lastSentState[i] = pressed;
+            }
         }
     }
 
     emulatorLoop() {
         if (!this.emulatorRunning) return;
+
+        // Poll inputs
+        this.pollGamepads();
 
         try {
             this.emulator.step();
@@ -367,7 +446,6 @@ class SwissEditor {
                          this.imageData.data[off+3] = 255;   // A
                      }
                 } else {
-                    // Maybe RGB (3 bytes)?
                     if (len === 184320) {
                         for (let i = 0; i < 256*240; i++) {
                              const off = i * 4;

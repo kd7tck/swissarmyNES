@@ -2920,7 +2920,8 @@ impl CodeGenerator {
             if let TopLevel::World(_, _, _) = decl {
                 let label = "World_Map";
                 self.output.push(format!("Ptr_{}: WORD {}", label, label));
-                self.data_table_offsets.insert(label.to_string(), current_addr);
+                self.data_table_offsets
+                    .insert(label.to_string(), current_addr);
                 current_addr += 2;
             }
         }

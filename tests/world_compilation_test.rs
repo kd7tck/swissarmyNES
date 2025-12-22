@@ -1,14 +1,15 @@
 #[cfg(test)]
 mod tests {
     use swissarmynes::compiler::analysis::SemanticAnalyzer;
+    use swissarmynes::compiler::ast::{Program, TopLevel};
     use swissarmynes::compiler::codegen::CodeGenerator;
-    use swissarmynes::compiler::ast::{TopLevel, Program};
 
     #[test]
     fn test_world_compilation() {
         let world_decl = TopLevel::World(
-            2, 2, // 2x2 grid
-            vec![0, 1, 2, 3] // Nametable indices
+            2,
+            2,                // 2x2 grid
+            vec![0, 1, 2, 3], // Nametable indices
         );
 
         let program = Program {
@@ -41,7 +42,7 @@ mod tests {
         let mt_decl = TopLevel::Metatile(
             "Grass".to_string(),
             [10, 11, 12, 13], // Tiles
-            1 // Attr
+            1,                // Attr
         );
 
         let program = Program {

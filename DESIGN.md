@@ -230,27 +230,27 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Slice 128x128 image into 8x8 tiles.
 - **Completion Criteria:** Dragging a PNG onto CHR Editor populates the bank.
 
-## Phase 27: Visual - Metatile Editor
+## Phase 27: Visual - Metatile Editor (Completed)
 **Goal:** Build maps faster.
 - **Action Items:**
     - Create UI for defining 16x16 or 32x32 blocks (composed of 4 or 16 tiles).
     - Assign palette attributes to the metatile.
 - **Completion Criteria:** User paints with 16x16 blocks instead of single tiles.
 
-## Phase 28: Visual - Metatile Integration
+## Phase 28: Visual - Metatile Integration (Completed)
 **Goal:** Organize game world. Screen editing will be built into the map editor directly. Allowing a person to edit individial tiles or collection of tiles called metatiles.
 - **Action Items:**
     - Integrate metatiles into MAP UI system more fully.
 - **Completion Criteria:** Can edit and work with metatiles in other systems that also use tiles.
 
-## Phase 29: Visual - World Editor for MAPS
+## Phase 29: Visual - World Editor for MAPS (Completed)
 **Goal:** Stitch Maps together. each grid point in world editor is a map from the map editor.
 - **Action Items:**
     - 2D Grid view of tiles or metatiles in vast grid map able to be stored in ROM.
     - Define adjacency (which MAP is Right/Up/Down/Left).
 - **Completion Criteria:** Visual map of the entire game world. and ability to import maps and use maps inside of world editor.
 
-## Phase 30: Visual - Sprite Editor
+## Phase 30: Visual - Sprite Editor (Completed)
 **Goal:** Dedicated character design tool.
 - **Action Items:**
     - Canvas allowing free placement of 8x8 sprite tiles or metatiles.

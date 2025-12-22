@@ -115,7 +115,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - State machine to update current frame based on timer.
 - **Completion Criteria:** Character walks (cycles 3 frames) when moving.
 
-## Phase 15: Object Pooling
+## Phase 15: Object Pooling (Completed)
 **Goal:** Manage game entities dynamically without dynamic memory allocation.
 - **Action Items:**
     - Implement a static `Entity` pool array.
@@ -144,7 +144,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Attribute table handling (via `PPU` control).
 - **Completion Criteria:** Map scrolls infinitely to the right without artifacts.
 
-## Phase 19: Scrolling - Vertical
+## Phase 19: Scrolling - Vertical (Completed)
 **Goal:** Enable vertical shooters/platformers.
 - **Action Items:**
     - Vertical camera logic.
@@ -160,35 +160,35 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
 
 ---
 
-## Phase 21: Audio - DPCM Support
+## Phase 21: Audio - DPCM Support (Completed)
 **Goal:** Play sampled sounds (drums, voice).
 - **Action Items:**
     - Audio Compiler: Support DMC channel data.
     - Add sample import (WAV -> 1-bit Delta) tool.
 - **Completion Criteria:** A voice sample plays on button press.
 
-## Phase 22: Audio - SFX Priority
+## Phase 22: Audio - SFX Priority (Completed)
 **Goal:** Prevent sound effects from cutting off music awkwardly.
 - **Action Items:**
     - Implement priority flag for SFX tracks.
     - Sound engine only interrupts music channel if SFX priority > current note priority.
 - **Completion Criteria:** Shooting sound plays over music, but low-priority ambient noise doesn't kill melody.
 
-## Phase 23: Audio - Envelope Editor UI
+## Phase 23: Audio - Envelope Editor UI (Completed)
 **Goal:** Visual sound design.
 - **Action Items:**
     - Create a graph editor for Volume and Pitch envelopes.
     - Export envelope data to Audio Compiler format.
 - **Completion Criteria:** User draws a fade-out curve, engine reproduces it.
 
-## Phase 24: Audio - Arpeggios
+## Phase 24: Audio - Arpeggios (Completed)
 **Goal:** Chiptune chords.
 - **Action Items:**
     - Add "Arp" macro support to Tracker.
     - Engine cycles pitch offsets every frame (0, 4, 7 semitones).
 - **Completion Criteria:** A single channel produces a major chord sound.
 
-## Phase 25a: Audio - SFX Engine Core
+## Phase 25a: Audio - SFX Engine Core (Completed)
 **Goal:** Define the binary format for Sound Effects and implement the runtime playback logic (Assembler/ASM).
 - **Action Items:**
     - Define `SoundEffect` struct in Rust (Channel, Priority, Speed, Sequences for Vol/Pitch/Duty).
@@ -196,7 +196,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Ensure SFX engine handles priority correctly.
 - **Completion Criteria:** Manually defined SFX data can be compiled and played via `PLAY_SFX` in a test ROM.
 
-## Phase 25b: Audio - SFX Editor UI Foundation
+## Phase 25b: Audio - SFX Editor UI Foundation (Completed)
 **Goal:** Create the dedicated workspace for Sound Effect creation, separate from the Music Tracker, rename Audio tab to music to make sure there is no future confusion.
 - **Action Items:**
     - Add "SFX" tab to the Audio Editor.
@@ -204,7 +204,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Basic properties panel (Channel selection, Loop settings).
 - **Completion Criteria:** User can create a named SFX entry and save the project.
 
-## Phase 25c: Audio - Visual Envelope Designers
+## Phase 25c: Audio - Visual Envelope Designers (Completed)
 **Goal:** Intuitive visual editing of sound parameters over time.
 - **Action Items:**
     - Implement "Draw" canvas for Volume envelopes.
@@ -212,7 +212,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Implement "Arpeggio" macro editor (specific sequence of note offsets).
 - **Completion Criteria:** User can draw a volume fade-out curve and a pitch slide visually.
 
-## Phase 25d: Audio - Import/Export & Full Integration
+## Phase 25d: Audio - Import/Export & Full Integration (Completed)
 **Goal:** Asset sharing and final polish.
 - **Action Items:**
     - Implement JSON Import/Export for individual SFX patches.

@@ -2,11 +2,16 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const __wbg_emulator_free: (a: number, b: number) => void;
+export const emulator_clear_audio_samples: (a: number) => void;
+export const emulator_get_audio_samples: (a: number) => number;
+export const emulator_get_audio_samples_len: (a: number) => number;
 export const emulator_get_pixels: (a: number) => number;
 export const emulator_get_pixels_len: (a: number) => number;
 export const emulator_load_rom: (a: number, b: number, c: number) => [number, number];
 export const emulator_new: () => number;
+export const emulator_reset: (a: number) => void;
 export const emulator_set_button: (a: number, b: number, c: number, d: number) => void;
+export const emulator_set_sample_rate: (a: number, b: number) => void;
 export const emulator_step: (a: number) => [number, number];
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

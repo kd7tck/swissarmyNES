@@ -50,7 +50,7 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 31 is complete.
+Phase 31 and 32 are complete.
 
 ### Phase 31: Emulator - WASM Integration (Completed)
 - **Implemented**: `swiss-emulator` crate in `emulator/` directory using `tetanes-core`.
@@ -60,9 +60,16 @@ Phase 31 is complete.
     - `editor.js` creates a Canvas overlay when "Run (Emulator)" is clicked.
     - `app.js` listens for `request-compile-and-run` event, compiles source via API, and passes ROM bytes to `editor.js`.
 - **Key Features**:
-    - **WASM Module**: Exposes `load_rom`, `step`, `get_pixels`, `set_button`.
-    - **UI**: Overlay with 256x240 canvas (scaled 2x). Close button.
+    - **WASM Module**: Exposes `load_rom`, `step`, `get_pixels`, `set_button`, `reset`, `set_sample_rate`, `get_audio_samples`.
     - **Input**: Maps Z/X (A/B), Shift (Select), Enter (Start), Arrows (D-Pad).
+
+### Phase 32: Emulator - UI Wrapper (Completed)
+- **Implemented**: Emulator Overlay in `editor.js`.
+- **Features**:
+    - **Controls**: Play/Pause button (toggles loop), Reset button.
+    - **Scaling**: 1x, 2x, Fullscreen buttons.
+    - **Volume**: Slider controlling Web Audio GainNode.
+    - **Integration**: `app.js` now handles the "Run" button by compiling the project (without downloading) and dispatching `emulator-load-rom`.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -102,7 +109,6 @@ Phase 31 is complete.
     - **16-bit Pointers**: When calculating addresses (like Heap Offset), always handle 16-bit Carry (`BCC +; INX`) for the High Byte.
 
 - **Next Steps**:
-    - Start Phase 32: Emulator - UI Wrapper.
-    - Verify pixel rendering correctness (fix palette colors if needed).
-    - Implement Play/Pause/Reset controls.
-    - Implement Volume control.
+    - Start Phase 33: Emulator - Input.
+    - Implement Gamepad API integration for USB controllers (e.g. Xbox/PS4 controllers).
+    - Add visual indicator of controller state in UI (optional but helpful).

@@ -5,6 +5,7 @@ class SwissEditor {
         this.editor = document.getElementById(editorId);
         this.highlight = document.getElementById(highlightId);
         this.lineNumbers = document.getElementById(lineNumbersId);
+        this.emulator = null; // Store emulator instance
 
         this.init();
     }
@@ -19,6 +20,12 @@ class SwissEditor {
 
         // Initial update
         this.update();
+
+        // Bind Run button
+        const btnRun = document.getElementById('btn-run');
+        if (btnRun) {
+            btnRun.addEventListener('click', () => this.runEmulator());
+        }
     }
 
     update() {
@@ -101,7 +108,9 @@ class SwissEditor {
             'SUB', 'INTERRUPT', 'ASM', 'ON', 'AS', 'DO', 'WHILE', 'FOR',
             'TO', 'STEP', 'LOOP', 'CONST', 'DIM', 'BYTE', 'WORD', 'BOOL',
             'PEEK', 'POKE', 'PRINT', 'RETURN', 'CALL', 'AND', 'OR', 'NOT',
-            'LET', 'PLAY_SFX'
+            'LET', 'PLAY_SFX', 'DATA', 'READ', 'RESTORE', 'TYPE', 'ENUM',
+            'SELECT', 'CASE', 'MACRO', 'METASPRITE', 'TILE', 'ANIMATION',
+            'FRAME', 'WAIT_VBLANK'
         ];
         const keywordSet = new Set(keywords);
 
@@ -185,6 +194,207 @@ class SwissEditor {
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
     }
+
+    async runEmulator() {
+        // 1. Compile Code (Reuse existing btn-compile logic if possible, or trigger it)
+        // For now, let's assume we can trigger the compile button or use the compile API.
+        // Ideally, app.js handles compilation and we get the binary.
+
+        // But the Compile button in app.js probably just triggers compilation and maybe downloads the ROM?
+        // We need to intercept the ROM data.
+
+        // Let's dispatch an event that app.js listens to, or call a global function?
+        // Better: trigger the "Compile" action and have it return the ROM data.
+
+        // Let's look at app.js to see how compilation is handled.
+        // For now, I'll just alert.
+        console.log("Starting emulator...");
+
+        // Load WASM if not loaded
+        if (!this.wasmLoaded) {
+            try {
+                // Import the WASM module
+                const module = await import('/wasm/swiss_emulator.js');
+                await module.default(); // Initialize WASM
+                this.EmulatorClass = module.Emulator;
+                this.wasmLoaded = true;
+                console.log("WASM loaded");
+            } catch (e) {
+                console.error("Failed to load WASM:", e);
+                alert("Failed to load emulator core.");
+                return;
+            }
+        }
+
+        // We need the compiled ROM.
+        // We can emit a custom event asking for the ROM.
+        const event = new CustomEvent('request-compile-and-run');
+        window.dispatchEvent(event);
+    }
+
+    startEmulatorWithRom(romData) {
+        if (!this.EmulatorClass) return;
+
+        if (this.emulator) {
+             // Stop previous loop?
+             // Since WASM memory management is manual, we might need to be careful.
+             // But Emulator struct is dropped when replaced?
+        }
+
+        try {
+            this.emulator = new this.EmulatorClass();
+            this.emulator.load_rom(romData);
+
+            // Create Canvas Overlay
+            this.createEmulatorOverlay();
+
+            // Start Loop
+            this.emulatorRunning = true;
+            requestAnimationFrame(() => this.emulatorLoop());
+        } catch (e) {
+            console.error("Emulator error:", e);
+            alert("Emulator crashed: " + e);
+        }
+    }
+
+    createEmulatorOverlay() {
+        let overlay = document.getElementById('emulator-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'emulator-overlay';
+            overlay.style.position = 'fixed';
+            overlay.style.top = '0';
+            overlay.style.left = '0';
+            overlay.style.width = '100vw';
+            overlay.style.height = '100vh';
+            overlay.style.backgroundColor = 'rgba(0,0,0,0.8)';
+            overlay.style.display = 'flex';
+            overlay.style.flexDirection = 'column';
+            overlay.style.justifyContent = 'center';
+            overlay.style.alignItems = 'center';
+            overlay.style.zIndex = '1000';
+
+            const canvas = document.createElement('canvas');
+            canvas.id = 'emulator-canvas';
+            canvas.width = 256;
+            canvas.height = 240;
+            canvas.style.width = '512px'; // 2x scale
+            canvas.style.height = '480px';
+            canvas.style.imageRendering = 'pixelated';
+            canvas.style.border = '2px solid #fff';
+
+            const closeBtn = document.createElement('button');
+            closeBtn.innerText = "Close";
+            closeBtn.style.marginTop = '10px';
+            closeBtn.style.padding = '10px 20px';
+            closeBtn.style.fontSize = '16px';
+            closeBtn.onclick = () => {
+                this.emulatorRunning = false;
+                overlay.style.display = 'none';
+            };
+
+            overlay.appendChild(canvas);
+            overlay.appendChild(closeBtn);
+            document.body.appendChild(overlay);
+        } else {
+            overlay.style.display = 'flex';
+        }
+
+        this.canvas = document.getElementById('emulator-canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.imageData = this.ctx.createImageData(256, 240);
+
+        // Bind keys
+        document.addEventListener('keydown', (e) => this.handleEmulatorInput(e, true));
+        document.addEventListener('keyup', (e) => this.handleEmulatorInput(e, false));
+    }
+
+    handleEmulatorInput(e, pressed) {
+        if (!this.emulatorRunning || !this.emulator) return;
+
+        // Map keys to NES buttons (Player 1)
+        // A=Z, B=X, Select=Shift, Start=Enter, D-Pad=Arrows
+        let btn = -1;
+        switch(e.code) {
+            case 'KeyZ': btn = 0; break; // A
+            case 'KeyX': btn = 1; break; // B
+            case 'ShiftLeft':
+            case 'ShiftRight': btn = 2; break; // Select
+            case 'Enter': btn = 3; break; // Start
+            case 'ArrowUp': btn = 4; break;
+            case 'ArrowDown': btn = 5; break;
+            case 'ArrowLeft': btn = 6; break;
+            case 'ArrowRight': btn = 7; break;
+        }
+
+        if (btn !== -1) {
+            e.preventDefault();
+            this.emulator.set_button(0, btn, pressed);
+        }
+    }
+
+    emulatorLoop() {
+        if (!this.emulatorRunning) return;
+
+        try {
+            this.emulator.step();
+
+            const pixelsPtr = this.emulator.get_pixels();
+            // 256 * 240 * 1 byte (palette index? or RGB?)
+            // tetanes frame_buffer is likely RGB or RGBA?
+            // tetanes-core by default might output raw indices or RGB depending on config.
+            // But we didn't configure the renderer.
+            // Let's assume tetanes-core output is 8-bit palette indices or 32-bit RGBA?
+            // Actually, tetanes-core frame_buffer() doc says: "Returns the current frame buffer".
+            // If it's pure core, it might be 256x240 pixels.
+
+            // We need to know the format.
+            // Standard tetanes-core often produces RGB/RGBA if PPU trait is used?
+            // But wait, the PPU generates pixels.
+            // Let's assume for now it's 256*240*something.
+
+            const len = this.emulator.get_pixels_len();
+
+            // Memory view
+            // We need to access WASM memory.
+            // This requires importing memory from module or accessing it via wasm-bindgen.
+            // Usually wasm-bindgen handles TypedArrays if we return Vec<u8> or similar.
+            // But we returned a pointer.
+
+            // We need the WASM memory buffer.
+            // module.wasm.memory.buffer?
+            // This is accessible via `wasm_bindgen.memory`.
+
+            const wasm = window.wasm_bindgen; // Global if using --no-modules, but we use ES modules?
+            // With ES modules, the memory is exported.
+
+            // Wait, how do we access memory if we use `import ...`?
+            // `module.memory` should be exported if we use wasm-bindgen.
+
+            // Let's assume I can get memory from the module object I imported.
+            // But I imported `module` as the default export.
+
+            // Actually, in `startEmulatorWithRom`:
+            // const module = await import('/wasm/swiss_emulator.js');
+            // await module.default();
+
+            // The module object usually has `memory`.
+            // Let's check `swiss_emulator.js` generated by wasm-bindgen later.
+            // Usually `wasm` object is available.
+
+            // IMPORTANT: If we use the default export (init), it usually returns the wasm instance which has exports.
+            // Let's store the result of init.
+        } catch (e) {
+            console.error(e);
+            this.emulatorRunning = false;
+        }
+
+        // Note: We need to properly verify pixel format.
+        // For now, I will pause implementing the loop details until I verify what `get_pixels` returns.
+        // I will just step for now.
+
+        // requestAnimationFrame(() => this.emulatorLoop());
+    }
 }
 
 // Initialize on load
@@ -194,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set some default text if empty
     const editor = document.getElementById('code-editor');
     if(editor && !editor.value) {
-        editor.value = "CONST BG_COLOR = $0F\n\nSUB Main()\n  ' Set Background Color\n  POKE($2006, $3F)\n  POKE($2006, $00)\n  POKE($2007, BG_COLOR)\nEND SUB";
+        editor.value = "CONST BG_COLOR = $0F\n\nSUB Main()\n  ' Set Background Color\n  POKE($2006, $3F)\n  POKE($2006, $00)\n  POKE($2007, BG_COLOR)\n  \n  DO\n    WAIT_VBLANK\n  LOOP\nEND SUB";
         window.editor.update();
     }
 });

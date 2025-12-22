@@ -50,29 +50,19 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-30 are complete and verified. Phase 31 is Next.
+Phase 31 is complete.
 
-### Phase 29: Visual - World Editor (Completed & Verified)
-- **Implemented**: `WorldLayout` in backend and `WorldEditor` in frontend.
-- **Compilation**:
-    - `TopLevel::World` AST node added.
-    - Compiles to `World_Map` label containing Width (2 bytes), Height (2 bytes), and Data bytes (Nametable indices).
-    - `Ptr_World_Map` added to Data Table for runtime access.
+### Phase 31: Emulator - WASM Integration (Completed)
+- **Implemented**: `swiss-emulator` crate in `emulator/` directory using `tetanes-core`.
+- **Compiling**: `emulator` compiles to `wasm32-unknown-unknown` and exposes `Emulator` class via `wasm-bindgen`.
+- **Frontend**:
+    - `editor.js` handles loading the WASM module dynamically.
+    - `editor.js` creates a Canvas overlay when "Run (Emulator)" is clicked.
+    - `app.js` listens for `request-compile-and-run` event, compiles source via API, and passes ROM bytes to `editor.js`.
 - **Key Features**:
-    - **World Struct**: `width`, `height`, `data` (Vec<i32> referencing Nametable indices).
-    - **Editor UI**: Grid view of maps. Select map from list (Nametables) and paint onto grid.
-    - **Persistence**: Saved to `assets.json` under `world`.
-
-### Phase 27-28: Visual - Metatile Editor & Integration (Completed & Verified)
-- **Implemented**: `MetatileEditor` in frontend and `Metatile` struct in backend.
-- **Compilation**:
-    - `TopLevel::Metatile` AST node added.
-    - Compiles to Label (Name) + 5 bytes (TL, TR, BL, BR, Attr).
-    - Added to Data Table for runtime access.
-- **Key Features**:
-    - **Metatile Struct**: Defines 2x2 tile blocks (4 tile indices) and 1 palette attribute index.
-    - **Editor UI**: Create, Delete, Rename metatiles. Visual 2x2 grid editor to assign tiles from the CHR bank.
-    - **Map Integration**: "Metatile Mode" in Map Editor allows painting with 16x16 metatiles.
+    - **WASM Module**: Exposes `load_rom`, `step`, `get_pixels`, `set_button`.
+    - **UI**: Overlay with 256x240 canvas (scaled 2x). Close button.
+    - **Input**: Maps Z/X (A/B), Shift (Select), Enter (Start), Arrows (D-Pad).
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -100,6 +90,7 @@ Phase 1-30 are complete and verified. Phase 31 is Next.
 - **$FFFA**: Vectors (NMI, Reset, IRQ).
 
 - **Pitfalls**:
+    - **WASM Pixel Format**: `tetanes-core` frame buffer format needs verification (RGBA vs RGB vs Palette). Currently assuming pointer access is sufficient for raw rendering, but color mapping might be needed if it returns raw NES palette indices. Future phases should verify color correctness.
     - `Text.Print` writes directly to the PPU ($2006/$2007). Use `WAIT_VBLANK` before calling this to avoid visual glitches.
     - `True` is `$FF`. Check assumptions in assembly injections if they rely on `1`.
     - **Audio Labels**: When injecting assembly strings in loops or multiple blocks, ensure labels are unique or use local labels if assembler supports it. `rs6502` global label reuse caused "Branch too far".
@@ -110,14 +101,8 @@ Phase 1-30 are complete and verified. Phase 31 is Next.
     - **CHR Import**: Requires a 128x128 PNG for full bank import. Alpha channel is treated as color 0 (transparent). Nearest neighbor matching uses the *current* 4-color palette, not the full NES palette, so ensure the correct sub-palette is selected before importing.
     - **16-bit Pointers**: When calculating addresses (like Heap Offset), always handle 16-bit Carry (`BCC +; INX`) for the High Byte.
 
-- **Debugging Review (Phases 1-30)**:
-    - **Verification**: Phases 1-30 verified. `tests/` pass.
-    - **Audio**: Verified correct compilation of `SoundEffect`, `AudioTrack`, and `DpcmSample` in `src/compiler/audio.rs`. `tests/sfx_compilation_test.rs` confirms binary layout.
-    - **Visual**: Verified `World` and `Metatile` compilation logic in `codegen.rs`.
-    - **Documentation**: Updated `README.md` to reflect completed phases and new features (World, Sprite, Animation).
-
 - **Next Steps**:
-    - Start Phase 31: Emulator - WASM Integration.
-    - Select a Rust NES emulator crate.
-    - Compile emulator to WASM.
-    - Integrate WASM module into `editor.js`.
+    - Start Phase 32: Emulator - UI Wrapper.
+    - Verify pixel rendering correctness (fix palette colors if needed).
+    - Implement Play/Pause/Reset controls.
+    - Implement Volume control.

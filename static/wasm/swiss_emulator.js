@@ -226,6 +226,29 @@ export class Emulator {
         const ret = wasm.emulator_get_pixels_len(this.__wbg_ptr);
         return ret >>> 0;
     }
+    /**
+     * @param {number} rate
+     */
+    set_sample_rate(rate) {
+        wasm.emulator_set_sample_rate(this.__wbg_ptr, rate);
+    }
+    /**
+     * @returns {number}
+     */
+    get_audio_samples() {
+        const ret = wasm.emulator_get_audio_samples(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    clear_audio_samples() {
+        wasm.emulator_clear_audio_samples(this.__wbg_ptr);
+    }
+    /**
+     * @returns {number}
+     */
+    get_audio_samples_len() {
+        const ret = wasm.emulator_get_audio_samples_len(this.__wbg_ptr);
+        return ret >>> 0;
+    }
     constructor() {
         const ret = wasm.emulator_new();
         this.__wbg_ptr = ret >>> 0;
@@ -237,6 +260,9 @@ export class Emulator {
         if (ret[1]) {
             throw takeFromExternrefTable0(ret[0]);
         }
+    }
+    reset() {
+        wasm.emulator_reset(this.__wbg_ptr);
     }
     /**
      * @param {Uint8Array} rom_data

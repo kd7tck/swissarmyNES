@@ -35,7 +35,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Handle initial load based on hash
     // Initialize Audio Tracker
     if (window.AudioTracker) {
         window.audioTracker = new window.AudioTracker('audio-tracker-root');
@@ -51,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.spriteEditor = new window.SpriteEditor();
     }
 
+    // Handle initial load based on hash
     const initialHash = window.location.hash.replace('#', '');
     if (initialHash && document.getElementById(initialHash)) {
         navigateTo(initialHash);
@@ -69,39 +69,40 @@ document.addEventListener('DOMContentLoaded', () => {
          }
     });
 
-    // Handle Compile
-    if (btnCompile && codeEditor) {
-        btnCompile.addEventListener('click', async () => {
-            // Save project first to ensure files on disk are up to date
-            if (window.projectManager) {
-                try {
-                    await window.projectManager.saveCurrentProject(true);
-                } catch (e) {
-                    console.error("Auto-save failed:", e);
-                }
-            }
+    // Compilation Logic
+    async function performCompile(download = true) {
+        if (!codeEditor) return;
 
-            const source = codeEditor.value;
-            // Get assets from the ProjectManager
-            const assets = window.projectManager ? window.projectManager.assets : null;
-            const projectName = window.projectManager ? window.projectManager.currentProject : null;
-
-            const payload = {
-                source: projectName ? null : source, // Use editor content only if no project
-                project_name: projectName,
-                assets: assets
-            };
-
+        // Save project first to ensure files on disk are up to date
+        if (window.projectManager) {
             try {
-                const response = await fetch('/api/compile', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+                await window.projectManager.saveCurrentProject(true);
+            } catch (e) {
+                console.error("Auto-save failed:", e);
+            }
+        }
 
-                if (response.ok) {
-                    // Success: Download the blob
-                    const blob = await response.blob();
+        const source = codeEditor.value;
+        const assets = window.projectManager ? window.projectManager.assets : null;
+        const projectName = window.projectManager ? window.projectManager.currentProject : null;
+
+        const payload = {
+            source: projectName ? null : source, // Use editor content only if no project
+            project_name: projectName,
+            assets: assets
+        };
+
+        try {
+            const response = await fetch('/api/compile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                if (download) {
+                    // Download the blob
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.style.display = 'none';
@@ -112,14 +113,28 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.URL.revokeObjectURL(url);
                     alert('Compilation Successful! ROM downloaded.');
                 } else {
-                    // Error: Show message
-                    const text = await response.text();
-                    alert('Compilation Failed:\n' + text);
+                    // Send to Emulator
+                    const arrayBuffer = await blob.arrayBuffer();
+                    const romData = new Uint8Array(arrayBuffer);
+                    const event = new CustomEvent('emulator-load-rom', { detail: romData });
+                    window.dispatchEvent(event);
                 }
-            } catch (err) {
-                console.error(err);
-                alert('Network Error: ' + err.message);
+            } else {
+                // Error: Show message
+                const text = await response.text();
+                alert('Compilation Failed:\n' + text);
             }
-        });
+        } catch (err) {
+            console.error(err);
+            alert('Network Error: ' + err.message);
+        }
     }
+
+    // Bind Compile Button
+    if (btnCompile) {
+        btnCompile.addEventListener('click', () => performCompile(true));
+    }
+
+    // Bind Emulator Request
+    window.addEventListener('request-compile-and-run', () => performCompile(false));
 });

@@ -426,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set some default text if empty
     const editorEl = document.getElementById('code-editor');
     if(editorEl && !editorEl.value) {
-        editorEl.value = "CONST BG_COLOR = $0F\n\nSUB Main()\n  ' Set Background Color\n  POKE($2006, $3F)\n  POKE($2006, $00)\n  POKE($2007, BG_COLOR)\n  \n  DO\n    WAIT_VBLANK\n  LOOP\nEND SUB";
+        editorEl.value = "CONST BG_COLOR = $0F\n\nSUB Main()\n  ' Set Background Color\n  POKE($2006, $3F)\n  POKE($2006, $00)\n  POKE($2007, BG_COLOR)\n  \n  DO\n    WAIT_VBLANK\n  LOOP WHILE 1\nEND SUB";
         window.editor.update();
     }
 });

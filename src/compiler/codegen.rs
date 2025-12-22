@@ -186,8 +186,6 @@ impl CodeGenerator {
             self.output.push("  STA $05".to_string());
         }
 
-        self.output.push("  JSR Main".to_string());
-
         let nmi_label = program.declarations.iter().find_map(|d| {
             if let TopLevel::Interrupt(name, _) = d {
                 if name.to_uppercase() == "NMI" {
@@ -260,24 +258,35 @@ impl CodeGenerator {
         }
 
         for decl in &program.declarations {
-            if let TopLevel::Dim(name, DataType::String, Some(Expression::StringLiteral(val))) =
-                decl
-            {
-                if let Some(label) = self.string_literals.get(val) {
-                    if let Some(addr) = self.data_table_offsets.get(label) {
-                        if let Some(sym) = self.symbol_table.resolve(name) {
-                            if let Some(var_addr) = sym.address {
-                                self.output.push(format!("  ; Init String '{}'", name));
-                                self.output.push(format!("  LDA ${:04X}", addr));
-                                self.output.push(format!("  STA ${:04X}", var_addr));
-                                self.output.push(format!("  LDA ${:04X}", addr + 1));
-                                self.output.push(format!("  STA ${:04X}", var_addr + 1));
+            if let TopLevel::Dim(name, dtype, Some(expr)) = decl {
+                if let Some(addr) = self.symbol_table.resolve(name).and_then(|s| s.address) {
+                    self.output
+                        .push(format!("  ; Init {} @ ${:04X}", name, addr));
+                    match dtype {
+                        DataType::Byte | DataType::Bool | DataType::Int | DataType::Enum(_) => {
+                            let _ = self.generate_expression(expr)?;
+                            self.output.push(format!("  STA ${:04X}", addr));
+                        }
+                        DataType::Word | DataType::String => {
+                            let rtype = self.generate_expression(expr)?;
+                            self.output.push(format!("  STA ${:04X}", addr));
+                            if rtype == DataType::Word
+                                || rtype == DataType::Int
+                                || rtype == DataType::String
+                            {
+                                self.output.push(format!("  STX ${:04X}", addr + 1));
+                            } else {
+                                self.output.push("  LDA #0".to_string());
+                                self.output.push(format!("  STA ${:04X}", addr + 1));
                             }
                         }
+                        _ => {}
                     }
                 }
             }
         }
+
+        self.output.push("  JSR Main".to_string());
 
         self.output.push("forever:".to_string());
         self.output.push("  JMP forever".to_string());

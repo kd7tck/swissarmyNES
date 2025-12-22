@@ -39,5 +39,5 @@ fn test_string_compilation() {
     // LDA $FFxx, STA $03A0
     // LDA $FFxx+1, STA $03A1
     // We don't know exact address but we can check pattern
-    assert!(code.iter().any(|line| line.contains("Init String 's'")));
+    assert!(code.iter().any(|line| line.contains("Init s @")));
 }

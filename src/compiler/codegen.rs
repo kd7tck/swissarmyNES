@@ -1938,18 +1938,6 @@ impl CodeGenerator {
         self.output.push("  PLA".to_string());
         self.output.push("  STA $02".to_string()); // Low
 
-        // Gap Skip: If Y Low >= 240, add 16 to skip attribute area
-        self.output.push("  LDA $02".to_string());
-        self.output.push("  CMP #$F0".to_string());
-        self.output.push("  BCC Scroll_Row_NoGap".to_string());
-        self.output.push("  CLC".to_string());
-        self.output.push("  ADC #$10".to_string());
-        self.output.push("  STA $02".to_string());
-        self.output.push("  LDA $03".to_string());
-        self.output.push("  ADC #0".to_string());
-        self.output.push("  STA $03".to_string());
-        self.output.push("Scroll_Row_NoGap:".to_string());
-
         // Calculate Target High ($05)
         // Base $20 or $24 based on X High Bit 0
         self.output.push("  LDA $03".to_string());
@@ -2015,6 +2003,18 @@ impl CodeGenerator {
         self.output.push("  STA $03".to_string()); // High
         self.output.push("  PLA".to_string());
         self.output.push("  STA $02".to_string()); // Low
+
+        // Gap Skip: If Y Low >= 240, add 16 to skip attribute area
+        self.output.push("  LDA $02".to_string());
+        self.output.push("  CMP #$F0".to_string());
+        self.output.push("  BCC Scroll_Row_Gap_Skip".to_string());
+        self.output.push("  CLC".to_string());
+        self.output.push("  ADC #$10".to_string());
+        self.output.push("  STA $02".to_string());
+        self.output.push("  LDA $03".to_string());
+        self.output.push("  ADC #0".to_string());
+        self.output.push("  STA $03".to_string());
+        self.output.push("Scroll_Row_Gap_Skip:".to_string());
 
         // Calculate Target High ($05)
         // (Y Low / 64) -> High Offset

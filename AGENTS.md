@@ -50,32 +50,29 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 1-30 are complete. Phase 31 is Next.
+Phase 1-30 are complete and verified. Phase 31 is Next.
 
-### Phase 30: Visual - Sprite Editor (Completed)
-- **Implemented**: `Metasprite`, `SpriteTile`, `Animation`, `AnimationFrame` structs in backend; `SpriteEditor` in frontend.
-- **Key Features**:
-    - **Metasprite**: Collection of 8x8 tiles with relative offsets (X, Y) and attributes.
-    - **Animation**: Sequence of Metasprites with durations.
-    - **Compiler Injection**: Automatically converts assets to `TopLevel::Metasprite` and `TopLevel::Animation` AST nodes.
-    - **Editor UI**: Two-pane editor for Sprites and Animations. Canvas for placing tiles (using CHR bank). Timeline for frame sequencing.
-    - **Persistence**: Saved to `assets.json` under `metasprites` and `animations`.
-
-### Phase 29: Visual - World Editor (Completed)
+### Phase 29: Visual - World Editor (Completed & Verified)
 - **Implemented**: `WorldLayout` in backend and `WorldEditor` in frontend.
+- **Compilation**:
+    - `TopLevel::World` AST node added.
+    - Compiles to `World_Map` label containing Width (2 bytes), Height (2 bytes), and Data bytes (Nametable indices).
+    - `Ptr_World_Map` added to Data Table for runtime access.
 - **Key Features**:
     - **World Struct**: `width`, `height`, `data` (Vec<i32> referencing Nametable indices).
     - **Editor UI**: Grid view of maps. Select map from list (Nametables) and paint onto grid.
     - **Persistence**: Saved to `assets.json` under `world`.
-    - **Integration**: "World" tab added to main UI.
 
-### Phase 27-28: Visual - Metatile Editor & Integration (Completed)
+### Phase 27-28: Visual - Metatile Editor & Integration (Completed & Verified)
 - **Implemented**: `MetatileEditor` in frontend and `Metatile` struct in backend.
+- **Compilation**:
+    - `TopLevel::Metatile` AST node added.
+    - Compiles to Label (Name) + 5 bytes (TL, TR, BL, BR, Attr).
+    - Added to Data Table for runtime access.
 - **Key Features**:
     - **Metatile Struct**: Defines 2x2 tile blocks (4 tile indices) and 1 palette attribute index.
     - **Editor UI**: Create, Delete, Rename metatiles. Visual 2x2 grid editor to assign tiles from the CHR bank.
-    - **Map Integration**: "Metatile Mode" in Map Editor allows painting with 16x16 metatiles, automatically updating both nametable data and attribute table (aligned to 2x2 grid).
-    - **Persistence**: Saved to `assets.json` under `metatiles`.
+    - **Map Integration**: "Metatile Mode" in Map Editor allows painting with 16x16 metatiles.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -114,11 +111,9 @@ Phase 1-30 are complete. Phase 31 is Next.
     - **16-bit Pointers**: When calculating addresses (like Heap Offset), always handle 16-bit Carry (`BCC +; INX`) for the High Byte.
 
 - **Debugging Review (Phases 1-30)**:
-    - Fixed a critical bug in `Runtime_GetHeapSlot` where String Heap pointers would wrap incorrectly (fail to carry to high byte) and corrupt memory at `$0300` (Sound Engine).
-    - Renamed confusing labels in `Math_Div16_Signed` to improve maintainability.
-    - Verified signed math, audio compilation, and memory layout.
-    - **Vertical Scrolling**: Fixed a bug in `Runtime_Scroll_LoadRow` where Y-coordinates 240-255 would write to the Attribute Table instead of wrapping to the next Nametable. Implemented automatic gap-skipping (adding 16 to Y if Low >= 240).
-    - **Verification**: Confirmed Phases 15, 19, 21-25 (Audio/Scroll/Pool) are fully implemented.
+    - **Shift Operators**: Fixed missing implementation for `<<` and `>>` in Codegen (`Math_Shl8/16`, `Math_Shr8/16`).
+    - **World/Metatile Compilation**: Implemented missing compilation logic for `TopLevel::World` and `TopLevel::Metatile`. These assets are now correctly injected into the AST and compiled into the ROM, available via Data Table lookups.
+    - **Verification**: `tests/world_compilation_test.rs` confirms correct generation of World map data and Metatile definitions.
 
 - **Next Steps**:
     - Start Phase 31: Emulator - WASM Integration.

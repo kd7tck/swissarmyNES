@@ -117,7 +117,7 @@ pub fn compile_source(
     let program = preprocessor::expand_macros(program)
         .map_err(|e| format!("Macro Expansion Error: {}", e))?;
 
-    // 2d. Inject Assets (Metasprites/Animations)
+    // 2d. Inject Assets (Metasprites/Animations/Metatiles/World)
     let mut program = program;
     if let Some(assets) = &resolved_assets {
         for ms in &assets.metasprites {
@@ -149,6 +149,20 @@ pub fn compile_source(
                 anim.name.clone(),
                 frames,
                 anim.does_loop,
+            ));
+        }
+
+        for mt in &assets.metatiles {
+            program
+                .declarations
+                .push(TopLevel::Metatile(mt.name.clone(), mt.tiles, mt.attr));
+        }
+
+        if let Some(world) = &assets.world {
+            program.declarations.push(TopLevel::World(
+                world.width,
+                world.height,
+                world.data.clone(),
             ));
         }
     }

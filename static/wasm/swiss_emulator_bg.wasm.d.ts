@@ -1,12 +1,30 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const __wbg_cpustate_free: (a: number, b: number) => void;
 export const __wbg_emulator_free: (a: number, b: number) => void;
+export const __wbg_get_cpustate_acc: (a: number) => number;
+export const __wbg_get_cpustate_cycles: (a: number) => number;
+export const __wbg_get_cpustate_pc: (a: number) => number;
+export const __wbg_get_cpustate_sp: (a: number) => number;
+export const __wbg_get_cpustate_status: (a: number) => number;
+export const __wbg_get_cpustate_x: (a: number) => number;
+export const __wbg_get_cpustate_y: (a: number) => number;
+export const __wbg_set_cpustate_acc: (a: number, b: number) => void;
+export const __wbg_set_cpustate_cycles: (a: number, b: number) => void;
+export const __wbg_set_cpustate_pc: (a: number, b: number) => void;
+export const __wbg_set_cpustate_sp: (a: number, b: number) => void;
+export const __wbg_set_cpustate_status: (a: number, b: number) => void;
+export const __wbg_set_cpustate_x: (a: number, b: number) => void;
+export const __wbg_set_cpustate_y: (a: number, b: number) => void;
 export const emulator_clear_audio_samples: (a: number) => void;
 export const emulator_get_audio_samples: (a: number) => number;
 export const emulator_get_audio_samples_len: (a: number) => number;
+export const emulator_get_cpu_state: (a: number) => number;
 export const emulator_get_pixels: (a: number) => number;
 export const emulator_get_pixels_len: (a: number) => number;
+export const emulator_get_wram: (a: number) => number;
+export const emulator_get_wram_len: (a: number) => number;
 export const emulator_load_rom: (a: number, b: number, c: number) => [number, number];
 export const emulator_new: () => number;
 export const emulator_reset: (a: number) => void;

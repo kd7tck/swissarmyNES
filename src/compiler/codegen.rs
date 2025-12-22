@@ -3518,8 +3518,38 @@ impl CodeGenerator {
                         } else if base_name.eq_ignore_ascii_case("Pool")
                             && member.eq_ignore_ascii_case("Despawn")
                         {
+                            // 1. Generate Array Base Address ($02/$03)
                             self.generate_address_expression(&args[0])?;
 
+                            // 2. Save Base to Stack to protect from Index Expression Eval
+                            self.output.push("  LDA $03".to_string());
+                            self.output.push("  PHA".to_string());
+                            self.output.push("  LDA $02".to_string());
+                            self.output.push("  PHA".to_string());
+
+                            // 3. Generate Index Expression
+                            let idx_type = self.generate_expression(&args[1])?;
+
+                            // 4. Save Index Result temporarily to $04/$05 (Safe ZP temps)
+                            self.output.push("  STA $04".to_string());
+                            if idx_type == DataType::Word || idx_type == DataType::Int {
+                                self.output.push("  STX $05".to_string());
+                            } else {
+                                self.output.push("  LDA #0".to_string());
+                                self.output.push("  STA $05".to_string());
+                            }
+
+                            // 5. Restore Base to $02/$03
+                            self.output.push("  TSX".to_string());
+                            self.output.push("  LDA $0101, X".to_string()); // Base Low
+                            self.output.push("  STA $02".to_string());
+                            self.output.push("  LDA $0102, X".to_string()); // Base High
+                            self.output.push("  STA $03".to_string());
+                            self.output.push("  PLA".to_string()); // Pop Low
+                            self.output.push("  PLA".to_string()); // Pop High
+
+                            // 6. Setup Stride ($06)
+                            // Re-calculate stride (safe now)
                             let dtype = self.resolve_type(&args[0]).unwrap();
                             let stride = if let DataType::Array(inner, _) = dtype {
                                 self.get_type_size(&inner)
@@ -3529,19 +3559,11 @@ impl CodeGenerator {
                             self.output.push(format!("  LDA #{}", stride));
                             self.output.push("  STA $06".to_string());
 
-                            let idx_type = self.generate_expression(&args[1])?;
-                            if idx_type == DataType::Byte
-                                || idx_type == DataType::Bool
-                                || idx_type == DataType::Int
-                            {
-                                self.output.push("  PHA".to_string()); // Low
-                                self.output.push("  LDA #0".to_string());
-                                self.output.push("  PHA".to_string()); // High
-                            } else {
-                                self.output.push("  PHA".to_string()); // Low
-                                self.output.push("  TXA".to_string());
-                                self.output.push("  PHA".to_string()); // High
-                            }
+                            // 7. Push Index to Stack (Runtime expects it there)
+                            self.output.push("  LDA $04".to_string()); // Low
+                            self.output.push("  PHA".to_string());
+                            self.output.push("  LDA $05".to_string()); // High
+                            self.output.push("  PHA".to_string());
 
                             self.output.push("  JSR Runtime_Pool_Despawn".to_string());
                             return Ok(());

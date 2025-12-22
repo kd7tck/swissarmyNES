@@ -50,7 +50,7 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phase 31, 32, and 33 are complete.
+Phases 31-34 are complete.
 
 ### Phase 31: Emulator - WASM Integration (Completed)
 - **Implemented**: `swiss-emulator` crate in `emulator/` directory using `tetanes-core`.
@@ -80,10 +80,19 @@ Phase 31, 32, and 33 are complete.
     - **State Management**: Updates are only sent to WASM when the combined state changes to minimize overhead.
     - **Hot-plugging**: Detects connection/disconnection of gamepads.
 
-### Bug Fixes (Audio/Assembler)
-- **Implemented**: Strict overlap detection in `Assembler::assemble` to prevent binary injections or code segments from silently overwriting each other.
-- **Implemented**: Size limits in `compiler/audio.rs` for Music Data, Samples, SFX, and Envelopes to prevent ROM corruption.
-- **Implemented**: Error propagation from Audio Compiler to API to Frontend.
+### Phase 34: Debugging - Protocol (Completed)
+- **Implemented**: WASM interface exposes `get_cpu_state()` (PC, SP, A, X, Y, Status, Cycles) and `get_wram()` (Pointer to RAM).
+- **Frontend**: `editor.js` includes `getDebugState` and `getWRAM` helpers.
+- **Verification**: Code exists and is verified via review. The `emulatorLoop` logs CPU state to console every 60 frames for basic verification.
+
+### Bug Fixes
+- **Audio/Assembler**:
+    - Implemented strict overlap detection in `Assembler`.
+    - Implemented size limits in `compiler/audio.rs` for Music Data, Samples, SFX, and Envelopes.
+    - Fixed Audio Compiler gap overflow: Gaps > 255 frames are split into multiple silence commands.
+- **Compiler/Codegen**:
+    - Fixed `Pool.Despawn`: Arguments are now evaluated safely. Base address is protected on stack while Index is evaluated, preventing register clobbering.
+    - Verified Memory Map consistency.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
@@ -95,9 +104,9 @@ Phase 31, 32, and 33 are complete.
 - **$0300-$037F**: Sound Engine State (128 bytes).
     - Stride 32 bytes per channel (0, 32, 64, 96).
     - Offsets: State(0), Inst(4), Prio(5), Vol(6), Pitch(9), Arp(13), Base(17), Duty(19).
-- **$0380-$03BF**: VBlank Buffer.
-- **$03C0-$04BF**: String Heap (256 bytes).
-- **$04C0-$07FF**: User Variables (DIM).
+- **$0380-$03BF**: VBlank Buffer (64 bytes).
+- **$03C0-$05BF**: String Heap (512 bytes).
+- **$05C0-$07FF**: User Variables (DIM).
 - **$8000-$CFFF**: PRG-ROM (Code).
 - **$D000**: NTSC Period Table.
 - **$D100**: Music Data.
@@ -125,8 +134,9 @@ Phase 31, 32, and 33 are complete.
     - **Input State**: When modifying input logic, ensure keyboard and gamepad don't conflict (e.g., releasing a button on one device shouldn't clear the hold on the other). Use a "last sent state" tracker.
     - **WASM Crash**: If the emulator crashes (e.g. `CpuCorrupted`), the loop stops and input polling ceases. Ensure robustness or handle errors gracefully if you need input to restart.
     - **Assembler Overlap**: The Assembler now strictly enforces non-overlapping segments. If you encounter "overlaps with existing data", check your `.ORG` directives and injection sizes to ensure they don't collide.
+    - **CodeGenerator Stack**: When evaluating arguments for subroutines or built-ins, complex expressions can clobber temporary registers (like `$02/$03` or `$06`). Use the Stack (`PHA`/`PLA`) to protect intermediate values.
 
 - **Next Steps**:
-    - Start Phase 34: Debugging - Protocol.
-    - Define shared memory or message passing interface (WASM <-> JS).
-    - Expose CPU RAM and Registers to JS.
+    - Start Phase 35: Debugging - Source Maps.
+    - Add line/span tracking to AST.
+    - Emit source map JSON.

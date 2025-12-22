@@ -117,6 +117,8 @@ Phase 1-30 are complete. Phase 31 is Next.
     - Fixed a critical bug in `Runtime_GetHeapSlot` where String Heap pointers would wrap incorrectly (fail to carry to high byte) and corrupt memory at `$0300` (Sound Engine).
     - Renamed confusing labels in `Math_Div16_Signed` to improve maintainability.
     - Verified signed math, audio compilation, and memory layout.
+    - **Vertical Scrolling**: Fixed a bug in `Runtime_Scroll_LoadRow` where Y-coordinates 240-255 would write to the Attribute Table instead of wrapping to the next Nametable. Implemented automatic gap-skipping (adding 16 to Y if Low >= 240).
+    - **Verification**: Confirmed Phases 15, 19, 21-25 (Audio/Scroll/Pool) are fully implemented.
 
 - **Next Steps**:
     - Start Phase 31: Emulator - WASM Integration.

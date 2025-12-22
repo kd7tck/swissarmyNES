@@ -26,6 +26,8 @@ pub enum BinaryOperator {
     Or,
     Xor,
     Modulo,
+    ShiftLeft,
+    ShiftRight,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -94,6 +96,8 @@ pub enum TopLevel {
     Macro(String, Vec<String>, Vec<Statement>), // MACRO Name, Params, Body
     Metasprite(String, Vec<MetaspriteTile>),  // METASPRITE Name, Tiles
     Animation(String, Vec<AnimationFrame>, bool), // ANIMATION Name, Frames, Loops
+    Metatile(String, [u8; 4], u8),            // METATILE Name, Tiles[4], Attr
+    World(u32, u32, Vec<i32>),                // WORLD Width, Height, Data (Nametable Indices)
 }
 
 #[derive(Debug, PartialEq, Clone)]

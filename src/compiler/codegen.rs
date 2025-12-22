@@ -1568,6 +1568,56 @@ impl CodeGenerator {
         self.output.push("Math_DivSigned_Done:".to_string());
         self.output.push("  RTS".to_string());
 
+        self.output.push("Math_Shl8:".to_string());
+        self.output.push("  LDY $00".to_string());
+        self.output.push("  BEQ Math_Shl8_Done".to_string());
+        self.output.push("Math_Shl8_Loop:".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  DEY".to_string());
+        self.output.push("  BNE Math_Shl8_Loop".to_string());
+        self.output.push("Math_Shl8_Done:".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("Math_Shr8:".to_string());
+        self.output.push("  LDY $00".to_string());
+        self.output.push("  BEQ Math_Shr8_Done".to_string());
+        self.output.push("Math_Shr8_Loop:".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  DEY".to_string());
+        self.output.push("  BNE Math_Shr8_Loop".to_string());
+        self.output.push("Math_Shr8_Done:".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("Math_Shl16:".to_string());
+        self.output.push("  LDY $00".to_string());
+        self.output.push("  BEQ Math_Shl16_Done".to_string());
+        self.output.push("Math_Shl16_Loop:".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  PHA".to_string());
+        self.output.push("  TXA".to_string());
+        self.output.push("  ROL".to_string());
+        self.output.push("  TAX".to_string());
+        self.output.push("  PLA".to_string());
+        self.output.push("  DEY".to_string());
+        self.output.push("  BNE Math_Shl16_Loop".to_string());
+        self.output.push("Math_Shl16_Done:".to_string());
+        self.output.push("  RTS".to_string());
+
+        self.output.push("Math_Shr16:".to_string());
+        self.output.push("  LDY $00".to_string());
+        self.output.push("  BEQ Math_Shr16_Done".to_string());
+        self.output.push("Math_Shr16_Loop:".to_string());
+        self.output.push("  PHA".to_string()); // Save Low
+        self.output.push("  TXA".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  TAX".to_string());
+        self.output.push("  PLA".to_string()); // Restore Low
+        self.output.push("  ROR".to_string());
+        self.output.push("  DEY".to_string());
+        self.output.push("  BNE Math_Shr16_Loop".to_string());
+        self.output.push("Math_Shr16_Done:".to_string());
+        self.output.push("  RTS".to_string());
+
         // Runtime_Random
         self.output.push("Runtime_Random:".to_string());
         self.output.push("  LDY #8".to_string());
@@ -2758,6 +2808,35 @@ impl CodeGenerator {
                         .push(format!("{}: WORD {}", lbl, frame.metasprite));
                     self.output.push(format!("  db ${:02X}", frame.duration));
                 }
+            } else if let TopLevel::Metatile(name, tiles, attr) = decl {
+                self.output.push(format!("{}:", name));
+                self.output.push(format!(
+                    "  db ${:02X}, ${:02X}, ${:02X}, ${:02X}, ${:02X}",
+                    tiles[0], tiles[1], tiles[2], tiles[3], attr
+                ));
+            } else if let TopLevel::World(width, height, data) = decl {
+                self.output.push("World_Map:".to_string());
+                self.output.push(format!(
+                    "  db ${:02X}, ${:02X}",
+                    width & 0xFF,
+                    (width >> 8) & 0xFF
+                ));
+                self.output.push(format!(
+                    "  db ${:02X}, ${:02X}",
+                    height & 0xFF,
+                    (height >> 8) & 0xFF
+                ));
+                let mut line = String::from("  db ");
+                for (i, val) in data.iter().enumerate() {
+                    if i > 0 && i % 16 == 0 {
+                        self.output.push(line);
+                        line = String::from("  db ");
+                    } else if i > 0 {
+                        line.push_str(", ");
+                    }
+                    line.push_str(&format!("${:02X}", val));
+                }
+                self.output.push(line);
             }
         }
         self.output.push("".to_string());
@@ -2831,6 +2910,17 @@ impl CodeGenerator {
             if let TopLevel::Data(Some(label), _) = decl {
                 self.output.push(format!("Ptr_{}: WORD {}", label, label));
                 self.data_table_offsets.insert(label.clone(), current_addr);
+                current_addr += 2;
+            }
+            if let TopLevel::Metatile(name, _, _) = decl {
+                self.output.push(format!("Ptr_{}: WORD {}", name, name));
+                self.data_table_offsets.insert(name.clone(), current_addr);
+                current_addr += 2;
+            }
+            if let TopLevel::World(_, _, _) = decl {
+                let label = "World_Map";
+                self.output.push(format!("Ptr_{}: WORD {}", label, label));
+                self.data_table_offsets.insert(label.to_string(), current_addr);
                 current_addr += 2;
             }
         }
@@ -3230,6 +3320,18 @@ impl CodeGenerator {
                         .insert(name.clone(), data_table_addr);
                     // Size: Count(1) + Loop(1) + Frames(N * 3)
                     data_table_addr += 2 + (frames.len() as u16) * 3;
+                }
+                TopLevel::Metatile(name, _, _) => {
+                    self.data_table_offsets
+                        .insert(name.clone(), data_table_addr);
+                    // Size: 5 bytes (4 tiles + 1 attr)
+                    data_table_addr += 5;
+                }
+                TopLevel::World(_, _, data) => {
+                    self.data_table_offsets
+                        .insert("World_Map".to_string(), data_table_addr);
+                    // Size: Width(2) + Height(2) + Data (N)
+                    data_table_addr += 4 + (data.len() as u16);
                 }
                 _ => {}
             }
@@ -4729,6 +4831,22 @@ impl CodeGenerator {
                                 Ok(DataType::Word)
                             }
                         }
+                        BinaryOperator::ShiftLeft => {
+                            self.output.push("  JSR Math_Shl16".to_string());
+                            if is_signed {
+                                Ok(DataType::Int)
+                            } else {
+                                Ok(DataType::Word)
+                            }
+                        }
+                        BinaryOperator::ShiftRight => {
+                            self.output.push("  JSR Math_Shr16".to_string());
+                            if is_signed {
+                                Ok(DataType::Int)
+                            } else {
+                                Ok(DataType::Word)
+                            }
+                        }
                         _ => {
                             let true_lbl = self.new_label();
                             let false_lbl = self.new_label();
@@ -4873,6 +4991,12 @@ impl CodeGenerator {
                         }
                         BinaryOperator::Xor => {
                             self.output.push("  EOR $00".to_string());
+                        }
+                        BinaryOperator::ShiftLeft => {
+                            self.output.push("  JSR Math_Shl8".to_string());
+                        }
+                        BinaryOperator::ShiftRight => {
+                            self.output.push("  JSR Math_Shr8".to_string());
                         }
                         _ => {}
                     }

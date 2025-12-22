@@ -80,6 +80,11 @@ Phase 31, 32, and 33 are complete.
     - **State Management**: Updates are only sent to WASM when the combined state changes to minimize overhead.
     - **Hot-plugging**: Detects connection/disconnection of gamepads.
 
+### Bug Fixes (Audio/Assembler)
+- **Implemented**: Strict overlap detection in `Assembler::assemble` to prevent binary injections or code segments from silently overwriting each other.
+- **Implemented**: Size limits in `compiler/audio.rs` for Music Data, Samples, SFX, and Envelopes to prevent ROM corruption.
+- **Implemented**: Error propagation from Audio Compiler to API to Frontend.
+
 ### Memory Map
 - **$0000-$00FF**: Zero Page.
     - `$E0`: Scroll X, `$E1`: Scroll Y.
@@ -119,6 +124,7 @@ Phase 31, 32, and 33 are complete.
     - **Gamepad Polling**: `navigator.getGamepads` returns a snapshot. It must be polled in `requestAnimationFrame`.
     - **Input State**: When modifying input logic, ensure keyboard and gamepad don't conflict (e.g., releasing a button on one device shouldn't clear the hold on the other). Use a "last sent state" tracker.
     - **WASM Crash**: If the emulator crashes (e.g. `CpuCorrupted`), the loop stops and input polling ceases. Ensure robustness or handle errors gracefully if you need input to restart.
+    - **Assembler Overlap**: The Assembler now strictly enforces non-overlapping segments. If you encounter "overlaps with existing data", check your `.ORG` directives and injection sizes to ensure they don't collide.
 
 - **Next Steps**:
     - Start Phase 34: Debugging - Protocol.

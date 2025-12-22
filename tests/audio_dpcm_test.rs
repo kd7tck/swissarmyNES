@@ -37,7 +37,7 @@ fn test_compile_samples() {
         animations: vec![],
     };
 
-    let (samples_blob, table_blob) = audio::compile_samples(&Some(assets));
+    let (samples_blob, table_blob) = audio::compile_samples(&Some(assets)).unwrap();
 
     // Check Table
     // Entry 1: Addr (relative to $C000 >> 6), Len (L)
@@ -101,7 +101,7 @@ fn test_compile_audio_dmc() {
         animations: vec![],
     };
 
-    let blob = audio::compile_audio_data(&Some(assets));
+    let blob = audio::compile_audio_data(&Some(assets)).unwrap();
 
     // Check Header
     // Count = 1

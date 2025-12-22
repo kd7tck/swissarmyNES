@@ -1,10 +1,18 @@
-use crate::compiler::codegen::ENVELOPE_TABLE_ADDR;
-
 pub const PERIOD_TABLE_ADDR: u16 = 0xD000;
 pub const MUSIC_DATA_ADDR: u16 = 0xD100;
+pub const MUSIC_DATA_SIZE: usize = 0x380; // 896 bytes ($D100-$D480)
+
 pub const SAMPLE_TABLE_ADDR: u16 = 0xD480;
+pub const SAMPLE_TABLE_SIZE: usize = 0x80; // 128 bytes ($D480-$D500)
+
 pub const SFX_TABLE_ADDR: u16 = 0xD900;
+pub const SFX_TABLE_SIZE: usize = 0x100; // 256 bytes ($D900-$DA00)
+
+pub const ENVELOPE_TABLE_ADDR: u16 = 0xDA00;
+pub const ENVELOPE_TABLE_SIZE: usize = 0x600; // 1536 bytes ($DA00-$E000)
+
 pub const SAMPLE_DATA_ADDR: u16 = 0xE040;
+pub const SAMPLE_DATA_SIZE: usize = 0x1EC0; // 7872 bytes ($E040-$FF00)
 
 /// NTSC Period Table for octaves 0-7 (C to B)
 /// Indices: 0-11 = Octave 0, 12-23 = Octave 1, etc.
@@ -46,7 +54,7 @@ use std::iter;
 /// Compiles DPCM samples into two blobs:
 /// 1. `samples_blob`: The raw sample data, padded and aligned for DMC.
 /// 2. `table_blob`: A lookup table (Address Byte, Length Byte) for each sample.
-pub fn compile_samples(assets: &Option<ProjectAssets>) -> (Vec<u8>, Vec<u8>) {
+pub fn compile_samples(assets: &Option<ProjectAssets>) -> Result<(Vec<u8>, Vec<u8>), String> {
     let mut samples_blob = Vec::new();
     let mut table_blob = Vec::new();
 
@@ -110,10 +118,26 @@ pub fn compile_samples(assets: &Option<ProjectAssets>) -> (Vec<u8>, Vec<u8>) {
         table_blob.extend(iter::repeat_n(0, needed));
     }
 
-    (samples_blob, table_blob)
+    // Check Limits
+    if table_blob.len() > SAMPLE_TABLE_SIZE {
+        return Err(format!(
+            "Sample Table exceeds limit of {} bytes (got {})",
+            SAMPLE_TABLE_SIZE,
+            table_blob.len()
+        ));
+    }
+    if samples_blob.len() > SAMPLE_DATA_SIZE {
+        return Err(format!(
+            "DPCM Samples exceed limit of {} bytes (got {})",
+            SAMPLE_DATA_SIZE,
+            samples_blob.len()
+        ));
+    }
+
+    Ok((samples_blob, table_blob))
 }
 
-pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Vec<u8> {
+pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, String> {
     let mut blob = Vec::new();
     if let Some(assets) = assets {
         let user_env_count = assets.envelopes.len();
@@ -231,10 +255,17 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Vec<u8> {
     if blob.is_empty() {
         blob.push(0);
     }
-    blob
+    if blob.len() > ENVELOPE_TABLE_SIZE {
+        return Err(format!(
+            "Envelope Data exceeds limit of {} bytes (got {})",
+            ENVELOPE_TABLE_SIZE,
+            blob.len()
+        ));
+    }
+    Ok(blob)
 }
 
-pub fn compile_sfx_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
+pub fn compile_sfx_data(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, String> {
     let mut blob = Vec::new();
     if let Some(assets) = assets {
         let count = assets.sound_effects.len();
@@ -279,7 +310,14 @@ pub fn compile_sfx_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
     if blob.is_empty() {
         blob.push(0);
     }
-    blob
+    if blob.len() > SFX_TABLE_SIZE {
+        return Err(format!(
+            "SFX Table exceeds limit of {} bytes (got {})",
+            SFX_TABLE_SIZE,
+            blob.len()
+        ));
+    }
+    Ok(blob)
 }
 
 /// Compiles audio tracks into a binary format injected at MUSIC_DATA_ADDR ($D100).
@@ -309,7 +347,7 @@ pub fn compile_sfx_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
 ///   - **Duration** (1 byte): Frames to play. 0 = End.
 ///   - **Pitch** (1 byte): Period Table Index. For DMC: Sample Index.
 ///     - Index `$FF` (255) represents **Silence**.
-pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
+pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, String> {
     let mut blob = Vec::new();
 
     if let Some(assets) = assets {
@@ -403,5 +441,13 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Vec<u8> {
         blob.push(0);
     }
 
-    blob
+    if blob.len() > MUSIC_DATA_SIZE {
+        return Err(format!(
+            "Music Data exceeds limit of {} bytes (got {})",
+            MUSIC_DATA_SIZE,
+            blob.len()
+        ));
+    }
+
+    Ok(blob)
 }

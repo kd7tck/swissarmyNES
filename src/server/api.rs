@@ -216,22 +216,26 @@ pub fn compile_source(
     injections.push((audio::PERIOD_TABLE_ADDR, period_table));
 
     // 3. Music Data at $D100
-    let music_data = audio::compile_audio_data(&resolved_assets);
+    let music_data =
+        audio::compile_audio_data(&resolved_assets).map_err(|e| format!("Audio Error: {}", e))?;
     injections.push((audio::MUSIC_DATA_ADDR, music_data));
 
     // 3b. Sample Data
-    let (samples, sample_table) = audio::compile_samples(&resolved_assets);
+    let (samples, sample_table) =
+        audio::compile_samples(&resolved_assets).map_err(|e| format!("Audio Error: {}", e))?;
     if !samples.is_empty() {
         injections.push((audio::SAMPLE_DATA_ADDR, samples));
     }
     injections.push((audio::SAMPLE_TABLE_ADDR, sample_table));
 
     // 3c. Envelope Data
-    let envelope_data = audio::compile_envelopes(&resolved_assets);
+    let envelope_data =
+        audio::compile_envelopes(&resolved_assets).map_err(|e| format!("Audio Error: {}", e))?;
     injections.push((ENVELOPE_TABLE_ADDR, envelope_data));
 
     // 3d. SFX Data
-    let sfx_data = audio::compile_sfx_data(&resolved_assets);
+    let sfx_data =
+        audio::compile_sfx_data(&resolved_assets).map_err(|e| format!("Audio Error: {}", e))?;
     injections.push((audio::SFX_TABLE_ADDR, sfx_data));
 
     // 4. Nametable Data at $D500 (NAMETABLE_ADDR)

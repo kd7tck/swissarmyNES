@@ -49,7 +49,7 @@ fn test_audio_priority_compilation() {
         animations: vec![],
     };
 
-    let blob = compile_audio_data(&Some(assets));
+    let blob = compile_audio_data(&Some(assets)).unwrap();
 
     // Header: Count (1) + Ptrs (4) = 5 bytes
     assert_eq!(blob[0], 2); // Count

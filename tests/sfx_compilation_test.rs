@@ -31,7 +31,7 @@ mod tests {
         };
 
         // 1. Check Envelopes
-        let env_blob = compile_envelopes(&Some(assets.clone()));
+        let env_blob = compile_envelopes(&Some(assets.clone())).unwrap();
 
         // Count: 0 User + 3 SFX = 3
         assert_eq!(env_blob[0], 3);
@@ -73,7 +73,7 @@ mod tests {
         assert_eq!(env_blob[6], 0xDA);
 
         // 2. Check SFX Data
-        let sfx_blob = compile_sfx_data(&Some(assets));
+        let sfx_blob = compile_sfx_data(&Some(assets)).unwrap();
 
         // Count: 1
         assert_eq!(sfx_blob[0], 1);
@@ -123,7 +123,7 @@ mod tests {
             animations: vec![],
         };
 
-        let env_blob = compile_envelopes(&Some(assets));
+        let env_blob = compile_envelopes(&Some(assets)).unwrap();
 
         // Ptr1 (Vol) at Start+7
         // Vol Loop should be 0 (Start index) instead of 0xFF

@@ -10,7 +10,7 @@ pub const ENVELOPE_TABLE_ADDR: u16 = 0xDA00;
 const SOUND_RAM_START: u16 = 0x0300;
 const VBLANK_BUFFER_START: u16 = 0x0380;
 const STRING_HEAP_START: u16 = 0x03C0;
-const VAR_START_RAM: u16 = 0x04C0;
+const VAR_START_RAM: u16 = 0x05C0;
 
 pub struct CodeGenerator {
     symbol_table: SymbolTable,
@@ -2173,7 +2173,7 @@ impl CodeGenerator {
         self.output.push("Runtime_GetHeapSlot:".to_string());
         self.output.push("  INC $0E".to_string());
         self.output.push("  LDA $0E".to_string());
-        self.output.push("  AND #$0F".to_string());
+        self.output.push("  AND #$1F".to_string()); // 32 slots (0-31)
         self.output.push("  STA $0E".to_string());
         self.output.push("  TAX".to_string()); // Slot Index
         self.output.push("  LDA #0".to_string()); // Offset = Index * 16

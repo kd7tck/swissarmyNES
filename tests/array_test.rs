@@ -38,9 +38,9 @@ mod tests {
         let _asm_source = asm_lines.join("\n");
 
         // Verify allocation
-        // arr @ $04C0. Size 10. Next var idx @ $04CA.
-        assert!(asm_lines.iter().any(|line| line.contains("arr @ $04C0")));
-        assert!(asm_lines.iter().any(|line| line.contains("idx @ $04CA")));
+        // arr @ $05C0. Size 10. Next var idx @ $05CA.
+        assert!(asm_lines.iter().any(|line| line.contains("arr @ $05C0")));
+        assert!(asm_lines.iter().any(|line| line.contains("idx @ $05CA")));
 
         // Verify assignment arr(0) = 5
         // Should calculate address $0460 + 0 = $0460.

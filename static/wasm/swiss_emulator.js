@@ -189,9 +189,125 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
+const CpuStateFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_cpustate_free(ptr >>> 0, 1));
+
 const EmulatorFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_emulator_free(ptr >>> 0, 1));
+
+export class CpuState {
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(CpuState.prototype);
+        obj.__wbg_ptr = ptr;
+        CpuStateFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        CpuStateFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_cpustate_free(ptr, 0);
+    }
+    /**
+     * @returns {number}
+     */
+    get pc() {
+        const ret = wasm.__wbg_get_cpustate_pc(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {number} arg0
+     */
+    set pc(arg0) {
+        wasm.__wbg_set_cpustate_pc(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @returns {number}
+     */
+    get sp() {
+        const ret = wasm.__wbg_get_cpustate_sp(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {number} arg0
+     */
+    set sp(arg0) {
+        wasm.__wbg_set_cpustate_sp(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @returns {number}
+     */
+    get acc() {
+        const ret = wasm.__wbg_get_cpustate_acc(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {number} arg0
+     */
+    set acc(arg0) {
+        wasm.__wbg_set_cpustate_acc(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @returns {number}
+     */
+    get x() {
+        const ret = wasm.__wbg_get_cpustate_x(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {number} arg0
+     */
+    set x(arg0) {
+        wasm.__wbg_set_cpustate_x(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @returns {number}
+     */
+    get y() {
+        const ret = wasm.__wbg_get_cpustate_y(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {number} arg0
+     */
+    set y(arg0) {
+        wasm.__wbg_set_cpustate_y(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @returns {number}
+     */
+    get status() {
+        const ret = wasm.__wbg_get_cpustate_status(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {number} arg0
+     */
+    set status(arg0) {
+        wasm.__wbg_set_cpustate_status(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @returns {number}
+     */
+    get cycles() {
+        const ret = wasm.__wbg_get_cpustate_cycles(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @param {number} arg0
+     */
+    set cycles(arg0) {
+        wasm.__wbg_set_cpustate_cycles(this.__wbg_ptr, arg0);
+    }
+}
+if (Symbol.dispose) CpuState.prototype[Symbol.dispose] = CpuState.prototype.free;
 
 export class Emulator {
     __destroy_into_raw() {
@@ -218,6 +334,20 @@ export class Emulator {
      */
     set_button(player, button, pressed) {
         wasm.emulator_set_button(this.__wbg_ptr, player, button, pressed);
+    }
+    /**
+     * @returns {number}
+     */
+    get_wram_len() {
+        const ret = wasm.emulator_get_wram_len(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {CpuState}
+     */
+    get_cpu_state() {
+        const ret = wasm.emulator_get_cpu_state(this.__wbg_ptr);
+        return CpuState.__wrap(ret);
     }
     /**
      * @returns {number}
@@ -263,6 +393,13 @@ export class Emulator {
     }
     reset() {
         wasm.emulator_reset(this.__wbg_ptr);
+    }
+    /**
+     * @returns {number}
+     */
+    get_wram() {
+        const ret = wasm.emulator_get_wram(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
      * @param {Uint8Array} rom_data

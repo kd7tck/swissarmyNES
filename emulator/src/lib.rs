@@ -6,6 +6,17 @@ use tetanes_core::input::{JoypadBtn, Player};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
+pub struct CpuState {
+    pub pc: u16,
+    pub sp: u8,
+    pub acc: u8,
+    pub x: u8,
+    pub y: u8,
+    pub status: u8,
+    pub cycles: usize,
+}
+
+#[wasm_bindgen]
 pub struct Emulator {
     deck: Rc<RefCell<ControlDeck>>,
 }
@@ -90,5 +101,29 @@ impl Emulator {
             _ => return,
         };
         deck.joypad_mut(p).set_button(btn, pressed);
+    }
+
+    pub fn get_cpu_state(&self) -> CpuState {
+        let deck = self.deck.borrow();
+        let cpu = deck.cpu();
+        CpuState {
+            pc: cpu.pc,
+            sp: cpu.sp,
+            acc: cpu.acc,
+            x: cpu.x,
+            y: cpu.y,
+            status: cpu.status.bits(),
+            cycles: cpu.cycle as usize,
+        }
+    }
+
+    pub fn get_wram(&self) -> *const u8 {
+        let deck = self.deck.borrow();
+        deck.wram().as_ptr()
+    }
+
+    pub fn get_wram_len(&self) -> usize {
+        let deck = self.deck.borrow();
+        deck.wram().len()
     }
 }

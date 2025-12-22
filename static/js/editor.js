@@ -13,6 +13,7 @@ class SwissEditor {
         this.scale = 2; // 1, 2, or 3 (Full)
         this.wasmLoaded = false;
         this.wasmMemory = null;
+        this.frameCount = 0;
 
         // Input State
         this.gamepadIndex = null;
@@ -416,8 +417,37 @@ class SwissEditor {
         }
     }
 
+    getDebugState() {
+        if (!this.emulator) return null;
+        try {
+            const s = this.emulator.get_cpu_state();
+            const res = {
+                pc: s.pc, sp: s.sp, acc: s.acc, x: s.x, y: s.y, status: s.status, cycles: s.cycles
+            };
+            s.free();
+            return res;
+        } catch(e) { return null; }
+    }
+
+    getWRAM() {
+        if (!this.emulator || !this.wasmMemory) return null;
+        try {
+            const ptr = this.emulator.get_wram();
+            const len = this.emulator.get_wram_len();
+            return new Uint8Array(this.wasmMemory.buffer, ptr, len);
+        } catch(e) { return null; }
+    }
+
     emulatorLoop() {
         if (!this.emulatorRunning) return;
+
+        // Debug Verification (Phase 34)
+        if (this.frameCount++ % 60 === 0) {
+             const s = this.getDebugState();
+             if (s) {
+                 console.log(`[DEBUG] PC: $${s.pc.toString(16).toUpperCase()} A: $${s.acc.toString(16).toUpperCase()}`);
+             }
+        }
 
         // Poll inputs
         this.pollGamepads();

@@ -412,11 +412,18 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, Str
 
                 // Check for gap
                 if note_start_time > current_time {
-                    let gap_duration = (note_start_time - current_time) as u8;
-                    // Insert Silence
-                    blob.push(gap_duration);
-                    blob.push(0xFF); // Silence
-                    current_offset += 2;
+                    let mut gap_duration = note_start_time - current_time;
+                    while gap_duration > 255 {
+                        blob.push(255);
+                        blob.push(0xFF); // Silence
+                        gap_duration -= 255;
+                        current_offset += 2;
+                    }
+                    if gap_duration > 0 {
+                        blob.push(gap_duration as u8);
+                        blob.push(0xFF); // Silence
+                        current_offset += 2;
+                    }
                 }
 
                 // If note starts before current_time, it's an overlap.

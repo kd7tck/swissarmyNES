@@ -29,6 +29,7 @@ impl Assembler {
         // Initialize NROM-256 (32KB PRG) buffer.
         // NROM-256 is mapped at $8000-$FFFF.
         let mut prg_rom = vec![0u8; 32768];
+        let mut usage_map = vec![false; 32768];
 
         // Process Assembler Output Segments
         for segment in segments {
@@ -55,9 +56,18 @@ impl Assembler {
                 ));
             }
 
-            // Copy code into PRG ROM buffer
+            // Copy code into PRG ROM buffer and check overlap
             for (i, byte) in code.iter().enumerate() {
-                prg_rom[offset + i] = *byte;
+                let addr = offset + i;
+                if usage_map[addr] {
+                    return Err(format!(
+                        "Code segment at ${:04X} overlaps with existing data at ${:04X}",
+                        start,
+                        0x8000 + addr as u16
+                    ));
+                }
+                prg_rom[addr] = *byte;
+                usage_map[addr] = true;
             }
         }
 
@@ -82,7 +92,16 @@ impl Assembler {
             }
 
             for (i, byte) in data.iter().enumerate() {
-                prg_rom[offset + i] = *byte;
+                let current_addr = offset + i;
+                if usage_map[current_addr] {
+                    return Err(format!(
+                        "Injection at ${:04X} overlaps with existing data at ${:04X}",
+                        addr,
+                        0x8000 + current_addr as u16
+                    ));
+                }
+                prg_rom[current_addr] = *byte;
+                usage_map[current_addr] = true;
             }
         }
 

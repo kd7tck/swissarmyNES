@@ -50,7 +50,7 @@ mod tests {
             animations: vec![],
         };
 
-        let blob = compile_audio_data(&Some(assets));
+        let blob = compile_audio_data(&Some(assets)).expect("Compilation failed");
 
         // Validation
         // Header: Count(1) + Ptrs(2*1) = 3 bytes
@@ -123,7 +123,7 @@ mod tests {
             animations: vec![],
         };
 
-        let blob = compile_audio_data(&Some(assets));
+        let blob = compile_audio_data(&Some(assets)).expect("Compilation failed");
 
         // Offset: 3 (Header) + 6 (Chan/Inst/Prio/VolEnv/PitchEnv/ArpEnv) = 9
         // Note 1: 9,10 -> Time ends at 8.
@@ -141,7 +141,59 @@ mod tests {
 
     #[test]
     fn test_audio_compilation_empty() {
-        let blob = compile_audio_data(&None);
+        let blob = compile_audio_data(&None).unwrap();
         assert_eq!(blob[0], 0);
+    }
+
+    #[test]
+    fn test_audio_overflow() {
+        // MUSIC_DATA_SIZE = 896
+        // Create 2 tracks full of notes to exceed 896 bytes
+        let mut notes = vec![];
+        for i in 0..250 {
+            notes.push(AudioNote {
+                pitch: 10,
+                row: 0,
+                col: i as u8,
+                duration: 8,
+            });
+        }
+        let track1 = AudioTrack {
+            name: "T1".to_string(),
+            notes: notes.clone(),
+            channel: 0,
+            instrument: 0,
+            priority: 0,
+            vol_env: None,
+            pitch_env: None,
+            arpeggio_env: None,
+        };
+        let track2 = AudioTrack {
+            name: "T2".to_string(),
+            notes: notes.clone(),
+            channel: 1,
+            instrument: 0,
+            priority: 0,
+            vol_env: None,
+            pitch_env: None,
+            arpeggio_env: None,
+        };
+
+        let assets = ProjectAssets {
+            chr_bank: vec![],
+            palettes: vec![],
+            nametables: vec![],
+            audio_tracks: vec![track1, track2],
+            envelopes: vec![],
+            samples: vec![],
+            sound_effects: vec![],
+            metatiles: vec![],
+            world: None,
+            metasprites: vec![],
+            animations: vec![],
+        };
+
+        let result = compile_audio_data(&Some(assets));
+        assert!(result.is_err(), "Should detect Music Data overflow");
     }
 }

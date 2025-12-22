@@ -16,7 +16,10 @@ mod tests {
         let injections = vec![(0x8000, vec![0x00, 0x01])];
 
         let result = assembler.assemble(source, None, injections);
-        assert!(result.is_err(), "Assembler should detect overlap between code and injection");
+        assert!(
+            result.is_err(),
+            "Assembler should detect overlap between code and injection"
+        );
     }
 
     #[test]
@@ -26,12 +29,12 @@ mod tests {
 
         // Injection 1: $D000, len 10
         // Injection 2: $D005, len 10 (Overlap $D005-$D009)
-        let injections = vec![
-            (0xD000, vec![0; 10]),
-            (0xD005, vec![0; 10]),
-        ];
+        let injections = vec![(0xD000, vec![0; 10]), (0xD005, vec![0; 10])];
 
         let result = assembler.assemble(source, None, injections);
-        assert!(result.is_err(), "Assembler should detect overlap between injections");
+        assert!(
+            result.is_err(),
+            "Assembler should detect overlap between injections"
+        );
     }
 }

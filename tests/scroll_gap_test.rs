@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn test_scroll_load_column_asm() {
-        let mut symbol_table = SymbolTable::new();
+        let symbol_table = SymbolTable::new();
         let mut codegen = CodeGenerator::new(symbol_table);
         let program = Program {
             declarations: vec![],

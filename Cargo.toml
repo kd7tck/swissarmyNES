@@ -3,6 +3,9 @@ name = "swissarmynes"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+members = ["emulator"]
+
 [dependencies]
 axum = "0.7"
 rs6502 = "0.3.4"

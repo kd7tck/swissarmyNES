@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
+    use swissarmynes::compiler::ast::Program;
     use swissarmynes::compiler::ast::{DataType, Expression, TopLevel};
     use swissarmynes::compiler::codegen::CodeGenerator;
     use swissarmynes::compiler::symbol_table::{SymbolKind, SymbolTable};
-    use swissarmynes::compiler::ast::Program;
 
     #[test]
     fn test_dim_initialization() {
@@ -28,9 +28,15 @@ mod tests {
         };
 
         let mut symbol_table = SymbolTable::new();
-        symbol_table.define("x".to_string(), DataType::Byte, SymbolKind::Variable).unwrap();
-        symbol_table.define("w".to_string(), DataType::Word, SymbolKind::Variable).unwrap();
-        symbol_table.define("i".to_string(), DataType::Int, SymbolKind::Variable).unwrap();
+        symbol_table
+            .define("x".to_string(), DataType::Byte, SymbolKind::Variable)
+            .unwrap();
+        symbol_table
+            .define("w".to_string(), DataType::Word, SymbolKind::Variable)
+            .unwrap();
+        symbol_table
+            .define("i".to_string(), DataType::Int, SymbolKind::Variable)
+            .unwrap();
 
         let mut codegen = CodeGenerator::new(symbol_table);
         let output = codegen.generate(&program).expect("CodeGen failed");

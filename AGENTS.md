@@ -111,11 +111,10 @@ Phase 1-30 are complete and verified. Phase 31 is Next.
     - **16-bit Pointers**: When calculating addresses (like Heap Offset), always handle 16-bit Carry (`BCC +; INX`) for the High Byte.
 
 - **Debugging Review (Phases 1-30)**:
-    - **Shift Operators**: Fixed missing implementation for `<<` and `>>` in Codegen (`Math_Shl8/16`, `Math_Shr8/16`).
-    - **World/Metatile Compilation**: Implemented missing compilation logic for `TopLevel::World` and `TopLevel::Metatile`. These assets are now correctly injected into the AST and compiled into the ROM, available via Data Table lookups.
-    - **Verification**: `tests/world_compilation_test.rs` confirms correct generation of World map data and Metatile definitions.
-    - **Variable Initialization**: Fixed critical bug where `DIM x = value` was ignored for non-String types. Also moved variable initialization to execute *before* `Main`, ensuring globals are ready.
-    - **Startup Routine**: Reordered startup sequence (Sound -> User Data -> Vectors -> Vars -> Main) to ensure correct state before user code runs.
+    - **Verification**: Phases 1-30 verified. `tests/` pass.
+    - **Audio**: Verified correct compilation of `SoundEffect`, `AudioTrack`, and `DpcmSample` in `src/compiler/audio.rs`. `tests/sfx_compilation_test.rs` confirms binary layout.
+    - **Visual**: Verified `World` and `Metatile` compilation logic in `codegen.rs`.
+    - **Documentation**: Updated `README.md` to reflect completed phases and new features (World, Sprite, Animation).
 
 - **Next Steps**:
     - Start Phase 31: Emulator - WASM Integration.

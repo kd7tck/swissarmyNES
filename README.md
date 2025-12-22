@@ -4,11 +4,11 @@
 
 ## Current Status
 The project is currently in active development, following a strict roadmap defined in `DESIGN.md`.
-**Completed Phases:** 1 through 27.
+**Completed Phases:** 1 through 30.
 - **Core Compiler**: Lexer, Parser, AST, Symbol Table, Code Generation, Assembly.
 - **Language Features**: Strings, Arrays (`DIM`), Structures (`TYPE`), Enums (`ENUM`), Macros (`DEF MACRO`), Advanced Math (16-bit, Signed), Control Flow (`SELECT CASE`, `FOR`, `WHILE`).
-- **Standard Library**: Controller Input (`Controller.Read`, `IsPressed`).
-- **Tools**: Palette Editor, Tile (CHR) Editor, Map (Nametable) Editor, Metatile Editor, Audio Tracker.
+- **Standard Library**: Controller Input (`Controller.Read`, `IsPressed`), Sprite/Animation System, Object Pooling.
+- **Tools**: Palette Editor, Tile (CHR) Editor, Map (Nametable) Editor, Metatile Editor, World Editor, Sprite/Animation Editor, Audio Tracker.
 
 ## Features
 
@@ -19,7 +19,8 @@ A hybrid language designed for the NES, combining BASIC simplicity with low-leve
   - `TYPE`: Define custom data structures (e.g., `TYPE Player \n x AS BYTE \n y AS BYTE \n END TYPE`).
   - `ENUM`: Define enumerated constants.
   - `DIM`: 1D Arrays (e.g., `DIM buffer(10) AS BYTE`).
-  - meta sprites are arrays of tile id's. They should not directly store tile data.
+  - `METASPRITE`: Define composite sprites from multiple 8x8 tiles.
+  - `ANIMATION`: Define animation sequences for metasprites.
 - **Control Flow**:
   - `IF ... THEN ... ELSEIF ... END IF`
   - `SELECT CASE ... CASE ... END SELECT` (supports ranges `TO` and comparisons `IS`).
@@ -44,9 +45,11 @@ A hybrid language designed for the NES, combining BASIC simplicity with low-leve
   - **Tile (CHR)**: Draw 8x8 sprites and tiles with real-time feedback.
   - **Map**: Paint tiles onto a 32x30 nametable grid.
   - **Metatile**: Create 16x16 reusable tile blocks with attributes.
+  - **World**: Arrange maps (Nametables) into a larger game world grid.
+  - **Sprite**: Design composed characters (Metasprites) and define Animations.
 - **Audio Tracker**:
-  - Compose music and SFX for Pulse 1, Pulse 2, and Triangle channels.
-  - Custom envelopes for Volume and Duty Cycle.
+  - Compose music and SFX for Pulse 1, Pulse 2, Triangle, and DMC channels.
+  - Custom envelopes for Volume, Pitch, and Duty Cycle.
   - `PLAY_SFX` command integration.
 
 ### Compiler & Runtime
@@ -100,6 +103,7 @@ A hybrid language designed for the NES, combining BASIC simplicity with low-leve
   - `editor.js`: Code editor implementation.
   - `chr.js`, `map.js`, `palette.js`: Visual editors.
   - `audio.js`: Audio tracker UI.
+  - `metatile.js`, `world.js`, `sprite.js`: Advanced visual editors.
 
 ## Documentation
 - **`DESIGN.md`**: The master roadmap and technical specification.

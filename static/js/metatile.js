@@ -142,9 +142,37 @@ class MetatileEditor {
 
     deleteMetatile() {
         if (!this.assets || this.currentMetatileIndex < 0) return;
-        if (!confirm('Delete this metatile?')) return;
+        if (!confirm('Delete this metatile? This will remove it from all maps.')) return;
 
-        this.assets.metatiles.splice(this.currentMetatileIndex, 1);
+        const deletedIndex = this.currentMetatileIndex;
+
+        // Remove from list
+        this.assets.metatiles.splice(deletedIndex, 1);
+
+        // Fix up references in Nametables
+        if (this.assets.nametables) {
+            this.assets.nametables.forEach(nt => {
+                if (nt.metatile_grid) {
+                    for(let i=0; i<nt.metatile_grid.length; i++) {
+                        const val = nt.metatile_grid[i];
+                        if (val === deletedIndex) {
+                            nt.metatile_grid[i] = -1; // Empty
+                        } else if (val > deletedIndex) {
+                            nt.metatile_grid[i] = val - 1; // Shift down
+                        }
+                    }
+                }
+            });
+        }
+
+        // Notify Map Editor to refresh
+        // We trigger a global event because we don't have direct access
+        // 'metatile-changed' is usually for content updates, but maybe we need 'metatiles-reindexed'
+        // For now, we can rely on map editor refreshing if we trigger something generic or if the user clicks around.
+        // Actually, let's trigger a nametable refresh for all nametables if possible, or just one.
+        // Or we can assume MapEditor listens for 'project-loaded' or we can add a new event.
+        window.dispatchEvent(new CustomEvent('metatile-changed', { detail: { index: -1 } })); // Force refresh
+
         this.renderList();
         this.currentMetatileIndex = -1;
         if (this.assets.metatiles.length > 0) {

@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use swissarmynes::compiler::codegen::CodeGenerator;
-    use swissarmynes::compiler::parser::Parser;
-    use swissarmynes::compiler::lexer::Lexer;
     use swissarmynes::compiler::analysis::SemanticAnalyzer;
+    use swissarmynes::compiler::codegen::CodeGenerator;
+    use swissarmynes::compiler::lexer::Lexer;
+    use swissarmynes::compiler::parser::Parser;
 
     #[test]
     fn test_ram_overflow() {
@@ -25,6 +25,9 @@ mod tests {
         let result = codegen.generate(&program);
 
         assert!(result.is_err(), "Should have failed due to RAM overflow");
-        assert_eq!(result.err().unwrap(), "RAM overflow: Variable 'x' allocation exceeded safe memory limit ($07FF)");
+        assert_eq!(
+            result.err().unwrap(),
+            "RAM overflow: Variable 'x' allocation exceeded safe memory limit ($07FF)"
+        );
     }
 }

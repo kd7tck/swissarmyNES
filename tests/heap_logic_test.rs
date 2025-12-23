@@ -49,20 +49,22 @@ mod tests {
         let body = &code[start_idx..=end_idx];
 
         // Verify logic:
-        // ADC #$C0
-        // LDX #$03
-        // BCC ...
-        // INX
+        // AND #$1F (Mask Index)
+        // AND #$10 (High Bit Check)
+        // AND #$0F (Low Bits Check)
+        // ADC #$C0 (Base Low)
+        // ADC #$03 (Base High)
 
-        let has_adc = body.iter().any(|line| line.contains("ADC #$C0"));
-        let has_bcc = body.iter().any(|line| line.contains("BCC Heap_NoCarry"));
-        let has_inx = body.iter().any(|line| line == "  INX");
+        let has_mask = body.iter().any(|line| line.contains("AND #$1F"));
+        let has_high_calc = body.iter().any(|line| line.contains("AND #$10"));
+        let has_low_calc = body.iter().any(|line| line.contains("AND #$0F"));
+        let has_adc_low = body.iter().any(|line| line.contains("ADC #$C0"));
+        let has_adc_high = body.iter().any(|line| line.contains("ADC #$03"));
 
-        assert!(
-            has_adc,
-            "ADC instruction missing (checking for $C0 constant logic)"
-        );
-        assert!(has_bcc, "BCC instruction missing (Carry check)");
-        assert!(has_inx, "INX instruction missing (High byte increment)");
+        assert!(has_mask, "Missing Index Masking");
+        assert!(has_high_calc, "Missing High Offset Calculation");
+        assert!(has_low_calc, "Missing Low Offset Calculation");
+        assert!(has_adc_low, "Missing Base Low Addition");
+        assert!(has_adc_high, "Missing Base High Addition");
     }
 }

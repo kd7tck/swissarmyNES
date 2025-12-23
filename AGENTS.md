@@ -94,6 +94,7 @@ Phases 31-34 are complete.
     - Fixed `Pool.Despawn`: Arguments are now evaluated safely. Base address is protected on stack while Index is evaluated, preventing register clobbering.
     - Verified Memory Map consistency.
     - Fixed `Runtime_GetHeapSlot`: Corrected 16-bit address calculation for String Heap slots > 15. Previous 8-bit logic caused heap wrapping at 256 bytes.
+    - **RAM Overflow Check**: Added explicit check in `allocate_memory` to error if user variables exceed the NES RAM limit (`$07FF`). Added `tests/ram_overflow_test.rs` to verify.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.

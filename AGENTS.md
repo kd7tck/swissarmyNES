@@ -93,6 +93,7 @@ Phases 31-34 are complete.
 - **Compiler/Codegen**:
     - Fixed `Pool.Despawn`: Arguments are now evaluated safely. Base address is protected on stack while Index is evaluated, preventing register clobbering.
     - Verified Memory Map consistency.
+    - Fixed `Runtime_GetHeapSlot`: Corrected 16-bit address calculation for String Heap slots > 15. Previous 8-bit logic caused heap wrapping at 256 bytes.
 
 ### Memory Map
 - **$0000-$00FF**: Zero Page.

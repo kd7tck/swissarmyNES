@@ -2228,32 +2228,44 @@ impl CodeGenerator {
 
         // Runtime_GetHeapSlot
         // Returns ptr to next 16-byte slot in A (Low), X (High)
-        // Uses $0E (Index), $0A (Temp)
+        // Uses $0E (Index), $02/$03 (Temp)
         self.output.push("Runtime_GetHeapSlot:".to_string());
         self.output.push("  INC $0E".to_string());
         self.output.push("  LDA $0E".to_string());
         self.output.push("  AND #$1F".to_string()); // 32 slots (0-31)
         self.output.push("  STA $0E".to_string());
-        self.output.push("  TAX".to_string()); // Slot Index
-        self.output.push("  LDA #0".to_string()); // Offset = Index * 16
-        self.output.push("  CPX #0".to_string());
-        self.output.push("  BEQ Heap_OffsetCalc".to_string());
-        self.output.push("Heap_Loop:".to_string());
-        self.output.push("  CLC".to_string());
-        self.output.push("  ADC #16".to_string());
-        self.output.push("  DEX".to_string());
-        self.output.push("  BNE Heap_Loop".to_string());
-        self.output.push("Heap_OffsetCalc:".to_string());
+
+        // Calculate High Byte Offset: (Index & 0x10) >> 4
+        self.output.push("  AND #$10".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  LSR".to_string());
+        self.output.push("  STA $03".to_string()); // Temp High Offset
+
+        // Calculate Low Byte: (Index & 0x0F) << 4
+        self.output.push("  LDA $0E".to_string());
+        self.output.push("  AND #$0F".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+        self.output.push("  ASL".to_string());
+
+        // Add Base Low
         self.output.push("  CLC".to_string());
         self.output
             .push(format!("  ADC #${:02X}", (STRING_HEAP_START & 0xFF) as u8));
+        self.output.push("  STA $02".to_string()); // Result Low
+
+        // Add Base High + Carry
+        self.output.push("  LDA $03".to_string());
         self.output.push(format!(
-            "  LDX #${:02X}",
+            "  ADC #${:02X}",
             ((STRING_HEAP_START >> 8) & 0xFF) as u8
         ));
-        self.output.push("  BCC Heap_NoCarry".to_string());
-        self.output.push("  INX".to_string());
-        self.output.push("Heap_NoCarry:".to_string());
+        self.output.push("  TAX".to_string()); // Result High in X
+
+        self.output.push("  LDA $02".to_string()); // Result Low in A
         self.output.push("  RTS".to_string());
 
         // Runtime_Asc

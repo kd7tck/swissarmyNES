@@ -2,8 +2,8 @@
 mod tests {
     use swissarmynes::compiler::codegen::CodeGenerator;
     use swissarmynes::compiler::parser::Parser;
-    use swissarmynes::compiler::symbol_table::SymbolTable;
     use swissarmynes::compiler::lexer::Lexer;
+    use swissarmynes::compiler::analysis::SemanticAnalyzer;
 
     #[test]
     fn test_ram_overflow() {
@@ -15,7 +15,11 @@ mod tests {
 
         let tokens = Lexer::new(source).tokenize().expect("Lex failed");
         let program = Parser::new(tokens).parse().expect("Parse failed");
-        let symbol_table = SymbolTable::new();
+
+        let mut analyzer = SemanticAnalyzer::new();
+        analyzer.analyze(&program).expect("Analysis failed");
+
+        let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
 
         let result = codegen.generate(&program);

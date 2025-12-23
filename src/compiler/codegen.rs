@@ -3293,6 +3293,12 @@ impl CodeGenerator {
                         .push(format!("; {} @ ${:04X}", name, self.ram_pointer));
                     let size = self.get_type_size(dtype);
                     self.ram_pointer += size;
+                    if self.ram_pointer > 0x0800 {
+                        return Err(format!(
+                            "RAM overflow: Variable '{}' allocation exceeded safe memory limit ($07FF)",
+                            name
+                        ));
+                    }
                 }
                 TopLevel::Sub(sub_name, params, _) => {
                     self.symbol_table.enter_scope();
@@ -3311,6 +3317,12 @@ impl CodeGenerator {
                         ));
                         sig_params.push((self.ram_pointer, param_type.clone()));
                         self.ram_pointer += self.get_type_size(param_type);
+                        if self.ram_pointer > 0x0800 {
+                            return Err(format!(
+                                "RAM overflow: Parameter '{}' in sub '{}' exceeded safe memory limit ($07FF)",
+                                param_name, sub_name
+                            ));
+                        }
                     }
                     self.sub_signatures.insert(sub_name.clone(), sig_params);
                     self.data_table_offsets

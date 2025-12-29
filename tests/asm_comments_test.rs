@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use swissarmynes::compiler::ast::TopLevel;
+    use swissarmynes::compiler::ast::TopLevelKind;
     use swissarmynes::compiler::codegen::CodeGenerator;
     use swissarmynes::compiler::lexer::Lexer;
     use swissarmynes::compiler::parser::Parser;
@@ -25,7 +25,7 @@ mod tests {
         let program = parser.parse().expect("Parsing failed");
 
         // Check if comments are in the AST
-        if let TopLevel::Asm(lines) = &program.declarations[0] {
+        if let TopLevelKind::Asm(lines) = &program.declarations[0].kind {
             assert!(lines.iter().any(|l| l.contains("; This is a comment")));
             assert!(lines.iter().any(|l| l.contains("; Full line comment")));
         } else {

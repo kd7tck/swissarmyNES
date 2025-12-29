@@ -1,4 +1,4 @@
-use crate::compiler::ast::{DataType, Expression, Program, Statement, TopLevel};
+use crate::compiler::ast::{DataType, Expression, Program, Statement, StatementKind, TopLevelKind};
 use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 
 pub struct SemanticAnalyzer {
@@ -53,8 +53,8 @@ impl SemanticAnalyzer {
     pub fn analyze(&mut self, program: &Program) -> Result<(), Vec<String>> {
         // First pass: register all top-level symbols
         for decl in &program.declarations {
-            match decl {
-                TopLevel::Const(name, val) => {
+            match &decl.kind {
+                TopLevelKind::Const(name, val) => {
                     if let Err(e) =
                         self.symbol_table
                             .define(name.clone(), DataType::Byte, SymbolKind::Constant)
@@ -66,7 +66,7 @@ impl SemanticAnalyzer {
                         }
                     }
                 }
-                TopLevel::Dim(name, dtype, init_expr) => {
+                TopLevelKind::Dim(name, dtype, init_expr) => {
                     if let Err(e) =
                         self.symbol_table
                             .define(name.clone(), dtype.clone(), SymbolKind::Variable)
@@ -92,7 +92,7 @@ impl SemanticAnalyzer {
                         }
                     }
                 }
-                TopLevel::Sub(name, params, _body) => {
+                TopLevelKind::Sub(name, params, _body) => {
                     let param_types = params.iter().map(|(_, t)| t.clone()).collect();
                     if let Err(e) = self.symbol_table.define_with_params(
                         name.clone(),
@@ -103,12 +103,12 @@ impl SemanticAnalyzer {
                         self.errors.push(e);
                     }
                 }
-                TopLevel::Animation(name, _, _) => {
+                TopLevelKind::Animation(name, _, _) => {
                     if let Err(e) = self.symbol_table.define_animation(name.clone()) {
                         self.errors.push(e);
                     }
                 }
-                TopLevel::Interrupt(name, _body) => {
+                TopLevelKind::Interrupt(name, _body) => {
                     if let Err(e) =
                         self.symbol_table
                             .define(name.clone(), DataType::Byte, SymbolKind::Sub)
@@ -116,7 +116,7 @@ impl SemanticAnalyzer {
                         self.errors.push(e);
                     }
                 }
-                TopLevel::TypeDecl(name, members) => {
+                TopLevelKind::TypeDecl(name, members) => {
                     let mut offset = 0;
                     let mut member_defs = Vec::new();
                     let mut error = false;
@@ -143,7 +143,7 @@ impl SemanticAnalyzer {
                         }
                     }
                 }
-                TopLevel::Enum(name, variants) => {
+                TopLevelKind::Enum(name, variants) => {
                     let mut variant_defs = Vec::new();
                     let mut current_val = 0;
                     for (v_name, v_val) in variants {
@@ -161,7 +161,7 @@ impl SemanticAnalyzer {
                         self.errors.push(e);
                     }
                 }
-                TopLevel::Metasprite(name, _) => {
+                TopLevelKind::Metasprite(name, _) => {
                     if let Err(e) = self.symbol_table.define_metasprite(name.clone()) {
                         self.errors.push(e);
                     }
@@ -172,8 +172,8 @@ impl SemanticAnalyzer {
 
         // Second pass: analyze bodies
         for decl in &program.declarations {
-            match decl {
-                TopLevel::Sub(_name, params, body) => {
+            match &decl.kind {
+                TopLevelKind::Sub(_name, params, body) => {
                     self.symbol_table.enter_scope();
                     for (p_name, p_type) in params {
                         if let Err(e) = self.symbol_table.define(
@@ -187,12 +187,12 @@ impl SemanticAnalyzer {
                     self.analyze_block(body);
                     self.symbol_table.exit_scope();
                 }
-                TopLevel::Interrupt(_name, body) => {
+                TopLevelKind::Interrupt(_name, body) => {
                     self.symbol_table.enter_scope();
                     self.analyze_block(body);
                     self.symbol_table.exit_scope();
                 }
-                TopLevel::Animation(name, frames, _) => {
+                TopLevelKind::Animation(name, frames, _) => {
                     for frame in frames {
                         if let Some(sym) = self.symbol_table.resolve(&frame.metasprite) {
                             if sym.kind != SymbolKind::Metasprite {
@@ -227,8 +227,8 @@ impl SemanticAnalyzer {
     }
 
     fn analyze_statement(&mut self, stmt: &Statement) {
-        match stmt {
-            Statement::Let(target, expr) => {
+        match &stmt.kind {
+            StatementKind::Let(target, expr) => {
                 // Check target validity (LValue)
                 match target {
                     Expression::Identifier(name) => {
@@ -295,7 +295,7 @@ impl SemanticAnalyzer {
                 }
                 self.analyze_expression(expr);
             }
-            Statement::Call(target, args) => {
+            StatementKind::Call(target, args) => {
                 // Check for Member Access Call (Controller, Text)
                 if let Expression::MemberAccess(base, member) = target {
                     if let Expression::Identifier(base_name) = &**base {
@@ -644,26 +644,26 @@ impl SemanticAnalyzer {
                     self.analyze_expression(arg);
                 }
             }
-            Statement::If(cond, then_b, else_b) => {
+            StatementKind::If(cond, then_b, else_b) => {
                 self.analyze_expression(cond);
                 self.analyze_block(then_b);
                 if let Some(b) = else_b {
                     self.analyze_block(b);
                 }
             }
-            Statement::While(cond, body) => {
+            StatementKind::While(cond, body) => {
                 self.analyze_expression(cond);
                 self.unsafe_return_depth += 1;
                 self.analyze_block(body);
                 self.unsafe_return_depth -= 1;
             }
-            Statement::DoWhile(body, cond) => {
+            StatementKind::DoWhile(body, cond) => {
                 self.unsafe_return_depth += 1;
                 self.analyze_block(body);
                 self.unsafe_return_depth -= 1;
                 self.analyze_expression(cond);
             }
-            Statement::For(var, start, end, step, body) => {
+            StatementKind::For(var, start, end, step, body) => {
                 if self.symbol_table.resolve(var).is_none() {
                     let _ =
                         self.symbol_table
@@ -678,32 +678,32 @@ impl SemanticAnalyzer {
                 self.analyze_block(body);
                 self.unsafe_return_depth -= 1;
             }
-            Statement::Return(Some(expr)) => {
+            StatementKind::Return(Some(expr)) => {
                 if self.unsafe_return_depth > 0 {
                     self.errors
                         .push("Cannot RETURN from inside a loop or SELECT CASE block".to_string());
                 }
                 self.analyze_expression(expr);
             }
-            Statement::Return(None) => {
+            StatementKind::Return(None) => {
                 if self.unsafe_return_depth > 0 {
                     self.errors
                         .push("Cannot RETURN from inside a loop or SELECT CASE block".to_string());
                 }
             }
-            Statement::Poke(addr, val) => {
+            StatementKind::Poke(addr, val) => {
                 self.analyze_expression(addr);
                 self.analyze_expression(val);
             }
-            Statement::PlaySfx(id) => {
+            StatementKind::PlaySfx(id) => {
                 self.analyze_expression(id);
             }
-            Statement::Print(args) => {
+            StatementKind::Print(args) => {
                 for arg in args {
                     self.analyze_expression(arg);
                 }
             }
-            Statement::Read(vars) => {
+            StatementKind::Read(vars) => {
                 for var in vars {
                     if self.symbol_table.resolve(var).is_none() {
                         let _ = self.symbol_table.define(
@@ -714,7 +714,7 @@ impl SemanticAnalyzer {
                     }
                 }
             }
-            Statement::Select(expr, cases, case_else) => {
+            StatementKind::Select(expr, cases, case_else) => {
                 self.analyze_expression(expr);
                 self.unsafe_return_depth += 1;
                 for (val, block) in cases {
@@ -726,8 +726,8 @@ impl SemanticAnalyzer {
                 }
                 self.unsafe_return_depth -= 1;
             }
-            Statement::WaitVBlank => {}
-            Statement::Randomize(expr) => {
+            StatementKind::WaitVBlank => {}
+            StatementKind::Randomize(expr) => {
                 self.analyze_expression(expr);
             }
             _ => {}
@@ -943,29 +943,41 @@ impl SemanticAnalyzer {
                 // Controller Methods
                 if let Expression::MemberAccess(base, member) = &**callee {
                     if let Expression::Identifier(base_name) = &**base {
-                        if base_name.eq_ignore_ascii_case("Controller") {
-                            if member.eq_ignore_ascii_case("IsPressed")
+                        if base_name.eq_ignore_ascii_case("Controller")
+                            && (member.eq_ignore_ascii_case("IsPressed")
                                 || member.eq_ignore_ascii_case("IsHeld")
-                                || member.eq_ignore_ascii_case("IsReleased")
-                            {
-                                if args.len() != 1 {
-                                    self.errors
-                                        .push(format!("Controller.{} expects 1 argument", member));
-                                } else {
-                                    self.analyze_expression(&args[0]);
-                                }
-                                return;
-                            } else {
+                                || member.eq_ignore_ascii_case("IsReleased"))
+                        {
+                            if args.len() != 1 {
                                 self.errors
-                                    .push(format!("Unknown Controller function '{}'", member));
-                                return;
+                                    .push(format!("Controller.{} expects 1 argument", member));
+                            } else {
+                                self.analyze_expression(&args[0]);
                             }
-                        } else if base_name.eq_ignore_ascii_case("Collision") {
+                            return;
+                        }
+                        if base_name.eq_ignore_ascii_case("Pool")
+                            && member.eq_ignore_ascii_case("Spawn")
+                        {
+                            if args.len() != 1 {
+                                self.errors
+                                    .push("Pool.Spawn expects 1 argument (array)".to_string());
+                            } else {
+                                self.analyze_expression(&args[0]);
+                                if let Some(DataType::Array(_, _)) = self.resolve_type(&args[0]) {
+                                    // OK
+                                } else {
+                                    self.errors
+                                        .push("Pool.Spawn argument must be an array".to_string());
+                                }
+                            }
+                            return;
+                        }
+                        if base_name.eq_ignore_ascii_case("Collision") {
                             if member.eq_ignore_ascii_case("Rect") {
                                 if args.len() != 8 {
                                     self.errors.push(
-                                        "Collision.Rect expects 8 arguments (x1, y1, w1, h1, x2, y2, w2, h2)"
-                                            .to_string(),
+                                        "Collision.Rect expects 8 arguments".to_string(),
                                     );
                                 } else {
                                     for arg in args {
@@ -976,7 +988,7 @@ impl SemanticAnalyzer {
                             } else if member.eq_ignore_ascii_case("Point") {
                                 if args.len() != 6 {
                                     self.errors.push(
-                                        "Collision.Point expects 6 arguments (px, py, rx, ry, rw, rh)".to_string(),
+                                        "Collision.Point expects 6 arguments".to_string(),
                                     );
                                 } else {
                                     for arg in args {
@@ -987,17 +999,13 @@ impl SemanticAnalyzer {
                             } else if member.eq_ignore_ascii_case("Tile") {
                                 if args.len() != 2 {
                                     self.errors.push(
-                                        "Collision.Tile expects 2 arguments (x, y)".to_string(),
+                                        "Collision.Tile expects 2 arguments".to_string(),
                                     );
                                 } else {
                                     for arg in args {
                                         self.analyze_expression(arg);
                                     }
                                 }
-                                return;
-                            } else {
-                                self.errors
-                                    .push(format!("Unknown Collision command '{}'", member));
                                 return;
                             }
                         }

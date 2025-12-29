@@ -1,4 +1,4 @@
-use swissarmynes::compiler::ast::{BinaryOperator, Expression, Statement, TopLevel};
+use swissarmynes::compiler::ast::{BinaryOperator, Expression, StatementKind, TopLevelKind};
 use swissarmynes::compiler::{lexer, parser, preprocessor};
 
 #[test]
@@ -21,12 +21,12 @@ fn test_macro_expansion_basic() {
 
     // Verify
     // Main should have 2 statements: Let(x, 10), Let(x, 20)
-    if let TopLevel::Sub(name, _, body) = &expanded.declarations[0] {
+    if let TopLevelKind::Sub(name, _, body) = &expanded.declarations[0].kind {
         assert_eq!(name, "Main");
         assert_eq!(body.len(), 2);
 
-        match &body[0] {
-            Statement::Let(target, val) => {
+        match &body[0].kind {
+            StatementKind::Let(target, val) => {
                 if let Expression::Identifier(n) = target {
                     assert_eq!(n, "x");
                 }
@@ -37,8 +37,8 @@ fn test_macro_expansion_basic() {
             _ => panic!("Expected Let statement 1"),
         }
 
-        match &body[1] {
-            Statement::Let(_target, val) => {
+        match &body[1].kind {
+            StatementKind::Let(_target, val) => {
                 if let Expression::Integer(v) = val {
                     assert_eq!(*v, 20);
                 }
@@ -72,7 +72,7 @@ fn test_macro_expansion_nested() {
     let program = parser.parse().expect("Parse failed");
     let expanded = preprocessor::expand_macros(program).expect("Expansion failed");
 
-    if let TopLevel::Sub(_, _, body) = &expanded.declarations[0] {
+    if let TopLevelKind::Sub(_, _, body) = &expanded.declarations[0].kind {
         // DoubleInc expands to 2 statements
         assert_eq!(body.len(), 2);
     }
@@ -96,10 +96,10 @@ fn test_macro_argument_expression() {
     let program = parser.parse().expect("Parse failed");
     let expanded = preprocessor::expand_macros(program).expect("Expansion failed");
 
-    if let TopLevel::Sub(_, _, body) = &expanded.declarations[0] {
+    if let TopLevelKind::Sub(_, _, body) = &expanded.declarations[0].kind {
         // 2nd call: result = (x * 2) + (y + 5)
-        match &body[1] {
-            Statement::Let(_, expr) => {
+        match &body[1].kind {
+            StatementKind::Let(_, expr) => {
                 match expr {
                     Expression::BinaryOp(_l, op, _r) => {
                         assert_eq!(*op, BinaryOperator::Add);

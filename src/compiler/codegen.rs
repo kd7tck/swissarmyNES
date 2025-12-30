@@ -3372,6 +3372,7 @@ impl CodeGenerator {
 
     fn allocate_memory(&mut self, program: &Program) -> Result<(), String> {
         self.collect_all_strings(program);
+        self.current_line = 0; // Reset line number to avoid polluting source map with pre-pass lines
         self.ram_pointer = VAR_START_RAM;
         let mut data_table_addr = 0xFF00;
         data_table_addr += 2; // InitDefaultRTI

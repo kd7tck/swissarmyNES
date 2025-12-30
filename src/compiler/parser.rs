@@ -92,7 +92,10 @@ impl Parser {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err(format!("Line {}: Expected identifier after DIM", start_line));
+                return Err(format!(
+                    "Line {}: Expected identifier after DIM",
+                    start_line
+                ));
             };
 
             // Check for Array Size: DIM x(10) AS BYTE
@@ -270,7 +273,10 @@ impl Parser {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err(format!("Line {}: Expected identifier after SUB", start_line));
+                return Err(format!(
+                    "Line {}: Expected identifier after SUB",
+                    start_line
+                ));
             };
             self.consume(Token::LParen, "Expected '(' after SUB name")?;
 
@@ -340,10 +346,7 @@ impl Parser {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err(format!(
-                    "Line {}: Expected macro name",
-                    self.current_line()
-                ));
+                return Err(format!("Line {}: Expected macro name", self.current_line()));
             };
 
             self.consume(Token::LParen, "Expected '(' after macro name")?;
@@ -767,7 +770,10 @@ impl Parser {
                 ));
             };
             if !self.match_token(Token::Do) {
-                return Err(format!("Line {}: Expected DO after vector name", start_line));
+                return Err(format!(
+                    "Line {}: Expected DO after vector name",
+                    start_line
+                ));
             }
             let routine = if let Token::Identifier(n) = self.advance().clone() {
                 n

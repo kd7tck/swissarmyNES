@@ -1,6 +1,4 @@
-use crate::compiler::ast::{
-    Expression, Program, Statement, StatementKind, TopLevel, TopLevelKind,
-};
+use crate::compiler::ast::{Expression, Program, Statement, StatementKind, TopLevel, TopLevelKind};
 use crate::compiler::lexer::Lexer;
 use crate::compiler::parser::Parser;
 use std::collections::{HashMap, HashSet};

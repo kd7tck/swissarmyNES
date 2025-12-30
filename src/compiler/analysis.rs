@@ -976,9 +976,8 @@ impl SemanticAnalyzer {
                         if base_name.eq_ignore_ascii_case("Collision") {
                             if member.eq_ignore_ascii_case("Rect") {
                                 if args.len() != 8 {
-                                    self.errors.push(
-                                        "Collision.Rect expects 8 arguments".to_string(),
-                                    );
+                                    self.errors
+                                        .push("Collision.Rect expects 8 arguments".to_string());
                                 } else {
                                     for arg in args {
                                         self.analyze_expression(arg);
@@ -987,9 +986,8 @@ impl SemanticAnalyzer {
                                 return;
                             } else if member.eq_ignore_ascii_case("Point") {
                                 if args.len() != 6 {
-                                    self.errors.push(
-                                        "Collision.Point expects 6 arguments".to_string(),
-                                    );
+                                    self.errors
+                                        .push("Collision.Point expects 6 arguments".to_string());
                                 } else {
                                     for arg in args {
                                         self.analyze_expression(arg);
@@ -998,9 +996,8 @@ impl SemanticAnalyzer {
                                 return;
                             } else if member.eq_ignore_ascii_case("Tile") {
                                 if args.len() != 2 {
-                                    self.errors.push(
-                                        "Collision.Tile expects 2 arguments".to_string(),
-                                    );
+                                    self.errors
+                                        .push("Collision.Tile expects 2 arguments".to_string());
                                 } else {
                                     for arg in args {
                                         self.analyze_expression(arg);

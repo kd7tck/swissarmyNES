@@ -3,25 +3,27 @@ use crate::compiler::{
     assembler::Assembler,
     ast::{AnimationFrame, Expression, MetaspriteTile, TopLevel, TopLevelKind},
     audio,
-    codegen::{CodeGenerator, ENVELOPE_TABLE_ADDR, NAMETABLE_ADDR},
+    codegen::{CodeGenerator, SourceMap, ENVELOPE_TABLE_ADDR, NAMETABLE_ADDR},
     lexer::Lexer,
     parser::Parser,
     preprocessor,
 };
 use crate::server::project::{self, ProjectAssets};
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
-use serde::Deserialize;
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use base64::{engine::general_purpose, Engine as _};
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 pub struct CompileRequest {
     source: Option<String>,
     project_name: Option<String>,
     assets: Option<ProjectAssets>,
+}
+
+#[derive(Serialize)]
+pub struct CompileResponse {
+    rom: String, // Base64 encoded ROM
+    map: SourceMap,
 }
 
 pub async fn compile(Json(payload): Json<CompileRequest>) -> impl IntoResponse {
@@ -33,14 +35,13 @@ pub async fn compile(Json(payload): Json<CompileRequest>) -> impl IntoResponse {
 
     match result {
         Ok(compile_result) => match compile_result {
-            Ok(rom_data) => {
-                // Return the binary data
-                Response::builder()
-                    .status(StatusCode::OK)
-                    .header("Content-Type", "application/octet-stream")
-                    .header("Content-Disposition", "attachment; filename=\"game.nes\"")
-                    .body(axum::body::Body::from(rom_data))
-                    .unwrap()
+            Ok((rom_data, source_map)) => {
+                let encoded_rom = general_purpose::STANDARD.encode(rom_data);
+                let response = CompileResponse {
+                    rom: encoded_rom,
+                    map: source_map,
+                };
+                Json(response).into_response()
             }
             Err(err_msg) => {
                 // Return the compilation error message
@@ -62,7 +63,7 @@ pub fn compile_source(
     source: Option<String>,
     project_name: Option<String>,
     assets: Option<ProjectAssets>,
-) -> Result<Vec<u8>, String> {
+) -> Result<(Vec<u8>, SourceMap), String> {
     // Resolve source
     let source_code = if let Some(s) = source {
         s
@@ -178,7 +179,7 @@ pub fn compile_source(
 
     // Create CodeGenerator
     let mut codegen = CodeGenerator::new(symbol_table);
-    let (asm_lines, _sourcemap) = codegen
+    let (asm_lines, source_map) = codegen
         .generate(&program)
         .map_err(|e| format!("Codegen Error: {:?}", e))?;
     let asm_source = asm_lines.join("\n");
@@ -265,7 +266,7 @@ pub fn compile_source(
         .assemble(&asm_source, chr_data, injections)
         .map_err(|e| format!("Assembler Error: {:?}", e))?;
 
-    Ok(rom)
+    Ok((rom, source_map))
 }
 
 // Project API Handlers

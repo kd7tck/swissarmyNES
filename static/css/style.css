@@ -190,6 +190,15 @@ button:hover {
     flex-shrink: 0;
 }
 
+.line-num {
+    padding-right: 5px;
+}
+.line-num.debug-active {
+    background-color: #ffff00;
+    color: #000;
+    font-weight: bold;
+}
+
 .code-wrapper {
     position: relative;
     flex: 1;

@@ -305,7 +305,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Pause execution when hit.
 - **Completion Criteria:** Game freezes when execution hits line 10.
 
-## Phase 37: Debugging - Memory Viewer
+## Phase 37: Debugging - Memory Viewer (Completed)
 **Goal:** Inspect state.
 - **Action Items:**
     - Hex Editor UI component (virtualized list for performance).

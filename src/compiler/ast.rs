@@ -199,6 +199,8 @@ impl Statement {
         Self { kind: StatementKind::Randomize(expr), line: 0 }
     }
     #[allow(non_snake_case)]
+    pub const WAIT_VBLANK: Self = Self { kind: StatementKind::WaitVBlank, line: 0 };
+    #[allow(non_upper_case_globals)]
     pub const WaitVBlank: Self = Self { kind: StatementKind::WaitVBlank, line: 0 };
 }
 

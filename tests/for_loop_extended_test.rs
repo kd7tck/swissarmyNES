@@ -29,7 +29,7 @@ fn test_codegen_for_word_loop() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
     let code_str = code.join("\n");
 
     // Verification
@@ -73,7 +73,7 @@ fn test_codegen_for_int_signed_loop() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
     let code_str = code.join("\n");
 
     // -10 = 0xF6 (8-bit signed)

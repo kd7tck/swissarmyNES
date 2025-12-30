@@ -34,7 +34,7 @@ mod tests {
 
         let st = SymbolTable::new();
         let mut cg = CodeGenerator::new(st);
-        let code = cg.generate(&program).expect("Codegen failed");
+        let (code, _) = cg.generate(&program).expect("Codegen failed");
 
         // Check if comments are in the output
         assert!(code.iter().any(|l| l.contains("; This is a comment")));

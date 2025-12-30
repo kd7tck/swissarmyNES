@@ -30,7 +30,7 @@ mod tests {
         let result = codegen.generate(&program);
 
         match result {
-            Ok(lines) => {
+            Ok((lines, _)) => {
                 let asm = lines.join("\n");
                 // Check for 16-bit logic
                 // 1000 = $03E8. 500 = $01F4.

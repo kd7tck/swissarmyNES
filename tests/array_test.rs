@@ -34,7 +34,7 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let asm_lines = codegen.generate(&program).expect("Codegen failed");
+        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
         let _asm_source = asm_lines.join("\n");
 
         // Verify allocation
@@ -66,7 +66,7 @@ mod tests {
         analyzer.analyze(&program).expect("Analysis failed");
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let asm_lines = codegen.generate(&program).expect("Codegen failed");
+        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
 
         // Size 5 * 2 = 10 bytes.
         // Assignment 1000 ($03E8).

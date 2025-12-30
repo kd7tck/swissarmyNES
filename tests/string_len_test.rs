@@ -26,7 +26,7 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let asm_lines = codegen.generate(&program).expect("Codegen failed");
+        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
 
         // Check for call to Runtime_StringLen
         let found_call = asm_lines
@@ -61,7 +61,7 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let asm_lines = codegen.generate(&program).expect("Codegen failed");
+        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
 
         // Check for call to Runtime_StringLen
         let found_call = asm_lines

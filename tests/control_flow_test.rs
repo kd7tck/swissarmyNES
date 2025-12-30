@@ -37,7 +37,7 @@ fn test_codegen_if_statement() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
     let code_str = code.join("\n");
 
     // Check for branching instructions
@@ -79,7 +79,7 @@ fn test_codegen_while_statement() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
     let code_str = code.join("\n");
 
     assert!(code_str.contains("GEN_L1:")); // Start label (assuming 1 is first)
@@ -116,7 +116,7 @@ fn test_codegen_for_statement() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
     let code_str = code.join("\n");
 
     // Loop logic verification

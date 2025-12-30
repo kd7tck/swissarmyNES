@@ -176,9 +176,9 @@ pub fn compile_source(
     // 4. Codegen
     let symbol_table = analyzer.symbol_table;
 
-    // Create CodeGenerator (reverted signature)
+    // Create CodeGenerator
     let mut codegen = CodeGenerator::new(symbol_table);
-    let asm_lines = codegen
+    let (asm_lines, _sourcemap) = codegen
         .generate(&program)
         .map_err(|e| format!("Codegen Error: {:?}", e))?;
     let asm_source = asm_lines.join("\n");

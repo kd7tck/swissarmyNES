@@ -39,7 +39,7 @@ mod tests {
             .unwrap();
 
         let mut codegen = CodeGenerator::new(symbol_table);
-        let output = codegen.generate(&program).expect("CodeGen failed");
+        let (output, _) = codegen.generate(&program).expect("CodeGen failed");
         let asm = output.join("\n");
         println!("{}", asm);
 

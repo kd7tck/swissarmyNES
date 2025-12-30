@@ -44,7 +44,7 @@ mod tests {
             .unwrap();
 
         let mut codegen = CodeGenerator::new(symbol_table);
-        let asm = codegen.generate(&program).expect("Codegen failed");
+        let (asm, _) = codegen.generate(&program).expect("Codegen failed");
 
         // Verify TrampolineNMI exists and has safe context saving
         let trampoline_idx = asm

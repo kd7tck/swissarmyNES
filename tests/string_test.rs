@@ -18,7 +18,7 @@ fn test_string_compilation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
 
     // Check RAM allocation
     // s @ $05C0 (2 bytes)

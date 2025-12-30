@@ -50,7 +50,7 @@ fn test_codegen_select_statement() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
     let code_str = code.join("\n");
 
     // Check stack usage (Push Select Value)
@@ -109,7 +109,7 @@ fn test_codegen_select_word() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
     let code_str = code.join("\n");
 
     // Check stack usage (Push Word)

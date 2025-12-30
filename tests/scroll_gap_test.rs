@@ -25,7 +25,7 @@ mod tests {
             declarations: vec![],
         };
 
-        let asm = codegen.generate(&program).unwrap();
+        let (asm, _) = codegen.generate(&program).unwrap();
         let asm_str = asm.join("\n");
 
         // Extract Runtime_Scroll_LoadRow
@@ -58,7 +58,7 @@ mod tests {
         let program = Program {
             declarations: vec![],
         };
-        let asm = codegen.generate(&program).unwrap();
+        let (asm, _) = codegen.generate(&program).unwrap();
         let asm_str = asm.join("\n");
 
         if let Some(start) = asm_str.find("Runtime_Scroll_LoadColumn:") {

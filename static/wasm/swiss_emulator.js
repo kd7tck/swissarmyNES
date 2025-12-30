@@ -350,6 +350,12 @@ export class Emulator {
         return CpuState.__wrap(ret);
     }
     /**
+     * @param {number} addr
+     */
+    add_breakpoint(addr) {
+        wasm.emulator_add_breakpoint(this.__wbg_ptr, addr);
+    }
+    /**
      * @returns {number}
      */
     get_pixels_len() {
@@ -362,12 +368,21 @@ export class Emulator {
     set_sample_rate(rate) {
         wasm.emulator_set_sample_rate(this.__wbg_ptr, rate);
     }
+    clear_breakpoints() {
+        wasm.emulator_clear_breakpoints(this.__wbg_ptr);
+    }
     /**
      * @returns {number}
      */
     get_audio_samples() {
         const ret = wasm.emulator_get_audio_samples(this.__wbg_ptr);
         return ret >>> 0;
+    }
+    /**
+     * @param {number} addr
+     */
+    remove_breakpoint(addr) {
+        wasm.emulator_remove_breakpoint(this.__wbg_ptr, addr);
     }
     clear_audio_samples() {
         wasm.emulator_clear_audio_samples(this.__wbg_ptr);
@@ -385,11 +400,17 @@ export class Emulator {
         EmulatorFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
+    /**
+     * Steps the emulator forward.
+     * Returns Ok(true) if a breakpoint was hit, Ok(false) if a frame completed normally.
+     * @returns {boolean}
+     */
     step() {
         const ret = wasm.emulator_step(this.__wbg_ptr);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
         }
+        return ret[0] !== 0;
     }
     reset() {
         wasm.emulator_reset(this.__wbg_ptr);

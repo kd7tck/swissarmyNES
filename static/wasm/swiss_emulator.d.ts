@@ -21,13 +21,20 @@ export class Emulator {
   set_button(player: number, button: number, pressed: boolean): void;
   get_wram_len(): number;
   get_cpu_state(): CpuState;
+  add_breakpoint(addr: number): void;
   get_pixels_len(): number;
   set_sample_rate(rate: number): void;
+  clear_breakpoints(): void;
   get_audio_samples(): number;
+  remove_breakpoint(addr: number): void;
   clear_audio_samples(): void;
   get_audio_samples_len(): number;
   constructor();
-  step(): void;
+  /**
+   * Steps the emulator forward.
+   * Returns Ok(true) if a breakpoint was hit, Ok(false) if a frame completed normally.
+   */
+  step(): boolean;
   reset(): void;
   get_wram(): number;
   load_rom(rom_data: Uint8Array): void;
@@ -53,7 +60,9 @@ export interface InitOutput {
   readonly __wbg_set_cpustate_status: (a: number, b: number) => void;
   readonly __wbg_set_cpustate_x: (a: number, b: number) => void;
   readonly __wbg_set_cpustate_y: (a: number, b: number) => void;
+  readonly emulator_add_breakpoint: (a: number, b: number) => void;
   readonly emulator_clear_audio_samples: (a: number) => void;
+  readonly emulator_clear_breakpoints: (a: number) => void;
   readonly emulator_get_audio_samples: (a: number) => number;
   readonly emulator_get_audio_samples_len: (a: number) => number;
   readonly emulator_get_cpu_state: (a: number) => number;
@@ -63,10 +72,11 @@ export interface InitOutput {
   readonly emulator_get_wram_len: (a: number) => number;
   readonly emulator_load_rom: (a: number, b: number, c: number) => [number, number];
   readonly emulator_new: () => number;
+  readonly emulator_remove_breakpoint: (a: number, b: number) => void;
   readonly emulator_reset: (a: number) => void;
   readonly emulator_set_button: (a: number, b: number, c: number, d: number) => void;
   readonly emulator_set_sample_rate: (a: number, b: number) => void;
-  readonly emulator_step: (a: number) => [number, number];
+  readonly emulator_step: (a: number) => [number, number, number];
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_exn_store: (a: number) => void;

@@ -189,7 +189,8 @@ impl Emulator {
 
     pub fn update_pattern_tables(&mut self) {
         let deck = self.deck.borrow();
-        deck.ppu().load_pattern_tables(&mut self.pattern_table_buffer);
+        deck.ppu()
+            .load_pattern_tables(&mut self.pattern_table_buffer);
     }
 
     pub fn get_pattern_tables(&self) -> *const u8 {
@@ -235,7 +236,8 @@ impl Emulator {
         // Let's make palette_buffer big enough and pass a scratch buffer for the second arg.
 
         let mut scratch = vec![0u8; 256 * 4]; // Dummy
-        deck.ppu().load_palettes(&mut self.palette_buffer, &mut scratch);
+        deck.ppu()
+            .load_palettes(&mut self.palette_buffer, &mut scratch);
     }
 
     pub fn get_palettes(&self) -> *const u8 {

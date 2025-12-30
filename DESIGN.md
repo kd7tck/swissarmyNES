@@ -312,7 +312,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Live updates (poll every frame or on pause).
 - **Completion Criteria:** Can see variable values change in RAM at `$0300`.
 
-## Phase 38: Debugging - PPU Viewer
+## Phase 38: Debugging - PPU Viewer (Completed)
 **Goal:** Graphics debugging.
 - **Action Items:**
     - View Pattern Tables (CHR) as interpreted by PPU.

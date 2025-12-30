@@ -64,7 +64,7 @@ impl Emulator {
 
         // If no breakpoints, run fast path
         if self.breakpoints.is_empty() {
-             match deck.clock_frame() {
+            match deck.clock_frame() {
                 Ok(_) => return Ok(false),
                 Err(e) => return Err(format!("Emulation error: {:?}", e)),
             }

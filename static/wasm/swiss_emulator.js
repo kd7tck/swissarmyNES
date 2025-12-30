@@ -338,6 +338,20 @@ export class Emulator {
     /**
      * @returns {number}
      */
+    get_oam_data() {
+        const ret = wasm.emulator_get_oam_data(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    get_palettes() {
+        const ret = wasm.emulator_get_palettes(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
     get_wram_len() {
         const ret = wasm.emulator_get_wram_len(this.__wbg_ptr);
         return ret >>> 0;
@@ -358,6 +372,13 @@ export class Emulator {
     /**
      * @returns {number}
      */
+    get_nametables() {
+        const ret = wasm.emulator_get_nametables(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
     get_pixels_len() {
         const ret = wasm.emulator_get_pixels_len(this.__wbg_ptr);
         return ret >>> 0;
@@ -367,6 +388,23 @@ export class Emulator {
      */
     set_sample_rate(rate) {
         wasm.emulator_set_sample_rate(this.__wbg_ptr, rate);
+    }
+    update_palettes() {
+        wasm.emulator_update_palettes(this.__wbg_ptr);
+    }
+    /**
+     * @returns {number}
+     */
+    get_oam_data_len() {
+        const ret = wasm.emulator_get_oam_data_len(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    get_palettes_len() {
+        const ret = wasm.emulator_get_palettes_len(this.__wbg_ptr);
+        return ret >>> 0;
     }
     clear_breakpoints() {
         wasm.emulator_clear_breakpoints(this.__wbg_ptr);
@@ -384,6 +422,23 @@ export class Emulator {
     remove_breakpoint(addr) {
         wasm.emulator_remove_breakpoint(this.__wbg_ptr, addr);
     }
+    update_nametables() {
+        wasm.emulator_update_nametables(this.__wbg_ptr);
+    }
+    /**
+     * @returns {number}
+     */
+    get_nametables_len() {
+        const ret = wasm.emulator_get_nametables_len(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    get_pattern_tables() {
+        const ret = wasm.emulator_get_pattern_tables(this.__wbg_ptr);
+        return ret >>> 0;
+    }
     clear_audio_samples() {
         wasm.emulator_clear_audio_samples(this.__wbg_ptr);
     }
@@ -394,6 +449,16 @@ export class Emulator {
         const ret = wasm.emulator_get_audio_samples_len(this.__wbg_ptr);
         return ret >>> 0;
     }
+    update_pattern_tables() {
+        wasm.emulator_update_pattern_tables(this.__wbg_ptr);
+    }
+    /**
+     * @returns {number}
+     */
+    get_pattern_tables_len() {
+        const ret = wasm.emulator_get_pattern_tables_len(this.__wbg_ptr);
+        return ret >>> 0;
+    }
     constructor() {
         const ret = wasm.emulator_new();
         this.__wbg_ptr = ret >>> 0;
@@ -401,8 +466,6 @@ export class Emulator {
         return this;
     }
     /**
-     * Steps the emulator forward.
-     * Returns Ok(true) if a breakpoint was hit, Ok(false) if a frame completed normally.
      * @returns {boolean}
      */
     step() {

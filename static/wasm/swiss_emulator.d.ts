@@ -19,21 +19,28 @@ export class Emulator {
   [Symbol.dispose](): void;
   get_pixels(): number;
   set_button(player: number, button: number, pressed: boolean): void;
+  get_oam_data(): number;
+  get_palettes(): number;
   get_wram_len(): number;
   get_cpu_state(): CpuState;
   add_breakpoint(addr: number): void;
+  get_nametables(): number;
   get_pixels_len(): number;
   set_sample_rate(rate: number): void;
+  update_palettes(): void;
+  get_oam_data_len(): number;
+  get_palettes_len(): number;
   clear_breakpoints(): void;
   get_audio_samples(): number;
   remove_breakpoint(addr: number): void;
+  update_nametables(): void;
+  get_nametables_len(): number;
+  get_pattern_tables(): number;
   clear_audio_samples(): void;
   get_audio_samples_len(): number;
+  update_pattern_tables(): void;
+  get_pattern_tables_len(): number;
   constructor();
-  /**
-   * Steps the emulator forward.
-   * Returns Ok(true) if a breakpoint was hit, Ok(false) if a frame completed normally.
-   */
   step(): boolean;
   reset(): void;
   get_wram(): number;
@@ -66,6 +73,14 @@ export interface InitOutput {
   readonly emulator_get_audio_samples: (a: number) => number;
   readonly emulator_get_audio_samples_len: (a: number) => number;
   readonly emulator_get_cpu_state: (a: number) => number;
+  readonly emulator_get_nametables: (a: number) => number;
+  readonly emulator_get_nametables_len: (a: number) => number;
+  readonly emulator_get_oam_data: (a: number) => number;
+  readonly emulator_get_oam_data_len: (a: number) => number;
+  readonly emulator_get_palettes: (a: number) => number;
+  readonly emulator_get_palettes_len: (a: number) => number;
+  readonly emulator_get_pattern_tables: (a: number) => number;
+  readonly emulator_get_pattern_tables_len: (a: number) => number;
   readonly emulator_get_pixels: (a: number) => number;
   readonly emulator_get_pixels_len: (a: number) => number;
   readonly emulator_get_wram: (a: number) => number;
@@ -77,6 +92,9 @@ export interface InitOutput {
   readonly emulator_set_button: (a: number, b: number, c: number, d: number) => void;
   readonly emulator_set_sample_rate: (a: number, b: number) => void;
   readonly emulator_step: (a: number) => [number, number, number];
+  readonly emulator_update_nametables: (a: number) => void;
+  readonly emulator_update_palettes: (a: number) => void;
+  readonly emulator_update_pattern_tables: (a: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_exn_store: (a: number) => void;

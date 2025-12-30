@@ -1,5 +1,8 @@
 // Basic Syntax Highlighter and Line Number Manager
 
+// Removed import { PpuViewer } from './ppu_viewer.js'; as editor.js is not a module in HTML
+// But PpuViewer is loaded via script tag before editor.js
+
 class SwissEditor {
     constructor(editorId, highlightId, lineNumbersId) {
         this.editor = document.getElementById(editorId);
@@ -24,6 +27,14 @@ class SwissEditor {
         this.memoryViewerOpen = false;
         this.memoryStart = 0x0000;
         this.memorySize = 0x0800; // 2KB Internal RAM
+
+        // PPU Viewer State
+        if (typeof PpuViewer !== 'undefined') {
+            this.ppuViewer = new PpuViewer();
+        } else {
+            console.warn("PpuViewer not defined");
+            this.ppuViewer = { attach:()=>{}, show:()=>{}, hide:()=>{}, update:()=>{} }; // dummy
+        }
 
         // Input State
         this.gamepadIndex = null;
@@ -245,6 +256,8 @@ class SwissEditor {
                 }
 
                 this.wasmLoaded = true;
+                // Expose globally for ppu viewer
+                window.wasmMemory = this.wasmMemory;
             } catch (e) {
                 console.error("Failed to load WASM:", e);
                 alert("Failed to load emulator core.");
@@ -279,6 +292,9 @@ class SwissEditor {
             this.emulator.load_rom(romData);
             this.emulator.set_sample_rate(this.audioContext.sampleRate);
             this.nextStartTime = this.audioContext.currentTime;
+
+            // Attach PPU Viewer
+            if(this.ppuViewer.attach) this.ppuViewer.attach(this.emulator);
 
             // Reset Input State
             this.keyboardState.fill(false);
@@ -345,6 +361,10 @@ class SwissEditor {
             btnMem.innerText = 'Memory';
             btnMem.onclick = () => this.toggleMemoryViewer();
 
+            const btnPpu = document.createElement('button');
+            btnPpu.innerText = 'PPU';
+            btnPpu.onclick = () => this.ppuViewer.show();
+
             // Volume
             const volContainer = document.createElement('div');
             volContainer.style.display = 'flex';
@@ -366,9 +386,10 @@ class SwissEditor {
                 overlay.style.display = 'none';
                 if(this.audioContext) this.audioContext.suspend();
                 this.clearDebugHighlight();
+                if(this.ppuViewer.hide) this.ppuViewer.hide();
             };
 
-            toolbar.append(btnPlay, btnReset, btn1x, btn2x, btnFull, btnMem, volContainer, btnClose);
+            toolbar.append(btnPlay, btnReset, btn1x, btn2x, btnFull, btnMem, btnPpu, volContainer, btnClose);
             overlay.appendChild(toolbar);
 
             const mainArea = document.createElement('div');
@@ -665,22 +686,28 @@ class SwissEditor {
                this.updateDebugInfo(s.pc);
             }
 
-            // Update Memory Viewer if open (throttle this if too slow)
+            // Update Memory Viewer if open
             if (this.memoryViewerOpen) {
-                // Updating every frame might be heavy for full table redraw
-                // Let's do it every 10 frames or so, or always if performant enough.
-                // 128 rows of table might be okay.
                 if (this.frameCount % 10 === 0) {
                      this.updateMemoryView();
                 }
             }
+
+            // Update PPU Viewer if open
+            if (this.ppuViewer.isVisible) {
+                 if (this.frameCount % 5 === 0) { // Throttle slightly
+                     this.ppuViewer.update();
+                 }
+            }
+
             this.frameCount++;
 
             if (breakpointHit) {
                 this.emulatorRunning = false;
                 this.updatePlayPauseButton();
-                // Force update memory on break
+                // Force update views on break
                 if (this.memoryViewerOpen) this.updateMemoryView();
+                this.ppuViewer.update();
                 console.log("Breakpoint Hit!");
             }
 

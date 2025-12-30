@@ -20,6 +20,11 @@ class SwissEditor {
         this.activeLine = -1;
         this.breakpoints = new Set(); // Set of line numbers (1-based)
 
+        // Memory Viewer State
+        this.memoryViewerOpen = false;
+        this.memoryStart = 0x0000;
+        this.memorySize = 0x0800; // 2KB Internal RAM
+
         // Input State
         this.gamepadIndex = null;
         this.keyboardState = new Array(8).fill(false);
@@ -336,6 +341,10 @@ class SwissEditor {
             btnFull.innerText = 'Full';
             btnFull.onclick = () => this.setScale(0);
 
+            const btnMem = document.createElement('button');
+            btnMem.innerText = 'Memory';
+            btnMem.onclick = () => this.toggleMemoryViewer();
+
             // Volume
             const volContainer = document.createElement('div');
             volContainer.style.display = 'flex';
@@ -359,8 +368,13 @@ class SwissEditor {
                 this.clearDebugHighlight();
             };
 
-            toolbar.append(btnPlay, btnReset, btn1x, btn2x, btnFull, volContainer, btnClose);
+            toolbar.append(btnPlay, btnReset, btn1x, btn2x, btnFull, btnMem, volContainer, btnClose);
             overlay.appendChild(toolbar);
+
+            const mainArea = document.createElement('div');
+            mainArea.style.display = 'flex';
+            mainArea.style.gap = '20px';
+            mainArea.style.alignItems = 'flex-start';
 
             const canvas = document.createElement('canvas');
             canvas.id = 'emulator-canvas';
@@ -369,7 +383,25 @@ class SwissEditor {
             canvas.style.imageRendering = 'pixelated';
             canvas.style.border = '2px solid #fff';
 
-            overlay.appendChild(canvas);
+            // Memory Viewer Container
+            const memViewer = document.createElement('div');
+            memViewer.id = 'memory-viewer';
+            memViewer.style.display = 'none'; // Hidden by default
+            memViewer.style.width = '420px';
+            memViewer.style.height = '480px'; // 2x height approx
+            memViewer.style.backgroundColor = '#1e1e1e';
+            memViewer.style.color = '#0f0';
+            memViewer.style.fontFamily = 'monospace';
+            memViewer.style.fontSize = '12px';
+            memViewer.style.padding = '10px';
+            memViewer.style.overflowY = 'auto';
+            memViewer.style.border = '1px solid #444';
+            memViewer.innerHTML = '<div style="text-align:center">RAM Viewer ($0000-$07FF)</div><div id="mem-content"></div>';
+
+            mainArea.appendChild(canvas);
+            mainArea.appendChild(memViewer);
+            overlay.appendChild(mainArea);
+
             document.body.appendChild(overlay);
         } else {
             overlay.style.display = 'flex';
@@ -383,6 +415,55 @@ class SwissEditor {
         // Bind keys
         document.addEventListener('keydown', (e) => this.handleEmulatorInput(e, true));
         document.addEventListener('keyup', (e) => this.handleEmulatorInput(e, false));
+    }
+
+    toggleMemoryViewer() {
+        const mv = document.getElementById('memory-viewer');
+        if (!mv) return;
+        this.memoryViewerOpen = !this.memoryViewerOpen;
+        mv.style.display = this.memoryViewerOpen ? 'block' : 'none';
+        if (this.memoryViewerOpen) {
+            this.updateMemoryView();
+        }
+    }
+
+    updateMemoryView() {
+        if (!this.memoryViewerOpen) return;
+        const wram = this.getWRAM();
+        if (!wram) return;
+
+        const content = document.getElementById('mem-content');
+        if (!content) return;
+
+        let html = '<table style="width:100%; border-collapse:collapse;">';
+        // Header
+        html += '<tr><th style="color:#aaa">Addr</th>';
+        for(let i=0; i<16; i++) {
+            html += `<th style="color:#aaa">${i.toString(16).toUpperCase().padStart(2,'0')}</th>`;
+        }
+        html += '<th style="color:#aaa">Ascii</th></tr>';
+
+        // Limit to first 2KB ($0000 - $07FF) for now, even if WRAM is larger
+        // Tetanes WRAM usually includes 2KB internal + maybe save RAM?
+        // Let's safe guard size
+        const limit = Math.min(this.memorySize, wram.length);
+
+        for (let r = 0; r < limit; r += 16) {
+            html += `<tr><td style="color:#fe9">${r.toString(16).toUpperCase().padStart(4,'0')}</td>`;
+            let ascii = '';
+            for (let c = 0; c < 16; c++) {
+                if (r + c < limit) {
+                    const val = wram[r + c];
+                    html += `<td>${val.toString(16).toUpperCase().padStart(2,'0')}</td>`;
+                    ascii += (val >= 32 && val <= 126) ? String.fromCharCode(val) : '.';
+                } else {
+                    html += '<td></td>';
+                }
+            }
+            html += `<td style="color:#aaa">${this.escapeHtml(ascii)}</td></tr>`;
+        }
+        html += '</table>';
+        content.innerHTML = html;
     }
 
     togglePause() {
@@ -584,9 +665,22 @@ class SwissEditor {
                this.updateDebugInfo(s.pc);
             }
 
+            // Update Memory Viewer if open (throttle this if too slow)
+            if (this.memoryViewerOpen) {
+                // Updating every frame might be heavy for full table redraw
+                // Let's do it every 10 frames or so, or always if performant enough.
+                // 128 rows of table might be okay.
+                if (this.frameCount % 10 === 0) {
+                     this.updateMemoryView();
+                }
+            }
+            this.frameCount++;
+
             if (breakpointHit) {
                 this.emulatorRunning = false;
                 this.updatePlayPauseButton();
+                // Force update memory on break
+                if (this.memoryViewerOpen) this.updateMemoryView();
                 console.log("Breakpoint Hit!");
             }
 

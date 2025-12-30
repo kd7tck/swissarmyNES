@@ -89,7 +89,7 @@ fn test_string_functions_codegen() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
 
     // Verify calls
     assert!(code.iter().any(|line| line.contains("JSR Runtime_Asc")));

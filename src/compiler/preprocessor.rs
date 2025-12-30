@@ -1,4 +1,4 @@
-use crate::compiler::ast::{Expression, Program, Statement, TopLevel};
+use crate::compiler::ast::{Expression, Program, Statement, StatementKind, TopLevel, TopLevelKind};
 use crate::compiler::lexer::Lexer;
 use crate::compiler::parser::Parser;
 use std::collections::{HashMap, HashSet};
@@ -19,20 +19,15 @@ fn expand_program(
     let mut new_declarations = Vec::new();
 
     for decl in program.declarations {
-        match decl {
-            TopLevel::Include(filename) => {
+        match &decl.kind {
+            TopLevelKind::Include(filename) => {
                 // Check if already included to prevent cycles and duplicates (Pragma Once behavior)
-                if seen_files.contains(&filename) {
-                    // Start of circular dependency check vs duplicate inclusion check.
-                    // If we want to allow including the same file if it's not a cycle but just shared dependency (diamond problem),
-                    // we usually still only want to include it ONCE to avoid symbol redefinition.
-                    // So skipping it is the correct behavior for "Pragma Once".
-                    // If it was a cycle, we'd still skip it, breaking the cycle.
+                if seen_files.contains(filename) {
                     continue;
                 }
                 seen_files.insert(filename.clone());
 
-                let source = source_provider(&filename)?;
+                let source = source_provider(filename)?;
 
                 // Lex and Parse
                 let mut lexer = Lexer::new(&source);
@@ -71,31 +66,37 @@ pub fn expand_macros(program: Program) -> Result<Program, String> {
 
     // 1. Collect Macros and filter them out
     for decl in program.declarations {
-        if let TopLevel::Macro(name, params, body) = decl {
-            if macros.contains_key(&name) {
-                return Err(format!("Duplicate macro definition: {}", name));
+        match decl.kind {
+            TopLevelKind::Macro(name, params, body) => {
+                if macros.contains_key(&name) {
+                    return Err(format!("Duplicate macro definition: {}", name));
+                }
+                macros.insert(name, MacroDef { params, body });
             }
-            macros.insert(name, MacroDef { params, body });
-        } else {
-            new_declarations.push(decl);
+            _ => new_declarations.push(decl),
         }
     }
 
     // 2. Expand macros in the remaining code
     let mut final_declarations = Vec::new();
     for decl in new_declarations {
-        match decl {
-            TopLevel::Sub(name, params, body) => {
+        match decl.kind {
+            TopLevelKind::Sub(name, params, body) => {
                 let expanded_body = expand_statements(body, &macros, 0)?;
-                final_declarations.push(TopLevel::Sub(name, params, expanded_body));
+                final_declarations.push(TopLevel {
+                    kind: TopLevelKind::Sub(name, params, expanded_body),
+                    line: decl.line,
+                });
             }
-            TopLevel::Interrupt(name, body) => {
+            TopLevelKind::Interrupt(name, body) => {
                 let expanded_body = expand_statements(body, &macros, 0)?;
-                final_declarations.push(TopLevel::Interrupt(name, expanded_body));
+                final_declarations.push(TopLevel {
+                    kind: TopLevelKind::Interrupt(name, expanded_body),
+                    line: decl.line,
+                });
             }
             // Declarations that don't contain statements:
             // Const, Dim, TypeDecl, Enum, Data, Asm, Include
-            // (Include should be processed already)
             _ => final_declarations.push(decl),
         }
     }
@@ -118,7 +119,7 @@ fn expand_statements(
     for stmt in stmts {
         // Check for Call statement that matches a macro
         let mut expanded = false;
-        if let Statement::Call(Expression::Identifier(ref name), ref args) = stmt {
+        if let StatementKind::Call(Expression::Identifier(ref name), ref args) = stmt.kind {
             if let Some(macro_def) = macros.get(name) {
                 // It is a macro call!
                 if args.len() != macro_def.params.len() {
@@ -161,32 +162,38 @@ fn expand_nested_statements(
     macros: &HashMap<String, MacroDef>,
     depth: usize,
 ) -> Result<Statement, String> {
-    match stmt {
-        Statement::If(cond, then_block, else_block) => Ok(Statement::If(
-            cond,
-            expand_statements(then_block, macros, depth)?,
-            if let Some(block) = else_block {
-                Some(expand_statements(block, macros, depth)?)
-            } else {
-                None
-            },
-        )),
-        Statement::While(cond, body) => Ok(Statement::While(
-            cond,
-            expand_statements(body, macros, depth)?,
-        )),
-        Statement::DoWhile(body, cond) => Ok(Statement::DoWhile(
-            expand_statements(body, macros, depth)?,
-            cond,
-        )),
-        Statement::For(var, start, end, step, body) => Ok(Statement::For(
-            var,
-            start,
-            end,
-            step,
-            expand_statements(body, macros, depth)?,
-        )),
-        Statement::Select(expr, cases, else_block) => {
+    match stmt.kind {
+        StatementKind::If(cond, then_block, else_block) => Ok(Statement {
+            kind: StatementKind::If(
+                cond,
+                expand_statements(then_block, macros, depth)?,
+                if let Some(block) = else_block {
+                    Some(expand_statements(block, macros, depth)?)
+                } else {
+                    None
+                },
+            ),
+            line: stmt.line,
+        }),
+        StatementKind::While(cond, body) => Ok(Statement {
+            kind: StatementKind::While(cond, expand_statements(body, macros, depth)?),
+            line: stmt.line,
+        }),
+        StatementKind::DoWhile(body, cond) => Ok(Statement {
+            kind: StatementKind::DoWhile(expand_statements(body, macros, depth)?, cond),
+            line: stmt.line,
+        }),
+        StatementKind::For(var, start, end, step, body) => Ok(Statement {
+            kind: StatementKind::For(
+                var,
+                start,
+                end,
+                step,
+                expand_statements(body, macros, depth)?,
+            ),
+            line: stmt.line,
+        }),
+        StatementKind::Select(expr, cases, else_block) => {
             let mut new_cases = Vec::new();
             for (val, block) in cases {
                 new_cases.push((val, expand_statements(block, macros, depth)?));
@@ -196,7 +203,10 @@ fn expand_nested_statements(
             } else {
                 None
             };
-            Ok(Statement::Select(expr, new_cases, new_else))
+            Ok(Statement {
+                kind: StatementKind::Select(expr, new_cases, new_else),
+                line: stmt.line,
+            })
         }
         _ => Ok(stmt),
     }
@@ -213,32 +223,32 @@ fn replace_args_in_statements(
 }
 
 fn replace_args_in_statement(stmt: &Statement, mapping: &HashMap<String, Expression>) -> Statement {
-    match stmt {
-        Statement::Let(target, val) => Statement::Let(
+    let new_kind = match &stmt.kind {
+        StatementKind::Let(target, val) => StatementKind::Let(
             replace_args_in_expression(target.clone(), mapping),
             replace_args_in_expression(val.clone(), mapping),
         ),
-        Statement::If(cond, then_b, else_b) => Statement::If(
+        StatementKind::If(cond, then_b, else_b) => StatementKind::If(
             replace_args_in_expression(cond.clone(), mapping),
             replace_args_in_statements(then_b, mapping),
             else_b
                 .as_ref()
                 .map(|b| replace_args_in_statements(b, mapping)),
         ),
-        Statement::While(cond, body) => Statement::While(
+        StatementKind::While(cond, body) => StatementKind::While(
             replace_args_in_expression(cond.clone(), mapping),
             replace_args_in_statements(body, mapping),
         ),
-        Statement::DoWhile(body, cond) => Statement::DoWhile(
+        StatementKind::DoWhile(body, cond) => StatementKind::DoWhile(
             replace_args_in_statements(body, mapping),
             replace_args_in_expression(cond.clone(), mapping),
         ),
-        Statement::For(var, start, end, step, body) => {
+        StatementKind::For(var, start, end, step, body) => {
             let mut new_var = var.clone();
             if let Some(Expression::Identifier(v)) = mapping.get(var) {
                 new_var = v.clone();
             }
-            Statement::For(
+            StatementKind::For(
                 new_var,
                 replace_args_in_expression(start.clone(), mapping),
                 replace_args_in_expression(end.clone(), mapping),
@@ -247,29 +257,29 @@ fn replace_args_in_statement(stmt: &Statement, mapping: &HashMap<String, Express
                 replace_args_in_statements(body, mapping),
             )
         }
-        Statement::Return(opt) => Statement::Return(
+        StatementKind::Return(opt) => StatementKind::Return(
             opt.as_ref()
                 .map(|e| replace_args_in_expression(e.clone(), mapping)),
         ),
-        Statement::Call(target, args) => Statement::Call(
+        StatementKind::Call(target, args) => StatementKind::Call(
             replace_args_in_expression(target.clone(), mapping),
             args.iter()
                 .map(|a| replace_args_in_expression(a.clone(), mapping))
                 .collect(),
         ),
-        Statement::Poke(addr, val) => Statement::Poke(
+        StatementKind::Poke(addr, val) => StatementKind::Poke(
             replace_args_in_expression(addr.clone(), mapping),
             replace_args_in_expression(val.clone(), mapping),
         ),
-        Statement::PlaySfx(id) => {
-            Statement::PlaySfx(replace_args_in_expression(id.clone(), mapping))
+        StatementKind::PlaySfx(id) => {
+            StatementKind::PlaySfx(replace_args_in_expression(id.clone(), mapping))
         }
-        Statement::Print(args) => Statement::Print(
+        StatementKind::Print(args) => StatementKind::Print(
             args.iter()
                 .map(|a| replace_args_in_expression(a.clone(), mapping))
                 .collect(),
         ),
-        Statement::Select(expr, cases, else_b) => Statement::Select(
+        StatementKind::Select(expr, cases, else_b) => StatementKind::Select(
             replace_args_in_expression(expr.clone(), mapping),
             cases
                 .iter()
@@ -284,7 +294,7 @@ fn replace_args_in_statement(stmt: &Statement, mapping: &HashMap<String, Express
                 .as_ref()
                 .map(|b| replace_args_in_statements(b, mapping)),
         ),
-        Statement::On(vec, sub) => {
+        StatementKind::On(vec, sub) => {
             let mut new_vec = vec.clone();
             let mut new_sub = sub.clone();
             if let Some(Expression::Identifier(v)) = mapping.get(vec) {
@@ -293,9 +303,14 @@ fn replace_args_in_statement(stmt: &Statement, mapping: &HashMap<String, Express
             if let Some(Expression::Identifier(s)) = mapping.get(sub) {
                 new_sub = s.clone();
             }
-            Statement::On(new_vec, new_sub)
+            StatementKind::On(new_vec, new_sub)
         }
-        _ => stmt.clone(),
+        _ => stmt.kind.clone(),
+    };
+
+    Statement {
+        kind: new_kind,
+        line: stmt.line,
     }
 }
 
@@ -357,8 +372,14 @@ mod tests {
         // Main program with INCLUDE
         let program = Program {
             declarations: vec![
-                TopLevel::Include("lib.swiss".to_string()),
-                TopLevel::Sub("Main".to_string(), vec![], vec![]),
+                TopLevel {
+                    kind: TopLevelKind::Include("lib.swiss".to_string()),
+                    line: 1,
+                },
+                TopLevel {
+                    kind: TopLevelKind::Sub("Main".to_string(), vec![], vec![]),
+                    line: 2,
+                },
             ],
         };
 
@@ -366,13 +387,13 @@ mod tests {
 
         assert_eq!(result.declarations.len(), 2);
         // First should be LibSub
-        if let TopLevel::Sub(name, _, _) = &result.declarations[0] {
+        if let TopLevelKind::Sub(name, _, _) = &result.declarations[0].kind {
             assert_eq!(name, "LibSub");
         } else {
             panic!("Expected LibSub");
         }
         // Second should be Main
-        if let TopLevel::Sub(name, _, _) = &result.declarations[1] {
+        if let TopLevelKind::Sub(name, _, _) = &result.declarations[1].kind {
             assert_eq!(name, "Main");
         } else {
             panic!("Expected Main");
@@ -401,7 +422,10 @@ mod tests {
 
         // Start with A
         let program = Program {
-            declarations: vec![TopLevel::Include("A.swiss".to_string())],
+            declarations: vec![TopLevel {
+                kind: TopLevelKind::Include("A.swiss".to_string()),
+                line: 1,
+            }],
         };
 
         let result = process_includes(program, &provider).expect("Failed to process includes");
@@ -412,10 +436,10 @@ mod tests {
 
         assert_eq!(result.declarations.len(), 2);
         // Order: B then A (because A includes B first)
-        if let TopLevel::Sub(name, _, _) = &result.declarations[0] {
+        if let TopLevelKind::Sub(name, _, _) = &result.declarations[0].kind {
             assert_eq!(name, "SubB");
         }
-        if let TopLevel::Sub(name, _, _) = &result.declarations[1] {
+        if let TopLevelKind::Sub(name, _, _) = &result.declarations[1].kind {
             assert_eq!(name, "SubA");
         }
     }

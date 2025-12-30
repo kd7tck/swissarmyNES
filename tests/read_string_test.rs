@@ -28,7 +28,7 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let asm_lines = codegen.generate(&program).expect("Codegen failed");
+        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
 
         // Verify DATA generation with null terminator
         // "Hello" -> $48, $65, $6C, $6C, $6F, $00

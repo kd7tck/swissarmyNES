@@ -32,7 +32,7 @@ fn test_data_restore_label() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
     let code_str = code.join("\n");
 
     // Verify Label in User Data

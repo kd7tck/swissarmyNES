@@ -1,7 +1,7 @@
 use crate::compiler::{
     analysis::SemanticAnalyzer,
     assembler::Assembler,
-    ast::{AnimationFrame, Expression, MetaspriteTile, TopLevel},
+    ast::{AnimationFrame, Expression, MetaspriteTile, TopLevel, TopLevelKind},
     audio,
     codegen::{CodeGenerator, ENVELOPE_TABLE_ADDR, NAMETABLE_ADDR},
     lexer::Lexer,
@@ -131,9 +131,10 @@ pub fn compile_source(
                     attr: Expression::Integer(t.attr as i32),
                 })
                 .collect();
-            program
-                .declarations
-                .push(TopLevel::Metasprite(ms.name.clone(), tiles));
+            program.declarations.push(TopLevel {
+                kind: TopLevelKind::Metasprite(ms.name.clone(), tiles),
+                line: 0,
+            });
         }
 
         for anim in &assets.animations {
@@ -145,25 +146,24 @@ pub fn compile_source(
                     duration: f.duration,
                 })
                 .collect();
-            program.declarations.push(TopLevel::Animation(
-                anim.name.clone(),
-                frames,
-                anim.does_loop,
-            ));
+            program.declarations.push(TopLevel {
+                kind: TopLevelKind::Animation(anim.name.clone(), frames, anim.does_loop),
+                line: 0,
+            });
         }
 
         for mt in &assets.metatiles {
-            program
-                .declarations
-                .push(TopLevel::Metatile(mt.name.clone(), mt.tiles, mt.attr));
+            program.declarations.push(TopLevel {
+                kind: TopLevelKind::Metatile(mt.name.clone(), mt.tiles, mt.attr),
+                line: 0,
+            });
         }
 
         if let Some(world) = &assets.world {
-            program.declarations.push(TopLevel::World(
-                world.width,
-                world.height,
-                world.data.clone(),
-            ));
+            program.declarations.push(TopLevel {
+                kind: TopLevelKind::World(world.width, world.height, world.data.clone()),
+                line: 0,
+            });
         }
     }
 
@@ -176,9 +176,9 @@ pub fn compile_source(
     // 4. Codegen
     let symbol_table = analyzer.symbol_table;
 
-    // Create CodeGenerator (reverted signature)
+    // Create CodeGenerator
     let mut codegen = CodeGenerator::new(symbol_table);
-    let asm_lines = codegen
+    let (asm_lines, _sourcemap) = codegen
         .generate(&program)
         .map_err(|e| format!("Codegen Error: {:?}", e))?;
     let asm_source = asm_lines.join("\n");

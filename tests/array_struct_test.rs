@@ -39,7 +39,7 @@ mod tests {
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
         // This is expected to fail or generate incorrect code if support is missing
-        let asm_lines = codegen.generate(&program).expect("Codegen failed");
+        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
         let _asm_source = asm_lines.join("\n");
 
         // Verify constant index access

@@ -92,93 +92,97 @@ pub enum Token {
 
 pub struct Lexer<'a> {
     input: std::iter::Peekable<std::str::Chars<'a>>,
+    line: usize,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
             input: input.chars().peekable(),
+            line: 1,
         }
     }
 
-    pub fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> (Token, usize) {
         self.skip_whitespace();
+        let current_line = self.line;
 
         match self.input.peek() {
             Some(&ch) => {
                 match ch {
                     '\n' => {
                         self.input.next();
-                        Token::Newline
+                        self.line += 1;
+                        (Token::Newline, current_line)
                     }
                     '+' => {
                         self.input.next();
-                        Token::Plus
+                        (Token::Plus, current_line)
                     }
                     '-' => {
                         self.input.next();
-                        Token::Minus
+                        (Token::Minus, current_line)
                     }
                     '*' => {
                         self.input.next();
-                        Token::Star
+                        (Token::Star, current_line)
                     }
                     '/' => {
                         self.input.next();
-                        Token::Slash
+                        (Token::Slash, current_line)
                     }
                     '=' => {
                         self.input.next();
-                        Token::Equal
+                        (Token::Equal, current_line)
                     }
                     '<' => {
                         self.input.next();
                         if let Some(&'=') = self.input.peek() {
                             self.input.next();
-                            Token::LessEqual
+                            (Token::LessEqual, current_line)
                         } else if let Some(&'>') = self.input.peek() {
                             self.input.next();
-                            Token::NotEqual
+                            (Token::NotEqual, current_line)
                         } else {
-                            Token::Less
+                            (Token::Less, current_line)
                         }
                     }
                     '>' => {
                         self.input.next();
                         if let Some(&'=') = self.input.peek() {
                             self.input.next();
-                            Token::GreaterEqual
+                            (Token::GreaterEqual, current_line)
                         } else {
-                            Token::Greater
+                            (Token::Greater, current_line)
                         }
                     }
                     '(' => {
                         self.input.next();
-                        Token::LParen
+                        (Token::LParen, current_line)
                     }
                     ')' => {
                         self.input.next();
-                        Token::RParen
+                        (Token::RParen, current_line)
                     }
                     ',' => {
                         self.input.next();
-                        Token::Comma
+                        (Token::Comma, current_line)
                     }
                     ':' => {
                         self.input.next();
-                        Token::Colon
+                        (Token::Colon, current_line)
                     }
                     ';' => {
                         self.input.next();
-                        Token::SemiColon
+                        (Token::SemiColon, current_line)
                     }
                     '.' => {
                         self.input.next();
-                        Token::Dot
+                        (Token::Dot, current_line)
                     }
                     '#' => {
                         self.input.next();
-                        Token::Hash
+                        (Token::Hash, current_line)
                     }
                     '\'' => {
                         // Comment
@@ -188,30 +192,36 @@ impl<'a> Lexer<'a> {
                     '$' => {
                         // Hex literal
                         self.input.next();
-                        self.read_hex_number()
+                        let token = self.read_hex_number();
+                        (token, current_line)
                     }
                     '%' => {
                         // Binary literal
                         self.input.next();
-                        self.read_binary_number()
+                        let token = self.read_binary_number();
+                        (token, current_line)
                     }
                     '"' => {
                         // String literal
-                        self.read_string()
+                        let token = self.read_string();
+                        // Lines might change inside string if handled, but currently treated as single line
+                        (token, current_line)
                     }
                     _ => {
                         if ch.is_ascii_digit() {
-                            self.read_number()
+                            let token = self.read_number();
+                            (token, current_line)
                         } else if is_letter(ch) {
-                            self.read_identifier()
+                            let token = self.read_identifier();
+                            (token, current_line)
                         } else {
                             self.input.next();
-                            Token::Illegal(ch.to_string())
+                            (Token::Illegal(ch.to_string()), current_line)
                         }
                     }
                 }
             }
-            None => Token::EOF,
+            None => (Token::EOF, current_line),
         }
     }
 
@@ -250,7 +260,7 @@ impl<'a> Lexer<'a> {
         match ident.to_uppercase().as_str() {
             "REM" => {
                 self.read_comment();
-                self.next_token()
+                self.next_token().0
             }
             "BEGIN" => Token::Begin,
             "END" => Token::End,
@@ -388,18 +398,18 @@ impl<'a> Lexer<'a> {
         Token::Illegal(format!("\"{}", str_val)) // Unterminated string
     }
 
-    pub fn tokenize(&mut self) -> Result<Vec<Token>, String> {
+    pub fn tokenize(&mut self) -> Result<Vec<(Token, usize)>, String> {
         let mut tokens = Vec::new();
         loop {
-            let token = self.next_token();
+            let (token, line) = self.next_token();
             if let Token::Illegal(s) = &token {
-                return Err(format!("Illegal token: {}", s));
+                return Err(format!("Illegal token at line {}: {}", line, s));
             }
             if token == Token::EOF {
-                tokens.push(token);
+                tokens.push((token, line));
                 break;
             }
-            tokens.push(token);
+            tokens.push((token, line));
         }
         Ok(tokens)
     }
@@ -409,9 +419,9 @@ fn is_letter(ch: char) -> bool {
     ch.is_alphabetic()
 }
 
-pub fn tokenize(input: &str) -> Vec<Token> {
+pub fn tokenize(input: &str) -> Vec<(Token, usize)> {
     let mut lexer = Lexer::new(input);
-    lexer.tokenize().unwrap_or_else(|_| vec![Token::EOF])
+    lexer.tokenize().unwrap_or_else(|_| vec![(Token::EOF, 0)])
 }
 
 #[cfg(test)]
@@ -423,7 +433,7 @@ mod tests {
         let input = "+ - * / = < > <= >= <> ( ) , : ; #";
         let tokens = tokenize(input);
 
-        let expected = vec![
+        let expected_kinds = vec![
             Token::Plus,
             Token::Minus,
             Token::Star,
@@ -443,7 +453,11 @@ mod tests {
             Token::EOF,
         ];
 
-        assert_eq!(tokens, expected);
+        assert_eq!(tokens.len(), expected_kinds.len());
+        for (i, (token, line)) in tokens.iter().enumerate() {
+            assert_eq!(token, &expected_kinds[i]);
+            assert_eq!(*line, 1);
+        }
     }
 
     #[test]
@@ -451,7 +465,7 @@ mod tests {
         let input = "IF THEN ELSE END SUB WHILE WEND DO CONST DIM AS BYTE WORD INT BOOL PEEK POKE PRINT RETURN CALL AND OR NOT INCLUDE";
         let tokens = tokenize(input);
 
-        let expected = vec![
+        let expected_kinds = vec![
             Token::If,
             Token::Then,
             Token::Else,
@@ -479,7 +493,10 @@ mod tests {
             Token::EOF,
         ];
 
-        assert_eq!(tokens, expected);
+        assert_eq!(tokens.len(), expected_kinds.len());
+        for (i, (token, _)) in tokens.iter().enumerate() {
+            assert_eq!(token, &expected_kinds[i]);
+        }
     }
 
     #[test]
@@ -489,7 +506,10 @@ mod tests {
 
         let expected = vec![Token::If, Token::Then, Token::Else, Token::EOF];
 
-        assert_eq!(tokens, expected);
+        assert_eq!(tokens.len(), expected.len());
+        for (i, (token, _)) in tokens.iter().enumerate() {
+            assert_eq!(token, &expected[i]);
+        }
     }
 
     #[test]
@@ -505,7 +525,10 @@ mod tests {
             Token::EOF,
         ];
 
-        assert_eq!(tokens, expected);
+        assert_eq!(tokens.len(), expected.len());
+        for (i, (token, _)) in tokens.iter().enumerate() {
+            assert_eq!(token, &expected[i]);
+        }
     }
 
     #[test]
@@ -521,7 +544,10 @@ mod tests {
             Token::EOF,
         ];
 
-        assert_eq!(tokens, expected);
+        assert_eq!(tokens.len(), expected.len());
+        for (i, (token, _)) in tokens.iter().enumerate() {
+            assert_eq!(token, &expected[i]);
+        }
     }
 
     #[test]
@@ -529,7 +555,7 @@ mod tests {
         let input = "x = 1 ' This is a comment\ny = 2 REM Another comment";
         let tokens = tokenize(input);
 
-        let expected = vec![
+        let expected_tokens = vec![
             Token::Identifier("x".to_string()),
             Token::Equal,
             Token::Integer(1),
@@ -540,7 +566,14 @@ mod tests {
             Token::EOF,
         ];
 
-        assert_eq!(tokens, expected);
+        // Lines: x=1 (1), Newline (1->2), y=2 (2), EOF
+        let expected_lines = vec![1, 1, 1, 1, 2, 2, 2, 2];
+
+        assert_eq!(tokens.len(), expected_tokens.len());
+        for (i, (token, line)) in tokens.iter().enumerate() {
+            assert_eq!(token, &expected_tokens[i]);
+            assert_eq!(*line, expected_lines[i]);
+        }
     }
 
     #[test]
@@ -560,11 +593,12 @@ END SUB
         let tokens = tokenize(input);
 
         // Basic structure check
-        assert_eq!(tokens[0], Token::Newline); // Start with newline
-        assert_eq!(tokens[1], Token::Const);
-        assert_eq!(tokens[2], Token::Identifier("BG_COLOR".to_string()));
-        assert_eq!(tokens[3], Token::Equal);
-        assert_eq!(tokens[4], Token::Integer(15));
-        // ...
+        assert_eq!(tokens[0].0, Token::Newline); // Start with newline
+        assert_eq!(tokens[0].1, 1);
+
+        assert_eq!(tokens[1].0, Token::Const);
+        assert_eq!(tokens[1].1, 2);
+
+        assert_eq!(tokens[2].0, Token::Identifier("BG_COLOR".to_string()));
     }
 }

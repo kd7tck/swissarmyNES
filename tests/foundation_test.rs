@@ -50,7 +50,7 @@ fn test_bitwise_8bit_generation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
 
     // Check AND
     assert!(code.iter().any(|line| line.contains("AND $00"))); // 8-bit AND
@@ -98,7 +98,7 @@ fn test_unary_ops() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
 
     // Negate: EOR #$FF, ADC #1 (Two's complement)
     let negate_found = code
@@ -144,7 +144,7 @@ fn test_peek_generation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
 
     // Static PEEK
     assert!(code.iter().any(|line| line.contains("LDA $2002")));
@@ -187,7 +187,7 @@ fn test_math_builtins() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
 
     // ABS check: BCC (skip negate if positive/unsigned)
     assert!(code.iter().any(|line| line.contains("BCC")));

@@ -32,7 +32,7 @@ mod tests {
         };
 
         let mut cg = CodeGenerator::new(st);
-        let code = cg.generate(&program).expect("Codegen failed");
+        let (code, _) = cg.generate(&program).expect("Codegen failed");
 
         // Find Runtime_GetHeapSlot
         let start_idx = code

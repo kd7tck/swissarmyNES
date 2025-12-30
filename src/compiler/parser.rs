@@ -1,11 +1,11 @@
 use super::ast::{
     AnimationFrame, BinaryOperator, DataType, Expression, MetaspriteTile, Program, Statement,
-    TopLevel, UnaryOperator,
+    StatementKind, TopLevel, TopLevelKind, UnaryOperator,
 };
 use super::lexer::Token;
 
 pub struct Parser {
-    tokens: Vec<Token>,
+    tokens: Vec<(Token, usize)>,
     position: usize,
 }
 
@@ -25,7 +25,7 @@ enum Precedence {
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<(Token, usize)>) -> Self {
         Self {
             tokens,
             position: 0,
@@ -52,33 +52,50 @@ impl Parser {
     }
 
     fn parse_top_level(&mut self) -> Result<TopLevel, String> {
+        let start_line = self.current_line();
+
         if self.match_token(Token::Include) {
             let filename = if let Token::StringLiteral(s) = self.advance().clone() {
                 s
             } else {
-                return Err("Expected string literal after INCLUDE".to_string());
+                return Err(format!(
+                    "Line {}: Expected string literal after INCLUDE",
+                    start_line
+                ));
             };
             self.match_token(Token::Newline);
-            return Ok(TopLevel::Include(filename));
+            return Ok(TopLevel {
+                kind: TopLevelKind::Include(filename),
+                line: start_line,
+            });
         }
 
         if self.match_token(Token::Const) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err("Expected identifier after CONST".to_string());
+                return Err(format!(
+                    "Line {}: Expected identifier after CONST",
+                    start_line
+                ));
             };
             self.consume(Token::Equal, "Expected '=' in CONST declaration")?;
             let val = self.parse_expression()?;
             self.match_token(Token::Newline);
-            return Ok(TopLevel::Const(name, val));
+            return Ok(TopLevel {
+                kind: TopLevelKind::Const(name, val),
+                line: start_line,
+            });
         }
 
         if self.match_token(Token::Dim) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err("Expected identifier after DIM".to_string());
+                return Err(format!(
+                    "Line {}: Expected identifier after DIM",
+                    start_line
+                ));
             };
 
             // Check for Array Size: DIM x(10) AS BYTE
@@ -87,11 +104,17 @@ impl Parser {
                 let size_expr = self.parse_expression()?;
                 if let Expression::Integer(val) = size_expr {
                     if val <= 0 {
-                        return Err("Array size must be positive".to_string());
+                        return Err(format!(
+                            "Line {}: Array size must be positive",
+                            self.current_line()
+                        ));
                     }
                     array_size = Some(val as usize);
                 } else {
-                    return Err("Array size must be an integer literal".to_string());
+                    return Err(format!(
+                        "Line {}: Array size must be an integer literal",
+                        self.current_line()
+                    ));
                 }
                 self.consume(Token::RParen, "Expected ')' after array size")?;
             }
@@ -109,14 +132,20 @@ impl Parser {
             }
 
             self.match_token(Token::Newline);
-            return Ok(TopLevel::Dim(name, data_type, init_expr));
+            return Ok(TopLevel {
+                kind: TopLevelKind::Dim(name, data_type, init_expr),
+                line: start_line,
+            });
         }
 
         if self.match_token(Token::Type) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err("Expected identifier after TYPE".to_string());
+                return Err(format!(
+                    "Line {}: Expected identifier after TYPE",
+                    start_line
+                ));
             };
             self.consume(Token::Newline, "Expected newline after TYPE name")?;
 
@@ -129,7 +158,10 @@ impl Parser {
                 let member_name = if let Token::Identifier(n) = self.advance().clone() {
                     n
                 } else {
-                    return Err("Expected member name in TYPE definition".to_string());
+                    return Err(format!(
+                        "Line {}: Expected member name in TYPE definition",
+                        self.current_line()
+                    ));
                 };
 
                 // Check for array member: member(10) AS Type
@@ -138,11 +170,17 @@ impl Parser {
                     let size_expr = self.parse_expression()?;
                     if let Expression::Integer(val) = size_expr {
                         if val <= 0 {
-                            return Err("Array size must be positive".to_string());
+                            return Err(format!(
+                                "Line {}: Array size must be positive",
+                                self.current_line()
+                            ));
                         }
                         array_size = Some(val as usize);
                     } else {
-                        return Err("Array size must be an integer literal".to_string());
+                        return Err(format!(
+                            "Line {}: Array size must be an integer literal",
+                            self.current_line()
+                        ));
                     }
                     self.consume(Token::RParen, "Expected ')' after array size")?;
                 }
@@ -162,14 +200,20 @@ impl Parser {
             self.consume(Token::End, "Expected END TYPE")?;
             self.consume(Token::Type, "Expected TYPE after END")?;
 
-            return Ok(TopLevel::TypeDecl(name, members));
+            return Ok(TopLevel {
+                kind: TopLevelKind::TypeDecl(name, members),
+                line: start_line,
+            });
         }
 
         if self.match_token(Token::Enum) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err("Expected identifier after ENUM".to_string());
+                return Err(format!(
+                    "Line {}: Expected identifier after ENUM",
+                    start_line
+                ));
             };
             self.consume(Token::Newline, "Expected newline after ENUM name")?;
 
@@ -182,7 +226,10 @@ impl Parser {
                 let variant_name = if let Token::Identifier(n) = self.advance().clone() {
                     n
                 } else {
-                    return Err("Expected variant name in ENUM definition".to_string());
+                    return Err(format!(
+                        "Line {}: Expected variant name in ENUM definition",
+                        self.current_line()
+                    ));
                 };
 
                 let mut val = None;
@@ -194,13 +241,17 @@ impl Parser {
                             if let Expression::Integer(v) = *sub {
                                 val = Some(-v);
                             } else {
-                                return Err(
-                                    "Enum variant value must be an integer literal".to_string()
-                                );
+                                return Err(format!(
+                                    "Line {}: Enum variant value must be an integer literal",
+                                    self.current_line()
+                                ));
                             }
                         }
                         _ => {
-                            return Err("Enum variant value must be an integer literal".to_string());
+                            return Err(format!(
+                                "Line {}: Enum variant value must be an integer literal",
+                                self.current_line()
+                            ));
                         }
                     }
                 }
@@ -212,14 +263,20 @@ impl Parser {
             self.consume(Token::End, "Expected END ENUM")?;
             self.consume(Token::Enum, "Expected ENUM after END")?;
 
-            return Ok(TopLevel::Enum(name, variants));
+            return Ok(TopLevel {
+                kind: TopLevelKind::Enum(name, variants),
+                line: start_line,
+            });
         }
 
         if self.match_token(Token::Sub) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err("Expected identifier after SUB".to_string());
+                return Err(format!(
+                    "Line {}: Expected identifier after SUB",
+                    start_line
+                ));
             };
             self.consume(Token::LParen, "Expected '(' after SUB name")?;
 
@@ -229,7 +286,10 @@ impl Parser {
                     let param_name = if let Token::Identifier(n) = self.advance().clone() {
                         n
                     } else {
-                        return Err("Expected parameter name".to_string());
+                        return Err(format!(
+                            "Line {}: Expected parameter name",
+                            self.current_line()
+                        ));
                     };
 
                     self.consume(Token::As, "Expected AS after parameter name")?;
@@ -249,14 +309,20 @@ impl Parser {
             self.consume(Token::End, "Expected END SUB")?;
             self.consume(Token::Sub, "Expected SUB after END")?;
 
-            return Ok(TopLevel::Sub(name, params, body));
+            return Ok(TopLevel {
+                kind: TopLevelKind::Sub(name, params, body),
+                line: start_line,
+            });
         }
 
         if self.match_token(Token::Interrupt) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err("Expected identifier after INTERRUPT".to_string());
+                return Err(format!(
+                    "Line {}: Expected identifier after INTERRUPT",
+                    start_line
+                ));
             };
             self.consume(Token::LParen, "Expected '(' after INTERRUPT name")?;
             self.consume(Token::RParen, "Expected ')' after INTERRUPT name")?;
@@ -269,7 +335,10 @@ impl Parser {
             self.consume(Token::End, "Expected END INTERRUPT")?;
             self.consume(Token::Interrupt, "Expected INTERRUPT after END")?;
 
-            return Ok(TopLevel::Interrupt(name, body));
+            return Ok(TopLevel {
+                kind: TopLevelKind::Interrupt(name, body),
+                line: start_line,
+            });
         }
 
         if self.match_token(Token::Def) {
@@ -277,7 +346,7 @@ impl Parser {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err("Expected macro name".to_string());
+                return Err(format!("Line {}: Expected macro name", self.current_line()));
             };
 
             self.consume(Token::LParen, "Expected '(' after macro name")?;
@@ -287,7 +356,10 @@ impl Parser {
                     let param_name = if let Token::Identifier(n) = self.advance().clone() {
                         n
                     } else {
-                        return Err("Expected parameter name".to_string());
+                        return Err(format!(
+                            "Line {}: Expected parameter name",
+                            self.current_line()
+                        ));
                     };
                     params.push(param_name);
                     if !self.match_token(Token::Comma) {
@@ -303,14 +375,20 @@ impl Parser {
             self.consume(Token::End, "Expected END MACRO")?;
             self.consume(Token::Macro, "Expected MACRO after END")?;
 
-            return Ok(TopLevel::Macro(name, params, body));
+            return Ok(TopLevel {
+                kind: TopLevelKind::Macro(name, params, body),
+                line: start_line,
+            });
         }
 
         if self.match_token(Token::Animation) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err("Expected identifier after ANIMATION".to_string());
+                return Err(format!(
+                    "Line {}: Expected identifier after ANIMATION",
+                    start_line
+                ));
             };
             self.consume(Token::Newline, "Expected newline after ANIMATION name")?;
 
@@ -326,17 +404,26 @@ impl Parser {
                     let metasprite = if let Token::Identifier(n) = self.advance().clone() {
                         n
                     } else {
-                        return Err("Expected metasprite name after FRAME".to_string());
+                        return Err(format!(
+                            "Line {}: Expected metasprite name after FRAME",
+                            self.current_line()
+                        ));
                     };
                     self.consume(Token::Comma, "Expected ',' after metasprite name")?;
                     let duration_expr = self.parse_expression()?;
                     let duration = if let Expression::Integer(val) = duration_expr {
                         if !(0..=255).contains(&val) {
-                            return Err("Duration must be 0-255".to_string());
+                            return Err(format!(
+                                "Line {}: Duration must be 0-255",
+                                self.current_line()
+                            ));
                         }
                         val as u8
                     } else {
-                        return Err("Duration must be an integer literal".to_string());
+                        return Err(format!(
+                            "Line {}: Duration must be an integer literal",
+                            self.current_line()
+                        ));
                     };
                     frames.push(AnimationFrame {
                         metasprite,
@@ -353,7 +440,8 @@ impl Parser {
                 }
 
                 return Err(format!(
-                    "Expected FRAME, LOOP or END ANIMATION, found {:?}",
+                    "Line {}: Expected FRAME, LOOP or END ANIMATION, found {:?}",
+                    self.current_line(),
                     self.peek()
                 ));
             }
@@ -361,14 +449,20 @@ impl Parser {
             self.consume(Token::End, "Expected END ANIMATION")?;
             self.consume(Token::Animation, "Expected ANIMATION after END")?;
 
-            return Ok(TopLevel::Animation(name, frames, loops));
+            return Ok(TopLevel {
+                kind: TopLevelKind::Animation(name, frames, loops),
+                line: start_line,
+            });
         }
 
         if self.match_token(Token::Metasprite) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err("Expected identifier after METASPRITE".to_string());
+                return Err(format!(
+                    "Line {}: Expected identifier after METASPRITE",
+                    start_line
+                ));
             };
             self.consume(Token::Newline, "Expected newline after METASPRITE name")?;
 
@@ -404,15 +498,18 @@ impl Parser {
             self.consume(Token::End, "Expected END METASPRITE")?;
             self.consume(Token::Metasprite, "Expected METASPRITE after END")?;
 
-            return Ok(TopLevel::Metasprite(name, tiles));
+            return Ok(TopLevel {
+                kind: TopLevelKind::Metasprite(name, tiles),
+                line: start_line,
+            });
         }
 
         let mut data_label = None;
         if let Token::Identifier(name) = self.peek().clone() {
             if self.position + 1 < self.tokens.len()
-                && self.tokens[self.position + 1] == Token::Colon
+                && self.tokens[self.position + 1].0 == Token::Colon
                 && self.position + 2 < self.tokens.len()
-                && self.tokens[self.position + 2] == Token::Data
+                && self.tokens[self.position + 2].0 == Token::Data
             {
                 self.advance();
                 self.advance();
@@ -430,7 +527,10 @@ impl Parser {
                 }
             }
             self.match_token(Token::Newline);
-            return Ok(TopLevel::Data(data_label, exprs));
+            return Ok(TopLevel {
+                kind: TopLevelKind::Data(data_label, exprs),
+                line: start_line,
+            });
         }
 
         if self.match_token(Token::Asm) {
@@ -458,10 +558,17 @@ impl Parser {
             }
             self.consume(Token::End, "Expected END after ASM block")?;
             self.consume(Token::Asm, "Expected ASM after END")?;
-            return Ok(TopLevel::Asm(lines));
+            return Ok(TopLevel {
+                kind: TopLevelKind::Asm(lines),
+                line: start_line,
+            });
         }
 
-        Err(format!("Unexpected token at top level: {:?}", self.peek()))
+        Err(format!(
+            "Line {}: Unexpected token at top level: {:?}",
+            start_line,
+            self.peek()
+        ))
     }
 
     fn parse_type(&mut self) -> Result<DataType, String> {
@@ -485,36 +592,47 @@ impl Parser {
             return Ok(DataType::Struct(name));
         }
         Err(format!(
-            "Expected type (BYTE, WORD, BOOL, STRING, StructName), found {:?}",
+            "Line {}: Expected type (BYTE, WORD, BOOL, STRING, StructName), found {:?}",
+            self.current_line(),
             self.peek()
         ))
     }
 
     fn parse_statement(&mut self) -> Result<Statement, String> {
+        let start_line = self.current_line();
         if self.match_token(Token::Let) {
             let target = self.parse_precedence(Precedence::Comparison)?;
             self.consume(Token::Equal, "Expected '=' after variable name in LET")?;
             let expr = self.parse_expression()?;
-            return Ok(Statement::Let(target, expr));
+            return Ok(Statement {
+                kind: StatementKind::Let(target, expr),
+                line: start_line,
+            });
         }
         if self.match_token(Token::If) {
-            return self.parse_if();
+            return self.parse_if(start_line);
         }
         if self.match_token(Token::While) {
-            return self.parse_while();
+            return self.parse_while(start_line);
         }
         if self.match_token(Token::Do) {
-            return self.parse_do_while();
+            return self.parse_do_while(start_line);
         }
         if self.match_token(Token::For) {
-            return self.parse_for();
+            return self.parse_for(start_line);
         }
         if self.match_token(Token::Return) {
             if self.check(Token::Newline) || self.check(Token::EOF) {
-                return Ok(Statement::Return(None));
+                return Ok(Statement {
+                    kind: StatementKind::Return(None),
+                    line: start_line,
+                });
             }
             let expr = self.parse_expression()?;
-            return Ok(Statement::Return(Some(expr)));
+            return Ok(Statement {
+                kind: StatementKind::Return(Some(expr)),
+                line: start_line,
+            });
         }
         if self.match_token(Token::Poke) {
             self.consume(Token::LParen, "Expected '(' after POKE")?;
@@ -522,13 +640,19 @@ impl Parser {
             self.consume(Token::Comma, "Expected ',' after POKE address")?;
             let val = self.parse_expression()?;
             self.consume(Token::RParen, "Expected ')' after POKE value")?;
-            return Ok(Statement::Poke(addr, val));
+            return Ok(Statement {
+                kind: StatementKind::Poke(addr, val),
+                line: start_line,
+            });
         }
         if self.match_token(Token::PlaySfx) {
             self.consume(Token::LParen, "Expected '(' after PLAY_SFX")?;
             let id = self.parse_expression()?;
             self.consume(Token::RParen, "Expected ')' after id")?;
-            return Ok(Statement::PlaySfx(id));
+            return Ok(Statement {
+                kind: StatementKind::PlaySfx(id),
+                line: start_line,
+            });
         }
         if self.match_token(Token::Print) {
             let mut args = Vec::new();
@@ -542,7 +666,10 @@ impl Parser {
                     break;
                 }
             }
-            return Ok(Statement::Print(args));
+            return Ok(Statement {
+                kind: StatementKind::Print(args),
+                line: start_line,
+            });
         }
         if self.match_token(Token::Read) {
             let mut vars = Vec::new();
@@ -550,16 +677,22 @@ impl Parser {
                 if let Token::Identifier(name) = self.advance().clone() {
                     vars.push(name);
                 } else {
-                    return Err("Expected variable name after READ".to_string());
+                    return Err(format!(
+                        "Line {}: Expected variable name after READ",
+                        start_line
+                    ));
                 }
                 if !self.match_token(Token::Comma) {
                     break;
                 }
             }
-            return Ok(Statement::Read(vars));
+            return Ok(Statement {
+                kind: StatementKind::Read(vars),
+                line: start_line,
+            });
         }
         if self.match_token(Token::Select) {
-            return self.parse_select();
+            return self.parse_select(start_line);
         }
         if self.match_token(Token::Restore) {
             let mut label = None;
@@ -567,7 +700,10 @@ impl Parser {
                 self.advance();
                 label = Some(name);
             }
-            return Ok(Statement::Restore(label));
+            return Ok(Statement {
+                kind: StatementKind::Restore(label),
+                line: start_line,
+            });
         }
         if self.match_token(Token::Asm) {
             let mut lines = Vec::new();
@@ -594,7 +730,10 @@ impl Parser {
             }
             self.consume(Token::End, "Expected END after ASM block")?;
             self.consume(Token::Asm, "Expected ASM after END")?;
-            return Ok(Statement::Asm(lines));
+            return Ok(Statement {
+                kind: StatementKind::Asm(lines),
+                line: start_line,
+            });
         }
         if self.match_token(Token::Call) {
             // CALL Identifier(Args) or CALL Expression?
@@ -604,38 +743,65 @@ impl Parser {
             let expr = self.parse_expression()?;
             // Check if it's a Call expression
             if let Expression::Call(target, args) = expr {
-                return Ok(Statement::Call(*target, args));
+                return Ok(Statement {
+                    kind: StatementKind::Call(*target, args),
+                    line: start_line,
+                });
             } else if let Expression::Identifier(name) = expr {
                 // Call Name (Implicit args empty)
-                return Ok(Statement::Call(Expression::Identifier(name), vec![]));
+                return Ok(Statement {
+                    kind: StatementKind::Call(Expression::Identifier(name), vec![]),
+                    line: start_line,
+                });
             } else {
-                return Err("Expected function call after CALL".to_string());
+                return Err(format!(
+                    "Line {}: Expected function call after CALL",
+                    start_line
+                ));
             }
         }
         if self.match_token(Token::On) {
             let vector = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err("Expected vector name (NMI/IRQ) after ON".to_string());
+                return Err(format!(
+                    "Line {}: Expected vector name (NMI/IRQ) after ON",
+                    start_line
+                ));
             };
             if !self.match_token(Token::Do) {
-                return Err("Expected DO after vector name".to_string());
+                return Err(format!(
+                    "Line {}: Expected DO after vector name",
+                    start_line
+                ));
             }
             let routine = if let Token::Identifier(n) = self.advance().clone() {
                 n
             } else {
-                return Err("Expected routine name after DO".to_string());
+                return Err(format!(
+                    "Line {}: Expected routine name after DO",
+                    start_line
+                ));
             };
-            return Ok(Statement::On(vector, routine));
+            return Ok(Statement {
+                kind: StatementKind::On(vector, routine),
+                line: start_line,
+            });
         }
 
         if self.match_token(Token::WaitVBlank) {
-            return Ok(Statement::WaitVBlank);
+            return Ok(Statement {
+                kind: StatementKind::WaitVBlank,
+                line: start_line,
+            });
         }
 
         if self.match_token(Token::Randomize) {
             let expr = self.parse_expression()?;
-            return Ok(Statement::Randomize(expr));
+            return Ok(Statement {
+                kind: StatementKind::Randomize(expr),
+                line: start_line,
+            });
         }
 
         // Implicit Let or Call
@@ -647,25 +813,38 @@ impl Parser {
 
             if self.match_token(Token::Equal) {
                 let val = self.parse_expression()?;
-                return Ok(Statement::Let(expr, val));
+                return Ok(Statement {
+                    kind: StatementKind::Let(expr, val),
+                    line: start_line,
+                });
             }
 
             if let Expression::Call(target, args) = expr {
-                return Ok(Statement::Call(*target, args));
+                return Ok(Statement {
+                    kind: StatementKind::Call(*target, args),
+                    line: start_line,
+                });
             }
 
             // Allow implicit Call without parens? "MyFunc"
             if let Expression::Identifier(name) = expr {
-                return Ok(Statement::Call(Expression::Identifier(name), vec![]));
+                return Ok(Statement {
+                    kind: StatementKind::Call(Expression::Identifier(name), vec![]),
+                    line: start_line,
+                });
             }
 
             return Err(format!(
-                "Unexpected expression in statement position: {:?}",
-                expr
+                "Line {}: Unexpected expression in statement position: {:?}",
+                start_line, expr
             ));
         }
 
-        Err(format!("Expected statement, found {:?}", self.peek()))
+        Err(format!(
+            "Line {}: Expected statement, found {:?}",
+            start_line,
+            self.peek()
+        ))
     }
 
     fn parse_block(&mut self) -> Result<Vec<Statement>, String> {
@@ -687,7 +866,7 @@ impl Parser {
         )
     }
 
-    fn parse_if(&mut self) -> Result<Statement, String> {
+    fn parse_if(&mut self, line: usize) -> Result<Statement, String> {
         let condition = self.parse_expression()?;
         self.consume(Token::Then, "Expected THEN after IF condition")?;
         self.consume(Token::Newline, "Expected newline after THEN")?;
@@ -699,31 +878,43 @@ impl Parser {
         }
         self.consume(Token::End, "Expected END IF")?;
         self.consume(Token::If, "Expected IF after END")?;
-        Ok(Statement::If(condition, then_block, else_block))
+        Ok(Statement {
+            kind: StatementKind::If(condition, then_block, else_block),
+            line,
+        })
     }
 
-    fn parse_while(&mut self) -> Result<Statement, String> {
+    fn parse_while(&mut self, line: usize) -> Result<Statement, String> {
         let condition = self.parse_expression()?;
         self.consume(Token::Newline, "Expected newline after WHILE condition")?;
         let body = self.parse_block()?;
         self.consume(Token::Wend, "Expected WEND")?;
-        Ok(Statement::While(condition, body))
+        Ok(Statement {
+            kind: StatementKind::While(condition, body),
+            line,
+        })
     }
 
-    fn parse_do_while(&mut self) -> Result<Statement, String> {
+    fn parse_do_while(&mut self, line: usize) -> Result<Statement, String> {
         self.consume(Token::Newline, "Expected newline after DO")?;
         let body = self.parse_block()?;
         self.consume(Token::Loop, "Expected LOOP after DO block")?;
         self.consume(Token::While, "Expected WHILE after LOOP")?;
         let condition = self.parse_expression()?;
-        Ok(Statement::DoWhile(body, condition))
+        Ok(Statement {
+            kind: StatementKind::DoWhile(body, condition),
+            line,
+        })
     }
 
-    fn parse_for(&mut self) -> Result<Statement, String> {
+    fn parse_for(&mut self, line: usize) -> Result<Statement, String> {
         let var_name = if let Token::Identifier(name) = self.advance().clone() {
             name
         } else {
-            return Err("Expected variable name after FOR".to_string());
+            return Err(format!(
+                "Line {}: Expected variable name after FOR",
+                self.current_line()
+            ));
         };
         self.consume(Token::Equal, "Expected '=' after FOR variable")?;
         let start_expr = self.parse_expression()?;
@@ -741,12 +932,13 @@ impl Parser {
                 self.advance();
             }
         }
-        Ok(Statement::For(
-            var_name, start_expr, end_expr, step_expr, body,
-        ))
+        Ok(Statement {
+            kind: StatementKind::For(var_name, start_expr, end_expr, step_expr, body),
+            line,
+        })
     }
 
-    fn parse_select(&mut self) -> Result<Statement, String> {
+    fn parse_select(&mut self, line: usize) -> Result<Statement, String> {
         self.consume(Token::Case, "Expected CASE after SELECT")?;
         let expr = self.parse_expression()?;
         self.consume(Token::Newline, "Expected newline after SELECT CASE <expr>")?;
@@ -769,14 +961,18 @@ impl Parser {
                 }
             } else {
                 return Err(format!(
-                    "Expected CASE or END SELECT, found {:?}",
+                    "Line {}: Expected CASE or END SELECT, found {:?}",
+                    self.current_line(),
                     self.peek()
                 ));
             }
         }
         self.consume(Token::End, "Expected END SELECT")?;
         self.consume(Token::Select, "Expected SELECT after END")?;
-        Ok(Statement::Select(expr, cases, case_else))
+        Ok(Statement {
+            kind: StatementKind::Select(expr, cases, case_else),
+            line,
+        })
     }
 
     pub fn parse_expression(&mut self) -> Result<Expression, String> {
@@ -809,7 +1005,12 @@ impl Parser {
                         self.advance();
                         "Tile".to_string()
                     }
-                    _ => return Err("Expected member name after '.'".to_string()),
+                    _ => {
+                        return Err(format!(
+                            "Line {}: Expected member name after '.'",
+                            self.current_line()
+                        ))
+                    }
                 };
                 left = Expression::MemberAccess(Box::new(left), member);
             } else if op == Token::LParen {
@@ -874,7 +1075,11 @@ impl Parser {
                 self.consume(Token::RParen, "Expected ')' after expression")?;
                 Ok(expr)
             }
-            _ => Err(format!("Expected expression, found {:?}", token)),
+            _ => Err(format!(
+                "Line {}: Expected expression, found {:?}",
+                self.current_line(),
+                token
+            )),
         }
     }
 
@@ -936,7 +1141,19 @@ impl Parser {
         if self.position >= self.tokens.len() {
             return &Token::EOF;
         }
-        &self.tokens[self.position]
+        &self.tokens[self.position].0
+    }
+
+    fn current_line(&self) -> usize {
+        if self.position >= self.tokens.len() {
+            if let Some(last) = self.tokens.last() {
+                last.1
+            } else {
+                1
+            }
+        } else {
+            self.tokens[self.position].1
+        }
     }
 
     fn advance(&mut self) -> &Token {
@@ -950,7 +1167,7 @@ impl Parser {
         if self.position == 0 {
             return &Token::EOF;
         }
-        &self.tokens[self.position - 1]
+        &self.tokens[self.position - 1].0
     }
 
     fn is_at_end(&self) -> bool {
@@ -977,10 +1194,16 @@ impl Parser {
         if self.check(token) {
             Ok(self.advance())
         } else {
-            Err(format!("{} Found: {:?}", message, self.peek()))
+            Err(format!(
+                "Line {}: {} Found: {:?}",
+                self.current_line(),
+                message,
+                self.peek()
+            ))
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1041,7 +1264,7 @@ mod tests {
         let mut parser = Parser::new(tokens);
         let program = parser.parse_program().expect("Failed to parse program");
 
-        if let TopLevel::Dim(name, dtype, _) = &program.declarations[0] {
+        if let TopLevelKind::Dim(name, dtype, _) = &program.declarations[0].kind {
             assert_eq!(name, "x");
             if let DataType::Array(inner, size) = dtype {
                 assert_eq!(**inner, DataType::Byte);

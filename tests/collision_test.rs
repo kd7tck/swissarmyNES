@@ -30,7 +30,7 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let asm_lines = codegen.generate(&program).expect("Codegen failed");
+        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
         let asm_source = asm_lines.join("\n");
 
         assert!(asm_source.contains("JSR Runtime_Collision_Rect"));
@@ -62,7 +62,7 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let asm_lines = codegen.generate(&program).expect("Codegen failed");
+        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
         let asm_source = asm_lines.join("\n");
 
         assert!(asm_source.contains("JSR Runtime_Collision_Point"));
@@ -90,7 +90,7 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let asm_lines = codegen.generate(&program).expect("Codegen failed");
+        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
         let asm_source = asm_lines.join("\n");
 
         assert!(asm_source.contains("JSR Runtime_Collision_Tile"));

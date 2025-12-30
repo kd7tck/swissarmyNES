@@ -33,7 +33,7 @@ fn test_mul_16_generation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
 
     // Check for Math_Mul16 usage
     assert!(code.iter().any(|line| line.contains("JSR Math_Mul16")));
@@ -70,7 +70,7 @@ fn test_div_16_generation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
 
     assert!(code.iter().any(|line| line.contains("JSR Math_Div16")));
     assert!(code.iter().any(|line| line.contains("Math_Div16:")));
@@ -105,7 +105,7 @@ fn test_div_16_signed_generation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
 
     assert!(code
         .iter()
@@ -141,7 +141,7 @@ fn test_mod_generation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
 
     assert!(code.iter().any(|line| line.contains("JSR Math_Div16")));
     // Check it reads Remainder from $08/$09
@@ -182,7 +182,7 @@ fn test_signed_comparison_generation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
 
     // Check for Signed logic (BVS)
     // LessThan logic: BVS overflow_lbl, BMI true_lbl...
@@ -231,7 +231,7 @@ fn test_mixed_comparison_promotion() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let code = cg.generate(&program).expect("Codegen failed");
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
 
     // Check for Signed logic (BVS) because Int is present
     assert!(code.iter().any(|line| line.contains("BVS")));

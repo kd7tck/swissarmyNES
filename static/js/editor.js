@@ -61,8 +61,29 @@ class SwissEditor {
             }
         });
 
+        // Hover for Address (Phase 35)
+        this.lineNumbers.addEventListener('mouseover', (e) => {
+            if (e.target.classList.contains('line-num')) {
+                const line = parseInt(e.target.dataset.line);
+                this.showAddressTooltip(line, e.clientX, e.clientY);
+            }
+        });
+        this.lineNumbers.addEventListener('mouseout', () => {
+            this.hideAddressTooltip();
+        });
+
         // Initial update
         this.update();
+
+        // Address Tooltip Element
+        this.tooltip = document.createElement('div');
+        this.tooltip.id = 'address-tooltip';
+        Object.assign(this.tooltip.style, {
+            position: 'fixed', display: 'none', background: '#333', color: '#fff',
+            padding: '4px', borderRadius: '4px', fontSize: '12px', zIndex: '2000',
+            pointerEvents: 'none', border: '1px solid #666'
+        });
+        document.body.appendChild(this.tooltip);
 
         // Bind Run button
         const btnRun = document.getElementById('btn-run');
@@ -136,6 +157,30 @@ class SwissEditor {
                 return `<div class="line-num${active}" data-line="${line}">${line}</div>`;
             })
             .join('');
+    }
+
+    showAddressTooltip(line, x, y) {
+        if (!this.sourceMap) return;
+        // Find address for line
+        // We look for exact match or first occurrence
+        let addr = null;
+        for (const [sLine, sAddr] of this.sourceMap) {
+            if (sLine === line) {
+                addr = sAddr;
+                break;
+            }
+        }
+
+        if (addr !== null) {
+            this.tooltip.innerText = `$${addr.toString(16).toUpperCase().padStart(4, '0')}`;
+            this.tooltip.style.left = (x + 10) + 'px';
+            this.tooltip.style.top = (y + 10) + 'px';
+            this.tooltip.style.display = 'block';
+        }
+    }
+
+    hideAddressTooltip() {
+        if (this.tooltip) this.tooltip.style.display = 'none';
     }
 
     toggleBreakpoint(line) {

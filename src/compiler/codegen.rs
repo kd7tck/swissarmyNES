@@ -90,7 +90,12 @@ impl CodeGenerator {
             return 2;
         }
         if operand.starts_with("($") {
-            return 3;
+            // JMP Indirect is 3 bytes, but (Indirect),Y or (Indirect,X) are 2 bytes
+            if parts[0].eq_ignore_ascii_case("JMP") {
+                return 3;
+            } else {
+                return 2;
+            }
         }
 
         if operand.starts_with('$') {

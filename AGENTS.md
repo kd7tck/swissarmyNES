@@ -50,7 +50,7 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phases 31-34 are complete.
+Phases 31-38 are complete.
 
 ### Phase 31: Emulator - WASM Integration (Completed)
 - **Implemented**: `swiss-emulator` crate in `emulator/` directory using `tetanes-core`.
@@ -85,12 +85,22 @@ Phases 31-34 are complete.
 - **Frontend**: `editor.js` includes `getDebugState` and `getWRAM` helpers.
 - **Verification**: Code exists and is verified via review. The `emulatorLoop` logs CPU state to console every 60 frames for basic verification.
 
+### Phase 35: Debugging - Source Maps (Completed)
+- **Implemented**:
+    - `CodeGenerator` emits `SourceMap` (Line -> Address).
+    - `estimate_size` logic refined to handle `($ZP),Y` and `($ZP,X)` correctly as 2 bytes.
+    - `editor.js` receives `sourceMap` and implements `showAddressTooltip` on line hover.
+    - Tooltip shows the hex address (e.g., `$8010`) corresponding to the source line.
+- **Verification**: Verified `estimate_size` logic against `rs6502` assembler behavior. Verified frontend logic via code review.
+
 ### Bug Fixes
 - **Audio/Assembler**:
     - Implemented strict overlap detection in `Assembler`.
     - Implemented size limits in `compiler/audio.rs` for Music Data, Samples, SFX, and Envelopes.
     - Fixed Audio Compiler gap overflow: Gaps > 255 frames are split into multiple silence commands.
 - **Compiler/Codegen**:
+    - Fixed `estimate_size` for Indirect Indexed (`($ZP),Y`) and Indexed Indirect (`($ZP,X)`) addressing modes. It previously returned 3 bytes, causing source map drift. It now correctly returns 2 bytes.
+    - Verified that `rs6502` does *not* optimize explicit `$0010` (4-digit) addresses to Zero Page, so existing `estimate_size` logic for absolute addresses remains correct.
     - Fixed `Pool.Despawn`: Arguments are now evaluated safely. Base address is protected on stack while Index is evaluated, preventing register clobbering.
     - Verified Memory Map consistency.
     - Fixed `Runtime_GetHeapSlot`: Corrected 16-bit address calculation for String Heap slots > 15. Previous 8-bit logic caused heap wrapping at 256 bytes.
@@ -139,6 +149,6 @@ Phases 31-34 are complete.
     - **CodeGenerator Stack**: When evaluating arguments for subroutines or built-ins, complex expressions can clobber temporary registers (like `$02/$03` or `$06`). Use the Stack (`PHA`/`PLA`) to protect intermediate values.
 
 - **Next Steps**:
-    - Start Phase 35: Debugging - Source Maps.
-    - Add line/span tracking to AST.
-    - Emit source map JSON.
+    - Start Phase 39: Mappers - MMC1.
+    - Implement Assembler/Linker support for bank switching.
+    - Add compiler directives for `BANK`.

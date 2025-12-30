@@ -15,6 +15,10 @@ class SwissEditor {
         this.wasmMemory = null;
         this.frameCount = 0;
 
+        // Debug State
+        this.sourceMap = []; // Line (1-based) -> Address
+        this.activeLine = -1;
+
         // Input State
         this.gamepadIndex = null;
         this.keyboardState = new Array(8).fill(false);
@@ -43,7 +47,15 @@ class SwissEditor {
 
         // Listen for compile event
         window.addEventListener('emulator-load-rom', (e) => {
-             this.startEmulatorWithRom(e.detail);
+             // e.detail has { romData, sourceMap }
+             if (e.detail.romData && e.detail.sourceMap) {
+                 this.startEmulatorWithRom(e.detail.romData, e.detail.sourceMap);
+             } else if (e.detail instanceof Uint8Array) {
+                 // Legacy support (just rom data)
+                 this.startEmulatorWithRom(e.detail, []);
+             } else {
+                 this.startEmulatorWithRom(e.detail.romData || e.detail, e.detail.sourceMap || []);
+             }
         });
 
         // Gamepad Events
@@ -91,7 +103,10 @@ class SwissEditor {
 
     updateLineNumbers(text) {
         const lines = text.split('\n').length;
-        this.lineNumbers.innerHTML = Array(lines).fill(0).map((_, i) => i + 1).join('<br>');
+        // Use divs for line numbers so we can target them for debugging
+        this.lineNumbers.innerHTML = Array(lines).fill(0)
+            .map((_, i) => `<div class="line-num" data-line="${i+1}">${i+1}</div>`)
+            .join('');
     }
 
     updateHighlighting(text) {
@@ -181,7 +196,7 @@ class SwissEditor {
         window.dispatchEvent(event);
     }
 
-    startEmulatorWithRom(romData) {
+    startEmulatorWithRom(romData, sourceMap) {
         if (!this.EmulatorClass) return;
 
         // Init Audio
@@ -191,6 +206,9 @@ class SwissEditor {
         if (this.audioContext.state === 'suspended') {
             this.audioContext.resume();
         }
+
+        this.sourceMap = sourceMap;
+        console.log("Loaded Source Map with " + sourceMap.length + " entries.");
 
         try {
             if (this.emulator) {
@@ -279,6 +297,7 @@ class SwissEditor {
                 this.emulatorRunning = false;
                 overlay.style.display = 'none';
                 if(this.audioContext) this.audioContext.suspend();
+                this.clearDebugHighlight();
             };
 
             toolbar.append(btnPlay, btnReset, btn1x, btn2x, btnFull, volContainer, btnClose);
@@ -438,22 +457,73 @@ class SwissEditor {
         } catch(e) { return null; }
     }
 
+    updateDebugInfo(pc) {
+        if (!this.sourceMap || this.sourceMap.length === 0) return;
+
+        // Simple linear search for now, could be binary search
+        // Find line where line_addr <= pc < next_line_addr
+        // The map is Line -> Addr.
+        // But code generation emits map as we go.
+        // Map is [(line, addr), (line, addr), ...]
+
+        // Find the last entry where addr <= pc
+        let bestLine = -1;
+        // Optimization: Start searching near last active line?
+        // For now, linear scan is fast enough for < 10000 lines
+        for (let i = 0; i < this.sourceMap.length; i++) {
+            const [line, addr] = this.sourceMap[i];
+            if (addr <= pc) {
+                bestLine = line;
+            } else {
+                // Since map is sorted by execution order (address usually increasing),
+                // if we pass pc, we stop.
+                // Wait, generated code might jump around, but the map list is generated in order of emission.
+                // So addresses should be monotonic mostly.
+                // Exceptions: Loops/Jumps don't affect map order.
+                // Map is Line -> StartAddr of Line.
+                break;
+            }
+        }
+
+        if (bestLine !== -1 && bestLine !== this.activeLine) {
+            this.highlightDebugLine(bestLine);
+            this.activeLine = bestLine;
+        }
+    }
+
+    highlightDebugLine(lineNum) {
+        // Clear previous
+        this.clearDebugHighlight();
+
+        // Find element
+        const el = this.lineNumbers.querySelector(`div[data-line="${lineNum}"]`);
+        if (el) {
+            el.classList.add('debug-active');
+            // Auto scroll to keep in view if needed
+            // Only if emulator is running slowly or paused, otherwise it jumps too much
+            // For now, maybe just highlight
+        }
+    }
+
+    clearDebugHighlight() {
+        const prev = this.lineNumbers.querySelector('.debug-active');
+        if (prev) prev.classList.remove('debug-active');
+    }
+
     emulatorLoop() {
         if (!this.emulatorRunning) return;
-
-        // Debug Verification (Phase 34)
-        if (this.frameCount++ % 60 === 0) {
-             const s = this.getDebugState();
-             if (s) {
-                 console.log(`[DEBUG] PC: $${s.pc.toString(16).toUpperCase()} A: $${s.acc.toString(16).toUpperCase()}`);
-             }
-        }
 
         // Poll inputs
         this.pollGamepads();
 
         try {
             this.emulator.step();
+
+            // Debug Update (Every frame)
+            const s = this.getDebugState();
+            if (s) {
+               this.updateDebugInfo(s.pc);
+            }
 
             // Render Video
             const pixelsPtr = this.emulator.get_pixels();

@@ -100,9 +100,18 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (response.ok) {
-                const blob = await response.blob();
+                const json = await response.json();
+
+                // Decode Base64 ROM
+                const binaryString = atob(json.rom);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+
                 if (download) {
                     // Download the blob
+                    const blob = new Blob([bytes], { type: 'application/octet-stream' });
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.style.display = 'none';
@@ -114,9 +123,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     alert('Compilation Successful! ROM downloaded.');
                 } else {
                     // Send to Emulator
-                    const arrayBuffer = await blob.arrayBuffer();
-                    const romData = new Uint8Array(arrayBuffer);
-                    const event = new CustomEvent('emulator-load-rom', { detail: romData });
+                    const event = new CustomEvent('emulator-load-rom', {
+                        detail: {
+                            romData: bytes,
+                            sourceMap: json.map
+                        }
+                    });
                     window.dispatchEvent(event);
                 }
             } else {

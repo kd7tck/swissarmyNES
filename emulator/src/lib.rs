@@ -19,6 +19,7 @@ pub struct CpuState {
 #[wasm_bindgen]
 pub struct Emulator {
     deck: Rc<RefCell<ControlDeck>>,
+    breakpoints: Vec<u16>,
 }
 
 #[wasm_bindgen]
@@ -28,6 +29,7 @@ impl Emulator {
         let deck = ControlDeck::new();
         Emulator {
             deck: Rc::new(RefCell::new(deck)),
+            breakpoints: Vec::new(),
         }
     }
 
@@ -39,11 +41,61 @@ impl Emulator {
         }
     }
 
-    pub fn step(&mut self) -> Result<(), String> {
+    pub fn add_breakpoint(&mut self, addr: u16) {
+        if !self.breakpoints.contains(&addr) {
+            self.breakpoints.push(addr);
+        }
+    }
+
+    pub fn remove_breakpoint(&mut self, addr: u16) {
+        if let Some(pos) = self.breakpoints.iter().position(|&x| x == addr) {
+            self.breakpoints.remove(pos);
+        }
+    }
+
+    pub fn clear_breakpoints(&mut self) {
+        self.breakpoints.clear();
+    }
+
+    /// Steps the emulator forward.
+    /// Returns Ok(true) if a breakpoint was hit, Ok(false) if a frame completed normally.
+    pub fn step(&mut self) -> Result<bool, String> {
         let mut deck = self.deck.borrow_mut();
-        match deck.clock_frame() {
-            Ok(_) => Ok(()),
-            Err(e) => Err(format!("Emulation error: {:?}", e)),
+
+        // If no breakpoints, run fast path
+        if self.breakpoints.is_empty() {
+            match deck.clock_frame() {
+                Ok(_) => return Ok(false),
+                Err(e) => return Err(format!("Emulation error: {:?}", e)),
+            }
+        }
+
+        // If breakpoints exist, run instruction by instruction
+        let start_frame = deck.frame_number();
+
+        // Always execute at least one instruction to "step over" if we are currently on a breakpoint
+        if let Err(e) = deck.clock_instr() {
+            return Err(format!("Emulation error: {:?}", e));
+        }
+
+        loop {
+            // Check if we hit a breakpoint at the current PC
+            // We do this BEFORE executing the instruction at PC,
+            // effectively pausing *before* execution.
+            let pc = deck.cpu().pc;
+            if self.breakpoints.contains(&pc) {
+                return Ok(true);
+            }
+
+            // Check if frame ended
+            if deck.frame_number() > start_frame {
+                return Ok(false);
+            }
+
+            // Execute next instruction
+            if let Err(e) = deck.clock_instr() {
+                return Err(format!("Emulation error: {:?}", e));
+            }
         }
     }
 

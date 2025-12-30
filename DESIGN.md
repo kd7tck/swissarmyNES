@@ -297,7 +297,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - ASM emits Address -> Source Line.
 - **Completion Criteria:** Hovering a line in Editor shows the corresponding Memory Address.
 
-## Phase 36: Debugging - Breakpoints
+## Phase 36: Debugging - Breakpoints (Completed)
 **Goal:** Stop and inspect.
 - **Action Items:**
     - Click gutter in Editor to set breakpoint (Line #).

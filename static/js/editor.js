@@ -18,6 +18,7 @@ class SwissEditor {
         // Debug State
         this.sourceMap = []; // Line (1-based) -> Address
         this.activeLine = -1;
+        this.breakpoints = new Set(); // Set of line numbers (1-based)
 
         // Input State
         this.gamepadIndex = null;
@@ -35,6 +36,14 @@ class SwissEditor {
         this.editor.addEventListener('input', () => this.update());
         this.editor.addEventListener('scroll', () => this.syncScroll());
         this.editor.addEventListener('keydown', (e) => this.handleKey(e));
+
+        // Breakpoint toggle
+        this.lineNumbers.addEventListener('click', (e) => {
+            if (e.target.classList.contains('line-num')) {
+                const line = parseInt(e.target.dataset.line);
+                this.toggleBreakpoint(line);
+            }
+        });
 
         // Initial update
         this.update();
@@ -105,8 +114,55 @@ class SwissEditor {
         const lines = text.split('\n').length;
         // Use divs for line numbers so we can target them for debugging
         this.lineNumbers.innerHTML = Array(lines).fill(0)
-            .map((_, i) => `<div class="line-num" data-line="${i+1}">${i+1}</div>`)
+            .map((_, i) => {
+                const line = i + 1;
+                const active = this.breakpoints.has(line) ? ' breakpoint' : '';
+                return `<div class="line-num${active}" data-line="${line}">${line}</div>`;
+            })
             .join('');
+    }
+
+    toggleBreakpoint(line) {
+        if (this.breakpoints.has(line)) {
+            this.breakpoints.delete(line);
+        } else {
+            this.breakpoints.add(line);
+        }
+
+        // Update UI
+        const el = this.lineNumbers.querySelector(`div[data-line="${line}"]`);
+        if (el) {
+            el.classList.toggle('breakpoint');
+        }
+
+        // Update Emulator
+        this.syncBreakpoints();
+    }
+
+    syncBreakpoints() {
+        if (!this.emulator || !this.sourceMap) return;
+
+        this.emulator.clear_breakpoints();
+
+        for (const line of this.breakpoints) {
+            // Find all addresses for this line
+            // SourceMap is [(line, addr), ...]
+            // Actually, we usually just want the first address for the line.
+            // Or we can add all instructions on that line.
+            // Usually just the start address is enough.
+
+            for (const [sLine, sAddr] of this.sourceMap) {
+                if (sLine === line) {
+                    this.emulator.add_breakpoint(sAddr);
+                    // Add all addresses belonging to this line?
+                    // No, usually just the first one.
+                    // If we add all, stepping over is harder if one line has multiple instructions.
+                    // But if we only add first, and we jump to middle of line (unlikely), we miss.
+                    // Let's stick to adding the first one we find for that line.
+                    break;
+                }
+            }
+        }
     }
 
     updateHighlighting(text) {
@@ -225,6 +281,9 @@ class SwissEditor {
             this.lastSentState.fill(false);
 
             this.createEmulatorOverlay();
+
+            // Sync initial breakpoints
+            this.syncBreakpoints();
 
             // Start Loop
             this.emulatorRunning = true;
@@ -517,12 +576,18 @@ class SwissEditor {
         this.pollGamepads();
 
         try {
-            this.emulator.step();
+            const breakpointHit = this.emulator.step();
 
             // Debug Update (Every frame)
             const s = this.getDebugState();
             if (s) {
                this.updateDebugInfo(s.pc);
+            }
+
+            if (breakpointHit) {
+                this.emulatorRunning = false;
+                this.updatePlayPauseButton();
+                console.log("Breakpoint Hit!");
             }
 
             // Render Video

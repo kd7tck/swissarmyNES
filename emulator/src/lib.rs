@@ -39,11 +39,10 @@ impl Emulator {
             pattern_table_buffer: vec![0; 256 * 128 * 4],
             // 512x480 * 4 bytes (RGBA) - showing full 2x2 nametable space
             nametable_buffer: vec![0; 512 * 480 * 4],
-            // Palettes: usually rendered as small swatches.
-            // load_palettes docs say "buffer with RGBA pixels".
-            // Let's assume it draws a representation.
-            // If unknown, I'll allocate plenty. 256x256 is safe.
-            palette_buffer: vec![0; 512 * 4],
+            // Palettes: Increased to 4KB (1024 pixels) to be safe.
+            // tetanes::Ppu::load_palettes writes a visual representation.
+            // 1024 * 4 bytes
+            palette_buffer: vec![0; 1024 * 4],
             // OAM: load_oam likely draws sprites. 256x240?
             oam_buffer: vec![0; 256 * 240 * 4],
         }
@@ -216,26 +215,9 @@ impl Emulator {
 
     pub fn update_palettes(&mut self) {
         let deck = self.deck.borrow();
-        // The API for load_palettes requires two buffers: palettes and colors (visual)
-        // Oops, I need to check the signature again.
-        // pub fn load_palettes(&self, palettes: &mut [u8], colors: &mut [u8])
-        // "Load the given buffer with RGBA pixels from the current palettes."
-        // Wait, which buffer is which?
-        // Let's assume 'palettes' is raw data? or visual?
-        // I will create a dummy buffer for the second arg if needed or just use one.
-        // Actually, let's just expose the raw palette RAM if possible.
-        // But load_palettes is useful for visualization.
-
-        // Let's re-read the doc snippet I have in memory or context.
         // load_palettes(palettes: &mut [u8], colors: &mut [u8])
-        // It says "Load the given buffer with RGBA pixels from the current palettes."
-        // Likely 'palettes' is the swatch view, and 'colors' is the full system palette view?
-
-        // I'll try to use it with my palette_buffer as the first arg.
-        // I'll need another buffer for the second arg.
-        // Let's make palette_buffer big enough and pass a scratch buffer for the second arg.
-
-        let mut scratch = vec![0u8; 256 * 4]; // Dummy
+        // We provide a larger scratch buffer to be safe.
+        let mut scratch = vec![0u8; 1024 * 4];
         deck.ppu()
             .load_palettes(&mut self.palette_buffer, &mut scratch);
     }
@@ -252,9 +234,7 @@ impl Emulator {
     pub fn get_oam_data(&self) -> *const u8 {
         let deck = self.deck.borrow();
         // deck.ppu().oamdata is ConstSlice<u8, 256>
-        // access via generic AsSlice or deref?
-        // tetanes_core::mem::ConstSlice usually derefs to [T].
-        let ptr = deck.ppu().oamdata.as_ptr(); // This accesses the pointer of the slice
+        let ptr = deck.ppu().oamdata.as_ptr();
         ptr
     }
 

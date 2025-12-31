@@ -24,7 +24,6 @@ pub struct Emulator {
     pattern_table_buffer: Vec<u8>,
     nametable_buffer: Vec<u8>,
     palette_buffer: Vec<u8>,
-    oam_buffer: Vec<u8>, // For visual OAM
 }
 
 #[wasm_bindgen]
@@ -43,8 +42,6 @@ impl Emulator {
             // tetanes::Ppu::load_palettes writes a visual representation.
             // 1024 * 4 bytes
             palette_buffer: vec![0; 1024 * 4],
-            // OAM: load_oam likely draws sprites. 256x240?
-            oam_buffer: vec![0; 256 * 240 * 4],
         }
     }
 

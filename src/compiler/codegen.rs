@@ -115,6 +115,11 @@ impl CodeGenerator {
         match opcode.as_str() {
             "JMP" | "JSR" => 3,
             "BNE" | "BEQ" | "BPL" | "BMI" | "BVC" | "BVS" | "BCC" | "BCS" => 2,
+            "DB" => {
+                // Count bytes in operand (comma separated)
+                operand.split(',').count() as u16
+            }
+            "WORD" => 2, // Explicit WORD is always 2 bytes
             _ => 3,
         }
     }

@@ -88,10 +88,25 @@ Phases 31-38 are complete.
 ### Phase 35: Debugging - Source Maps (Completed)
 - **Implemented**:
     - `CodeGenerator` emits `SourceMap` (Line -> Address).
-    - `estimate_size` logic refined to handle `($ZP),Y` and `($ZP,X)` correctly as 2 bytes.
+    - `estimate_size` logic refined to handle `($ZP),Y`, `($ZP,X)`, `DB`, and `WORD` correctly.
     - `editor.js` receives `sourceMap` and implements `showAddressTooltip` on line hover.
     - Tooltip shows the hex address (e.g., `$8010`) corresponding to the source line.
 - **Verification**: Verified `estimate_size` logic against `rs6502` assembler behavior. Verified frontend logic via code review.
+
+### Phase 36: Debugging - Breakpoints (Completed)
+- **Implemented**: Breakpoint support in `editor.js` and `emulator` crate.
+- **Backend**: `emulator/src/lib.rs` maintains a list of breakpoints and checks PC every instruction. Returns `true` from `step()` if hit.
+- **Frontend**: `editor.js` toggles breakpoints by clicking line numbers, syncing with emulator via `add_breakpoint`/`remove_breakpoint`.
+
+### Phase 37: Debugging - Memory Viewer (Completed)
+- **Implemented**: Live RAM viewer in `editor.js`.
+- **Backend**: `emulator` exposes `get_wram()` returning a pointer to WASM memory.
+- **Frontend**: `editor.js` reads WRAM and displays first 2KB (Zero Page, Stack, RAM) in a hex table, updating periodically.
+
+### Phase 38: Debugging - PPU Viewer (Completed)
+- **Implemented**: PPU Visualization in `static/js/ppu_viewer.js`.
+- **Backend**: `emulator` exposes `update_pattern_tables`, `update_nametables`, `update_palettes`, and `get_oam_data`.
+- **Frontend**: `PpuViewer` class renders Pattern Tables, Nametables, and Palettes to canvases and lists OAM entries.
 
 ### Bug Fixes
 - **Audio/Assembler**:
@@ -99,7 +114,8 @@ Phases 31-38 are complete.
     - Implemented size limits in `compiler/audio.rs` for Music Data, Samples, SFX, and Envelopes.
     - Fixed Audio Compiler gap overflow: Gaps > 255 frames are split into multiple silence commands.
 - **Compiler/Codegen**:
-    - Fixed `estimate_size` for Indirect Indexed (`($ZP),Y`) and Indexed Indirect (`($ZP,X)`) addressing modes. It previously returned 3 bytes, causing source map drift. It now correctly returns 2 bytes.
+    - Fixed `estimate_size` for `DB` and `WORD` directives. Previously, `DB` with multiple bytes (e.g., `DATA 1, 2, 3`) was estimated as 2 bytes (or 3 default), causing source map drift. Now correctly counts comma-separated values.
+    - Fixed `estimate_size` for Indirect Indexed (`($ZP),Y`) and Indexed Indirect (`($ZP,X)`) addressing modes. It previously returned 3 bytes. Now correctly returns 2 bytes.
     - Verified that `rs6502` does *not* optimize explicit `$0010` (4-digit) addresses to Zero Page, so existing `estimate_size` logic for absolute addresses remains correct.
     - Fixed `Pool.Despawn`: Arguments are now evaluated safely. Base address is protected on stack while Index is evaluated, preventing register clobbering.
     - Verified Memory Map consistency.

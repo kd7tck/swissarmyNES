@@ -30,7 +30,9 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+        // Get Bank 0
+        let asm_lines = asm_banks.get(&0).expect("Bank 0 missing");
 
         // p is at $05C0.
         // p.x is at $05C0. p.y is at $05C1.
@@ -82,7 +84,9 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+        // Get Bank 0
+        let asm_lines = asm_banks.get(&0).expect("Bank 0 missing");
 
         let asm_str = asm_lines.join("\n");
 

@@ -34,7 +34,9 @@ mod tests {
 
         let st = SymbolTable::new();
         let mut cg = CodeGenerator::new(st);
-        let (code, _) = cg.generate(&program).expect("Codegen failed");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    // Get Bank 0
+    let code = asm_banks.get(&0).expect("Bank 0 missing");
 
         // Check if comments are in the output
         assert!(code.iter().any(|l| l.contains("; This is a comment")));

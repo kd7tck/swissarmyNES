@@ -46,8 +46,14 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+
+        let mut bank_sources = std::collections::HashMap::new();
+        for (bank, lines) in &asm_banks {
+            bank_sources.insert(*bank, lines.join("\n"));
+        }
+        // Bank 0 should have Main and Animation Data
+        let asm_source = bank_sources.get(&0).expect("Bank 0 missing");
         println!("{}", asm_source);
 
         // Verify Assembly
@@ -61,13 +67,18 @@ mod tests {
         assert!(asm_source.contains("db $02"));
         assert!(asm_source.contains("db $01"));
 
-        // Check for Helpers
-        assert!(asm_source.contains("Runtime_Anim_Update:"));
-        assert!(asm_source.contains("Runtime_Anim_Draw:"));
+        // Check for Helpers (In Bank 7, or stubbed in Bank 0 if using trampoline)
+        // Since we check the joined source, we need to check Bank 7 for implementations
+        // Or if we assembled, we check ROM.
+
+        // Let's check Bank 7 source for helpers
+        let bank7 = bank_sources.get(&7).expect("Bank 7 missing");
+        assert!(bank7.contains("Runtime_Anim_Update:"));
+        assert!(bank7.contains("Runtime_Anim_Draw:"));
 
         let assembler = Assembler::new();
         let _rom = assembler
-            .assemble(&asm_source, None, vec![])
+            .assemble(&bank_sources, None, vec![])
             .expect("Assembly failed");
     }
 }

@@ -18,7 +18,9 @@ fn test_string_compilation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    // Get Bank 0
+    let code = asm_banks.get(&0).expect("Bank 0 missing");
 
     // Check RAM allocation
     // s @ $05C0 (2 bytes)

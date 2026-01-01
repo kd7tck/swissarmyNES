@@ -24,27 +24,34 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+
+        // Check Bank 0 for User Code and NMI
+        let asm_lines_0 = asm_banks.get(&0).expect("Bank 0 missing");
+        let asm_source_0 = asm_lines_0.join("\n");
 
         // Verify PPU.Ctrl
-        assert!(asm_source.contains("LDA #$90"));
-        assert!(asm_source.contains("STA $F8"));
-        assert!(asm_source.contains("STA $2000"));
+        assert!(asm_source_0.contains("LDA #$90"));
+        assert!(asm_source_0.contains("STA $F8"));
+        assert!(asm_source_0.contains("STA $2000"));
 
         // Verify Scroll.LoadColumn call
-        assert!(asm_source.contains("JSR Runtime_Scroll_LoadColumn"));
+        assert!(asm_source_0.contains("JSR Runtime_Scroll_LoadColumn"));
+
+        // Verify NMI Processing (in Bank 0 Startup)
+        assert!(asm_source_0.contains("TrampolineNMI:"));
+        assert!(asm_source_0.contains("LDA $0380")); // Check Flag
+        assert!(asm_source_0.contains("STA $2006")); // Set Addr
+        assert!(asm_source_0.contains("ORA #$04")); // Inc 32
+        assert!(asm_source_0.contains("STA $2007")); // Write Data
+
+        // Check Bank 7 for Runtime Helper
+        let asm_lines_7 = asm_banks.get(&7).expect("Bank 7 missing");
+        let asm_source_7 = asm_lines_7.join("\n");
 
         // Verify Runtime Helper
-        assert!(asm_source.contains("Runtime_Scroll_LoadColumn:"));
-        assert!(asm_source.contains("STA $0381")); // Type
-        assert!(asm_source.contains("STA $0384, Y")); // Data Copy
-
-        // Verify NMI Processing
-        assert!(asm_source.contains("TrampolineNMI:"));
-        assert!(asm_source.contains("LDA $0380")); // Check Flag
-        assert!(asm_source.contains("STA $2006")); // Set Addr
-        assert!(asm_source.contains("ORA #$04")); // Inc 32
-        assert!(asm_source.contains("STA $2007")); // Write Data
+        assert!(asm_source_7.contains("Runtime_Scroll_LoadColumn:"));
+        assert!(asm_source_7.contains("STA $0381")); // Type
+        assert!(asm_source_7.contains("STA $0384, Y")); // Data Copy
     }
 }

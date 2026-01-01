@@ -41,15 +41,19 @@ mod tests {
         // 4. Codegen
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, sourcemap) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let (asm_banks, sourcemap) = codegen.generate(&program).expect("Codegen failed");
+
+        let mut sources = std::collections::HashMap::new();
+        for (bank, lines) in &asm_banks {
+            sources.insert(*bank, lines.join("\n"));
+        }
 
         assert!(!sourcemap.is_empty(), "Source map should not be empty");
 
         // 5. Assembler
         let assembler = Assembler::new();
         let rom = assembler
-            .assemble(&asm_source, None, vec![])
+            .assemble(&sources, None, vec![])
             .expect("Assembly failed");
 
         // Verify ROM size (Header + PRG + CHR)

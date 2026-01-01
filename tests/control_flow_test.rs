@@ -37,7 +37,9 @@ fn test_codegen_if_statement() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    // Get Bank 0
+    let code = asm_banks.get(&0).expect("Bank 0 missing");
     let code_str = code.join("\n");
 
     // Check for branching instructions
@@ -79,7 +81,9 @@ fn test_codegen_while_statement() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    // Get Bank 0
+    let code = asm_banks.get(&0).expect("Bank 0 missing");
     let code_str = code.join("\n");
 
     assert!(code_str.contains("GEN_L1:")); // Start label (assuming 1 is first)
@@ -116,7 +120,9 @@ fn test_codegen_for_statement() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    // Get Bank 0
+    let code = asm_banks.get(&0).expect("Bank 0 missing");
     let code_str = code.join("\n");
 
     // Loop logic verification

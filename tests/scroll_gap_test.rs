@@ -26,7 +26,9 @@ mod tests {
         };
 
         let (asm, _) = codegen.generate(&program).unwrap();
-        let asm_str = asm.join("\n");
+        // Check Bank 7 (where Runtime helpers are)
+        let asm_lines = asm.get(&7).expect("Bank 7 missing");
+        let asm_str = asm_lines.join("\n");
 
         // Extract Runtime_Scroll_LoadRow
         if let Some(start) = asm_str.find("Runtime_Scroll_LoadRow:") {
@@ -59,7 +61,9 @@ mod tests {
             declarations: vec![],
         };
         let (asm, _) = codegen.generate(&program).unwrap();
-        let asm_str = asm.join("\n");
+        // Check Bank 7 (where Runtime helpers are)
+        let asm_lines = asm.get(&7).expect("Bank 7 missing");
+        let asm_str = asm_lines.join("\n");
 
         if let Some(start) = asm_str.find("Runtime_Scroll_LoadColumn:") {
             if let Some(end_offset) = asm_str[start..].find("Scroll_LoadColumn_Done:") {

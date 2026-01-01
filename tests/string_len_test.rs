@@ -26,17 +26,19 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
 
         // Check for call to Runtime_StringLen
-        let found_call = asm_lines
-            .iter()
+        let found_call = asm_banks
+            .values()
+            .flat_map(|lines| lines.iter())
             .any(|line| line.contains("JSR Runtime_StringLen"));
         assert!(found_call, "LEN call not found");
 
-        // Verify Runtime_StringLen exists
-        let found_routine = asm_lines
-            .iter()
+        // Verify Runtime_StringLen exists (likely in Bank 7)
+        let found_routine = asm_banks
+            .values()
+            .flat_map(|lines| lines.iter())
             .any(|line| line.contains("Runtime_StringLen:"));
         assert!(found_routine, "Runtime_StringLen helper not found");
     }
@@ -61,11 +63,12 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
 
         // Check for call to Runtime_StringLen
-        let found_call = asm_lines
-            .iter()
+        let found_call = asm_banks
+            .values()
+            .flat_map(|lines| lines.iter())
             .any(|line| line.contains("JSR Runtime_StringLen"));
         assert!(found_call, "LEN call not found");
     }

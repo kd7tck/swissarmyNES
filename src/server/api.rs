@@ -179,10 +179,14 @@ pub fn compile_source(
 
     // Create CodeGenerator
     let mut codegen = CodeGenerator::new(symbol_table);
-    let (asm_lines, source_map) = codegen
+    let (asm_banks, source_map) = codegen
         .generate(&program)
         .map_err(|e| format!("Codegen Error: {:?}", e))?;
-    let asm_source = asm_lines.join("\n");
+
+    let mut bank_sources = std::collections::HashMap::new();
+    for (bank, lines) in asm_banks {
+        bank_sources.insert(bank, lines.join("\n"));
+    }
 
     // 5. Assembler
     let assembler = Assembler::new();
@@ -263,7 +267,7 @@ pub fn compile_source(
     }
 
     let rom = assembler
-        .assemble(&asm_source, chr_data, injections)
+        .assemble(&bank_sources, chr_data, injections)
         .map_err(|e| format!("Assembler Error: {:?}", e))?;
 
     Ok((rom, source_map))

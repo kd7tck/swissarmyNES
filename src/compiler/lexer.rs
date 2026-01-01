@@ -55,6 +55,7 @@ pub enum Token {
     Animation,
     Frame,
     WaitVBlank,
+    Bank,
 
     // Identifiers
     Identifier(String),
@@ -315,6 +316,7 @@ impl<'a> Lexer<'a> {
             "ANIMATION" => Token::Animation,
             "FRAME" => Token::Frame,
             "WAITVBLANK" | "WAIT_VBLANK" => Token::WaitVBlank,
+            "BANK" => Token::Bank,
             _ => Token::Identifier(ident),
         }
     }

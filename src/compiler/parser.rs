@@ -70,6 +70,28 @@ impl Parser {
             });
         }
 
+        if self.match_token(Token::Bank) {
+            let n_expr = self.parse_expression()?;
+            if let Expression::Integer(n) = n_expr {
+                if !(0..=255).contains(&n) {
+                    return Err(format!(
+                        "Line {}: Bank number must be 0-255",
+                        self.current_line()
+                    ));
+                }
+                self.match_token(Token::Newline);
+                return Ok(TopLevel {
+                    kind: TopLevelKind::Bank(n as u8),
+                    line: start_line,
+                });
+            } else {
+                return Err(format!(
+                    "Line {}: Expected integer literal after BANK",
+                    self.current_line()
+                ));
+            }
+        }
+
         if self.match_token(Token::Const) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n

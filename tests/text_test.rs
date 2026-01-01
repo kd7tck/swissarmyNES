@@ -21,11 +21,16 @@ mod tests {
         let mut analyzer = SemanticAnalyzer::new();
         analyzer.analyze(&program).expect("Analysis failed");
         let mut codegen = CodeGenerator::new(analyzer.symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+
+        let mut sources = std::collections::HashMap::new();
+        for (bank, lines) in &asm_banks {
+            sources.insert(*bank, lines.join("\n"));
+        }
+
         let assembler = Assembler::new();
         let rom = assembler
-            .assemble(&asm_source, None, vec![])
+            .assemble(&sources, None, vec![])
             .expect("Assembly failed");
 
         // Verification:
@@ -64,11 +69,16 @@ mod tests {
         let mut analyzer = SemanticAnalyzer::new();
         analyzer.analyze(&program).expect("Analysis failed");
         let mut codegen = CodeGenerator::new(analyzer.symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+
+        let mut sources = std::collections::HashMap::new();
+        for (bank, lines) in &asm_banks {
+            sources.insert(*bank, lines.join("\n"));
+        }
+
         let assembler = Assembler::new();
         let rom = assembler
-            .assemble(&asm_source, None, vec![])
+            .assemble(&sources, None, vec![])
             .expect("Assembly failed");
 
         // Arg: 32 -> $20

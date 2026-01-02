@@ -31,7 +31,7 @@ mod tests {
 
         match result {
             Ok((lines, _)) => {
-                let asm = lines.join("\n");
+                let asm = lines.get(&0).expect("Bank 0 missing").join("\n");
                 // Check for 16-bit logic
                 // 1000 = $03E8. 500 = $01F4.
                 // 1000 + 500 = 1500 ($05DC).

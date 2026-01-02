@@ -29,8 +29,8 @@ fn test_codegen_for_word_loop() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
-    let code_str = code.join("\n");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    let code_str = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
 
     // Verification
     // 1. Initialization: Should be 16-bit store
@@ -73,8 +73,8 @@ fn test_codegen_for_int_signed_loop() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
-    let code_str = code.join("\n");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    let code_str = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
 
     // -10 = 0xF6 (8-bit signed)
     assert!(code_str.contains("LDA #$F6"));

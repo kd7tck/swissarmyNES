@@ -89,7 +89,10 @@ fn test_string_functions_codegen() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+
+    // Main code is in Bank 0
+    let code = asm_banks.get(&0).expect("Bank 0 missing");
 
     // Verify calls
     assert!(code.iter().any(|line| line.contains("JSR Runtime_Asc")));

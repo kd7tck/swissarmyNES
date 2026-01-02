@@ -33,11 +33,13 @@ mod tests {
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
         let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
-        // Get Bank 0
-        let asm_lines = asm_banks.get(&0).expect("Bank 0 missing");
-        let _asm_source = asm_lines.join("\n");
 
-        // 1. Verify DATA generation
+        let bank0 = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
+        let bank7 = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
+        let asm_source = format!("{}\n{}", bank0, bank7);
+        let asm_lines: Vec<&str> = asm_source.lines().collect();
+
+        // 1. Verify DATA generation (Bank 7)
         // 1 -> $01
         // 2 -> $02
         // 300 -> $2C, $01
@@ -59,7 +61,7 @@ mod tests {
         assert!(found_300, "Data 300 not found");
         assert!(found_neg, "Data -1 not found");
 
-        // 2. Verify READ
+        // 2. Verify READ (Bank 0)
         // READ a (Byte) -> JSR Runtime_ReadByte, STA $05C0
         let found_read_byte = asm_lines
             .iter()
@@ -68,14 +70,14 @@ mod tests {
 
         assert!(found_read_byte, "READ Byte code incorrect");
 
-        // 3. Verify RESTORE
+        // 3. Verify RESTORE (Bank 0)
         // LDA $FFxx, STA $04
         // We can't check exact address, but we can check if it loads from ROM
         let found_restore = asm_lines.iter().any(|line| line.contains("STA $04"))
             && asm_lines.iter().any(|line| line.contains("STA $05"));
         assert!(found_restore, "RESTORE code missing");
 
-        // Verify InitUserData in Data Tables
+        // Verify InitUserData in Data Tables (Bank 7)
         let found_init_ptr = asm_lines
             .iter()
             .any(|line| line.contains("InitUserData: WORD USER_DATA_START"));

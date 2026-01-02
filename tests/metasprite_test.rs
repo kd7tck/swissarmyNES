@@ -5,6 +5,7 @@ mod tests {
     use swissarmynes::compiler::codegen::CodeGenerator;
     use swissarmynes::compiler::lexer::Lexer;
     use swissarmynes::compiler::parser::Parser;
+    use std::collections::HashMap;
 
     #[test]
     fn test_metasprite_compilation() {
@@ -31,25 +32,31 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
 
-        assert!(asm_source.contains("player_idle:"));
-        assert!(asm_source.contains("Runtime_SpriteDraw:"));
-        assert!(asm_source.contains("Runtime_SpriteClear:"));
-        // Check for Data Bytes (may be split across lines or spaces)
-        // db $02
-        assert!(asm_source.contains("db $02"));
-        // db $00, $00, $10, $00
-        assert!(asm_source.contains("db $00, $00, $10, $00"));
-        // db $08, $00, $11, $00
-        assert!(asm_source.contains("db $08, $00, $11, $00"));
+        let mut assembler_inputs = HashMap::new();
+        for (bank, lines) in &asm_banks {
+            assembler_inputs.insert(*bank, lines.join("\n"));
+        }
+
+        // Verify content in Bank 7 (System Bank) where User Data is currently emitted
+        let bank7_source = assembler_inputs.get(&7).expect("Bank 7 missing");
+
+        assert!(bank7_source.contains("player_idle:"), "Metasprite label missing from Bank 7");
+        assert!(bank7_source.contains("Runtime_SpriteDraw:"));
+        assert!(bank7_source.contains("Runtime_SpriteClear:"));
+
+        // Check for Data Bytes
+        assert!(bank7_source.contains("db $02")); // Count
+        assert!(bank7_source.contains("db $00, $00, $10, $00")); // Tile 1
+        assert!(bank7_source.contains("db $08, $00, $11, $00")); // Tile 2
 
         let assembler = Assembler::new();
         let rom = assembler
-            .assemble(&asm_source, None, vec![])
+            .assemble(&assembler_inputs, None, vec![])
             .expect("Assembly failed");
 
-        assert_eq!(rom.len(), 40976);
+        // 128KB PRG + 8KB CHR + 16b Header = 131072 + 8192 + 16 = 139280
+        assert_eq!(rom.len(), 139280);
     }
 }

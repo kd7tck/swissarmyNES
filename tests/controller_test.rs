@@ -5,6 +5,7 @@ mod tests {
     use swissarmynes::compiler::codegen::CodeGenerator;
     use swissarmynes::compiler::lexer::Lexer;
     use swissarmynes::compiler::parser::Parser;
+    use std::collections::HashMap;
 
     #[test]
     fn test_controller_api() {
@@ -35,8 +36,14 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+
+        let mut assembler_inputs = HashMap::new();
+        for (bank, lines) in &asm_banks {
+            assembler_inputs.insert(*bank, lines.join("\n"));
+        }
+
+        let asm_source = assembler_inputs.values().cloned().collect::<Vec<_>>().join("\n");
 
         // Check for Read call
         assert!(asm_source.contains("JSR Runtime_Controller_Read"));
@@ -46,9 +53,9 @@ mod tests {
 
         let assembler = Assembler::new();
         let rom = assembler
-            .assemble(&asm_source, None, vec![])
+            .assemble(&assembler_inputs, None, vec![])
             .expect("Assembly failed");
 
-        assert_eq!(rom.len(), 40976);
+        assert_eq!(rom.len(), 139280);
     }
 }

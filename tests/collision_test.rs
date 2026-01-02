@@ -31,9 +31,10 @@ mod tests {
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
         let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
-        // Get Bank 0
-        let asm_lines = asm_banks.get(&0).expect("Bank 0 missing");
-        let asm_source = asm_lines.join("\n");
+
+        let bank0 = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
+        let bank7 = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
+        let asm_source = format!("{}\n{}", bank0, bank7);
 
         assert!(asm_source.contains("JSR Runtime_Collision_Rect"));
         assert!(asm_source.contains("Collision_False:"));
@@ -65,9 +66,10 @@ mod tests {
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
         let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
-        // Get Bank 0
-        let asm_lines = asm_banks.get(&0).expect("Bank 0 missing");
-        let asm_source = asm_lines.join("\n");
+
+        let bank0 = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
+        let bank7 = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
+        let asm_source = format!("{}\n{}", bank0, bank7);
 
         assert!(asm_source.contains("JSR Runtime_Collision_Point"));
         // Stack cleanup (12 bytes)
@@ -95,9 +97,10 @@ mod tests {
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
         let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
-        // Get Bank 0
-        let asm_lines = asm_banks.get(&0).expect("Bank 0 missing");
-        let asm_source = asm_lines.join("\n");
+
+        let bank0 = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
+        let bank7 = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
+        let asm_source = format!("{}\n{}", bank0, bank7);
 
         assert!(asm_source.contains("JSR Runtime_Collision_Tile"));
         assert!(asm_source.contains("Runtime_Collision_Tile:"));

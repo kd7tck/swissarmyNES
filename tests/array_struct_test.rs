@@ -39,8 +39,8 @@ mod tests {
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
         // This is expected to fail or generate incorrect code if support is missing
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let _asm_source = asm_lines.join("\n");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+        let _asm_source = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
 
         // Verify constant index access
         // pool(0) is at Base. .x is Base+1.

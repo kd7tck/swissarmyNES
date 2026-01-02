@@ -50,8 +50,8 @@ fn test_codegen_select_statement() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
-    let code_str = code.join("\n");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    let code_str = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
 
     // Check stack usage (Push Select Value)
     assert!(code_str.contains("PHA")); // Push Byte
@@ -109,8 +109,8 @@ fn test_codegen_select_word() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
-    let code_str = code.join("\n");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    let code_str = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
 
     // Check stack usage (Push Word)
     assert!(code_str.contains("PHA"));

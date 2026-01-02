@@ -33,12 +33,15 @@ fn test_mul_16_generation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    let bank0 = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
+    let bank7 = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
+    let code = format!("{}\n{}", bank0, bank7);
 
     // Check for Math_Mul16 usage
-    assert!(code.iter().any(|line| line.contains("JSR Math_Mul16")));
+    assert!(code.contains("JSR Math_Mul16"));
     // Check that Math_Mul16 is defined
-    assert!(code.iter().any(|line| line.contains("Math_Mul16:")));
+    assert!(code.contains("Math_Mul16:"));
 }
 
 #[test]
@@ -70,10 +73,13 @@ fn test_div_16_generation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    let bank0 = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
+    let bank7 = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
+    let code = format!("{}\n{}", bank0, bank7);
 
-    assert!(code.iter().any(|line| line.contains("JSR Math_Div16")));
-    assert!(code.iter().any(|line| line.contains("Math_Div16:")));
+    assert!(code.contains("JSR Math_Div16"));
+    assert!(code.contains("Math_Div16:"));
 }
 
 #[test]
@@ -105,11 +111,12 @@ fn test_div_16_signed_generation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    let bank0 = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
+    let bank7 = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
+    let code = format!("{}\n{}", bank0, bank7);
 
-    assert!(code
-        .iter()
-        .any(|line| line.contains("JSR Math_Div16_Signed")));
+    assert!(code.contains("JSR Math_Div16_Signed"));
 }
 
 #[test]
@@ -141,12 +148,15 @@ fn test_mod_generation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    let bank0 = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
+    let bank7 = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
+    let code = format!("{}\n{}", bank0, bank7);
 
-    assert!(code.iter().any(|line| line.contains("JSR Math_Div16")));
+    assert!(code.contains("JSR Math_Div16"));
     // Check it reads Remainder from $08/$09
-    assert!(code.iter().any(|line| line.contains("LDA $08")));
-    assert!(code.iter().any(|line| line.contains("LDX $09")));
+    assert!(code.contains("LDA $08"));
+    assert!(code.contains("LDX $09"));
 }
 
 #[test]
@@ -182,15 +192,18 @@ fn test_signed_comparison_generation() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    let bank0 = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
+    let bank7 = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
+    let code = format!("{}\n{}", bank0, bank7);
 
     // Check for Signed logic (BVS)
     // LessThan logic: BVS overflow_lbl, BMI true_lbl...
     // We expect BVS to be generated
-    assert!(code.iter().any(|line| line.contains("BVS")));
+    assert!(code.contains("BVS"));
     // We expect comparison instructions
-    assert!(code.iter().any(|line| line.contains("SEC")));
-    assert!(code.iter().any(|line| line.contains("SBC $00")));
+    assert!(code.contains("SEC"));
+    assert!(code.contains("SBC $00"));
 }
 
 #[test]
@@ -231,8 +244,11 @@ fn test_mixed_comparison_promotion() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+    let bank0 = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
+    let bank7 = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
+    let code = format!("{}\n{}", bank0, bank7);
 
     // Check for Signed logic (BVS) because Int is present
-    assert!(code.iter().any(|line| line.contains("BVS")));
+    assert!(code.contains("BVS"));
 }

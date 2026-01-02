@@ -44,14 +44,17 @@ mod tests {
             .unwrap();
 
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm, _) = codegen.generate(&program).expect("Codegen failed");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+
+        // TrampolineNMI is in Fixed Bank 7
+        let bank7 = asm_banks.get(&7).expect("Bank 7 missing");
 
         // Verify TrampolineNMI exists and has safe context saving
-        let trampoline_idx = asm
+        let trampoline_idx = bank7
             .iter()
             .position(|line| line == "TrampolineNMI:")
             .unwrap();
-        let trampoline_code = &asm[trampoline_idx..];
+        let trampoline_code = &bank7[trampoline_idx..];
 
         // Check for saving $00-$0F
         assert!(trampoline_code.iter().any(|line| line.contains("LDA $00")));
@@ -62,14 +65,15 @@ mod tests {
             .iter()
             .any(|line| line.contains("JSR CallUserNMI")));
 
-        // Verify NMI handler ends in RTS (not RTI)
-        let nmi_idx = asm.iter().position(|line| line == "NMI:").unwrap();
+        // Verify NMI handler (in Bank 0) ends in RTS (not RTI)
+        let bank0 = asm_banks.get(&0).expect("Bank 0 missing");
+        let nmi_idx = bank0.iter().position(|line| line == "NMI:").unwrap();
         // Look for next RTS/RTI
-        let return_idx = asm[nmi_idx..]
+        let return_idx = bank0[nmi_idx..]
             .iter()
             .position(|line| line.contains("RTS") || line.contains("RTI"))
             .unwrap();
-        let return_instr = &asm[nmi_idx + return_idx];
+        let return_instr = &bank0[nmi_idx + return_idx];
 
         assert_eq!(
             return_instr.trim(),

@@ -52,27 +52,15 @@ mod tests {
         for (bank, lines) in &asm_banks {
             bank_sources.insert(*bank, lines.join("\n"));
         }
-        // Bank 0 should have Main and Animation Data
-        let asm_source = bank_sources.get(&0).expect("Bank 0 missing");
-        println!("{}", asm_source);
 
-        // Verify Assembly
-        assert!(asm_source.contains("PlayerRun:"));
-        // Count=2, Loop=1. Might be on different lines or same.
-        // The generator output:
-        // PlayerRun:
-        //   db $02
-        //   db $01
-        assert!(asm_source.contains("PlayerRun:"));
-        assert!(asm_source.contains("db $02"));
-        assert!(asm_source.contains("db $01"));
-
-        // Check for Helpers (In Bank 7, or stubbed in Bank 0 if using trampoline)
-        // Since we check the joined source, we need to check Bank 7 for implementations
-        // Or if we assembled, we check ROM.
-
-        // Let's check Bank 7 source for helpers
         let bank7 = bank_sources.get(&7).expect("Bank 7 missing");
+        println!("{}", bank7);
+
+        // Verify Animation Data in Bank 7
+        assert!(bank7.contains("PlayerRun:"));
+        assert!(bank7.contains("db $02"));
+        assert!(bank7.contains("db $01"));
+
         assert!(bank7.contains("Runtime_Anim_Update:"));
         assert!(bank7.contains("Runtime_Anim_Draw:"));
 

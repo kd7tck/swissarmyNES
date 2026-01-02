@@ -32,23 +32,22 @@ fn test_data_restore_label() {
     };
 
     let mut cg = CodeGenerator::new(st);
-    let (code, _) = cg.generate(&program).expect("Codegen failed");
-    let code_str = code.join("\n");
+    let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
 
-    // Verify Label in User Data
+    let bank0 = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
+    let bank7 = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
+    let code_str = format!("{}\n{}", bank0, bank7);
+
+    // Verify Label in User Data (Bank 7)
     assert!(code_str.contains("MyData:"));
     assert!(code_str.contains("db $1E")); // 30 in Hex
 
-    // Verify Data Table Entry
+    // Verify Data Table Entry (Bank 7)
     assert!(code_str.contains("Ptr_MyData: WORD MyData"));
 
-    // Verify RESTORE implementation
+    // Verify RESTORE implementation (Bank 0)
     // RESTORE MyData should load Ptr_MyData
     // We can check if it tries to load an address and store to $04/$05
-    // and that address is likely near the other Ptr_ entries.
-    // However, exact offset matching in unit test is fragile if we add more default tables.
-    // Instead we check structure.
-
     assert!(code_str.contains("LDA $FF")); // Loading from Table
     assert!(code_str.contains("STA $04")); // Update Data Ptr Low
     assert!(code_str.contains("STA $05")); // Update Data Ptr High

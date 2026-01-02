@@ -68,7 +68,8 @@ mod tests {
         analyzer.analyze(&program).expect("Analysis failed");
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+        let asm_lines = asm_banks.get(&0).expect("Bank 0 missing");
 
         // Size 5 * 2 = 10 bytes.
         // Assignment 1000 ($03E8).

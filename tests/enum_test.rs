@@ -36,8 +36,8 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+        let asm_source = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
 
         println!("{}", asm_source);
 
@@ -84,8 +84,8 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+        let asm_source = asm_banks.get(&0).expect("Bank 0 missing").join("\n");
 
         // Neg = -5
         // LDA #$FB (-5 in 8-bit two's complement)

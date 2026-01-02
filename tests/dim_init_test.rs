@@ -40,7 +40,9 @@ mod tests {
 
         let mut codegen = CodeGenerator::new(symbol_table);
         let (output, _) = codegen.generate(&program).expect("CodeGen failed");
-        let asm = output.join("\n");
+
+        // Startup/Init code is now in Bank 7
+        let asm = output.get(&7).expect("Bank 7 missing").join("\n");
         println!("{}", asm);
 
         // 1. Check Byte Init (x = 42)
@@ -55,13 +57,5 @@ mod tests {
         // 3. Check Int Init (i = 100 = $64)
         assert!(asm.contains("Init i @"), "Missing i init comment");
         assert!(asm.contains("LDA #$64"), "Missing LDA #$64 for i");
-
-        // Ensure Int init does NOT store high byte (STX) at addr+1
-        // We can check that the code block for 'i' doesn't contain STX
-        // But asm is a big string.
-        // We can rely on the fact that CodeGen uses STX for 2-byte stores.
-        // If Int is 1-byte, it should only STA.
-        // But verifying *absence* in a substring is hard without splitting.
-        // We'll trust the logic verification for now (we saw the code: match dtype { Int => STA }).
     }
 }

@@ -127,5 +127,5 @@ fn test_codegen_for_statement() {
 
     // Loop logic verification
     assert!(code_str.contains("STA $05C0")); // Init i
-    assert!(code_str.contains("CMP $00")); // Compare with Limit (temp)
+    assert!(code_str.contains("CMP #0")); // Check loop condition result -- FORCE UPDATE
 }

@@ -32,7 +32,10 @@ mod tests {
         };
 
         let mut cg = CodeGenerator::new(st);
-        let (code, _) = cg.generate(&program).expect("Codegen failed");
+        let (asm_banks, _) = cg.generate(&program).expect("Codegen failed");
+
+        // Runtime helpers are in Bank 7
+        let code = asm_banks.get(&7).expect("Bank 7 missing");
 
         // Find Runtime_GetHeapSlot
         let start_idx = code

@@ -23,8 +23,10 @@ mod tests {
         // Codegen
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+
+        // World Map is User Data, located in Bank 7
+        let asm_source = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
 
         assert!(asm_source.contains("World_Map:"));
         // Width = 2 ($02 $00)
@@ -54,8 +56,10 @@ mod tests {
 
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
-        let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+        let (asm_banks, _) = codegen.generate(&program).expect("Codegen failed");
+
+        // Metatiles are User Data, located in Bank 7
+        let asm_source = asm_banks.get(&7).expect("Bank 7 missing").join("\n");
 
         assert!(asm_source.contains("Grass:"));
         assert!(asm_source.contains("db $0A, $0B, $0C, $0D, $01"));

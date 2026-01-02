@@ -25,7 +25,10 @@ mod tests {
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
         let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+
+        let bank0 = asm_lines.get(&0).expect("Bank 0 missing").join("\n");
+        let bank7 = asm_lines.get(&7).expect("Bank 7 missing").join("\n");
+        let asm_source = format!("{}\n{}", bank0, bank7);
 
         assert!(asm_source.contains("JSR Runtime_Randomize"));
         assert!(asm_source.contains("JSR Runtime_Random"));

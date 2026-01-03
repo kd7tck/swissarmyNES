@@ -322,7 +322,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
 
 ---
 
-## Phase 39: Mappers - MMC1
+## Phase 39: Mappers - MMC1 (Completed)
 **Goal:** Larger games (up to 256KB).
 - **Action Items:**
     - Assembler/Linker support for bank switching.

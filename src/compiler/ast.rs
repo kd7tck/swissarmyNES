@@ -104,6 +104,7 @@ pub enum TopLevelKind {
     Animation(String, Vec<AnimationFrame>, bool), // ANIMATION Name, Frames, Loops
     Metatile(String, [u8; 4], u8),            // METATILE Name, Tiles[4], Attr
     World(u32, u32, Vec<i32>),                // WORLD Width, Height, Data (Nametable Indices)
+    Bank(u8),                                 // BANK <n>
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -371,6 +372,13 @@ impl TopLevel {
     pub fn World(width: u32, height: u32, data: Vec<i32>) -> Self {
         Self {
             kind: TopLevelKind::World(width, height, data),
+            line: 0,
+        }
+    }
+    #[allow(non_snake_case)]
+    pub fn Bank(n: u8) -> Self {
+        Self {
+            kind: TopLevelKind::Bank(n),
             line: 0,
         }
     }

@@ -70,6 +70,29 @@ impl Parser {
             });
         }
 
+        if self.match_token(Token::Bank) {
+            let bank_expr = self.parse_expression()?;
+            let bank_num = if let Expression::Integer(val) = bank_expr {
+                if !(0..=255).contains(&val) {
+                    return Err(format!(
+                        "Line {}: Bank number must be 0-255",
+                        self.current_line()
+                    ));
+                }
+                val as u8
+            } else {
+                return Err(format!(
+                    "Line {}: Bank number must be an integer literal",
+                    self.current_line()
+                ));
+            };
+            self.match_token(Token::Newline);
+            return Ok(TopLevel {
+                kind: TopLevelKind::Bank(bank_num),
+                line: start_line,
+            });
+        }
+
         if self.match_token(Token::Const) {
             let name = if let Token::Identifier(n) = self.advance().clone() {
                 n

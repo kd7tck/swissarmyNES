@@ -67,7 +67,7 @@ mod tests {
 
         let assembler = Assembler::new();
         let _rom = assembler
-            .assemble(&asm_source, None, vec![])
+            .assemble(&asm_lines, None, vec![])
             .expect("Assembly failed");
     }
 }

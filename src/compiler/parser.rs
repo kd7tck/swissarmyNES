@@ -1,3 +1,4 @@
+// KEEP
 use super::ast::{
     AnimationFrame, BinaryOperator, DataType, Expression, MetaspriteTile, Program, Statement,
     StatementKind, TopLevel, TopLevelKind, UnaryOperator,
@@ -53,6 +54,28 @@ impl Parser {
 
     fn parse_top_level(&mut self) -> Result<TopLevel, String> {
         let start_line = self.current_line();
+
+        if self.match_token(Token::Bank) {
+            let bank_num = if let Token::Integer(n) = self.advance().clone() {
+                if !(0..=255).contains(&n) {
+                    return Err(format!(
+                        "Line {}: Bank index must be between 0 and 255, got {}",
+                        start_line, n
+                    ));
+                }
+                n as u8
+            } else {
+                return Err(format!(
+                    "Line {}: Expected integer literal after BANK",
+                    start_line
+                ));
+            };
+            self.match_token(Token::Newline);
+            return Ok(TopLevel {
+                kind: TopLevelKind::Bank(bank_num),
+                line: start_line,
+            });
+        }
 
         if self.match_token(Token::Include) {
             let filename = if let Token::StringLiteral(s) = self.advance().clone() {

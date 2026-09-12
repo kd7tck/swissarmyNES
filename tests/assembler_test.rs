@@ -15,7 +15,7 @@ mod tests {
         // Injection at $8000, overwriting code
         let injections = vec![(0x8000, vec![0x00, 0x01])];
 
-        let result = assembler.assemble(source, None, injections);
+        let result = assembler.assemble(&[source.to_string()], None, injections);
         assert!(
             result.is_err(),
             "Assembler should detect overlap between code and injection"
@@ -31,7 +31,7 @@ mod tests {
         // Injection 2: $D005, len 10 (Overlap $D005-$D009)
         let injections = vec![(0xD000, vec![0; 10]), (0xD005, vec![0; 10])];
 
-        let result = assembler.assemble(source, None, injections);
+        let result = assembler.assemble(&[source.to_string()], None, injections);
         assert!(
             result.is_err(),
             "Assembler should detect overlap between injections"

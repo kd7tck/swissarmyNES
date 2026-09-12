@@ -1,3 +1,4 @@
+// KEEP
 use crate::compiler::ast::DataType;
 use std::collections::HashMap;
 
@@ -24,6 +25,7 @@ pub struct Symbol {
     pub params: Option<Vec<DataType>>, // Subroutines
     pub members: Option<Vec<(String, DataType, u16)>>, // Struct members: Name, Type, Offset
     pub variants: Option<Vec<(String, i32)>>, // Enum variants: Name, Value
+    pub bank: Option<u8>,
 }
 
 #[derive(Debug)]
@@ -60,7 +62,7 @@ impl SymbolTable {
         data_type: DataType,
         kind: SymbolKind,
     ) -> Result<(), String> {
-        self.define_with_params(name, data_type, kind, None)
+        self.define_with_params(name, data_type, kind, None, None)
     }
 
     pub fn define_with_params(
@@ -69,8 +71,9 @@ impl SymbolTable {
         data_type: DataType,
         kind: SymbolKind,
         params: Option<Vec<DataType>>,
+        bank: Option<u8>,
     ) -> Result<(), String> {
-        self.define_full(name, data_type, kind, params, None, None, None)
+        self.define_full(name, data_type, kind, params, None, None, None, bank)
     }
 
     pub fn define_struct(
@@ -86,6 +89,7 @@ impl SymbolTable {
             None,
             Some(members),
             Some(size as i32),
+            None,
             None,
         )
     }
@@ -103,6 +107,7 @@ impl SymbolTable {
             None,
             None,
             Some(variants),
+            None,
         )
     }
 
@@ -115,6 +120,7 @@ impl SymbolTable {
             None,
             None,
             None,
+            None,
         )
     }
 
@@ -123,6 +129,7 @@ impl SymbolTable {
             name,
             DataType::Word, // Animation is referenced as a 16-bit address
             SymbolKind::Animation,
+            None,
             None,
             None,
             None,
@@ -140,6 +147,7 @@ impl SymbolTable {
         members: Option<Vec<(String, DataType, u16)>>,
         value: Option<i32>,
         variants: Option<Vec<(String, i32)>>,
+        bank: Option<u8>,
     ) -> Result<(), String> {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(&name) {
@@ -157,6 +165,7 @@ impl SymbolTable {
                 params,
                 members,
                 variants,
+                bank,
             };
             scope.insert(name, symbol);
             Ok(())

@@ -25,7 +25,7 @@ mod tests {
         let asm_source = asm_lines.join("\n");
         let assembler = Assembler::new();
         let rom = assembler
-            .assemble(&asm_source, None, vec![])
+            .assemble(&asm_lines, None, vec![])
             .expect("Assembly failed");
 
         // Verification:
@@ -68,7 +68,7 @@ mod tests {
         let asm_source = asm_lines.join("\n");
         let assembler = Assembler::new();
         let rom = assembler
-            .assemble(&asm_source, None, vec![])
+            .assemble(&asm_lines, None, vec![])
             .expect("Assembly failed");
 
         // Arg: 32 -> $20

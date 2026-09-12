@@ -47,9 +47,9 @@ mod tests {
 
         let assembler = Assembler::new();
         let rom = assembler
-            .assemble(&asm_source, None, vec![])
+            .assemble(&asm_lines, None, vec![])
             .expect("Assembly failed");
 
-        assert_eq!(rom.len(), 40976);
+        assert_eq!(rom.len(), 139280);
     }
 }

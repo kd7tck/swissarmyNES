@@ -180,10 +180,9 @@ pub fn compile_source(
     // Create CodeGenerator
     let mut codegen = CodeGenerator::new(symbol_table);
     let (asm_lines, source_map) = codegen
-        .generate(&program)
+        .generate_banks(&program)
         .map_err(|e| format!("Codegen Error: {:?}", e))?;
-    let asm_source = asm_lines.join("\n");
-
+    // KEEP
     // 5. Assembler
     let assembler = Assembler::new();
 
@@ -263,7 +262,7 @@ pub fn compile_source(
     }
 
     let rom = assembler
-        .assemble(&asm_source, chr_data, injections)
+        .assemble_banks(&asm_lines, chr_data, injections)
         .map_err(|e| format!("Assembler Error: {:?}", e))?;
 
     Ok((rom, source_map))

@@ -42,11 +42,11 @@ mod tests {
         // 5. Assembler
         let assembler = Assembler::new();
         let rom = assembler
-            .assemble(&asm_source, None, vec![])
+            .assemble(&asm_lines, None, vec![])
             .expect("Assembly failed");
 
         // Verify we got 40KB (16 Header + 32KB PRG + 8KB CHR)
-        assert_eq!(rom.len(), 40976);
+        assert_eq!(rom.len(), 139280);
 
         // Debug: Print generated assembly
         println!("Generated Assembly:\n{}", asm_source);

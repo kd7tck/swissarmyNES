@@ -373,9 +373,9 @@ pub fn delete_file(project_name: &str, file_name: &str) -> Result<(), String> {
 fn validate_project_name(name: &str) -> Result<(), String> {
     if !name
         .chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        .all(|c| (c.is_ascii_lowercase() || c.is_ascii_digit()) || c == '_' || c == '-')
     {
-        return Err("Invalid project name".to_string());
+        return Err("Invalid project name: Only lowercase letters, numbers, underscores, and hyphens are allowed".to_string());
     }
     Ok(())
 }
@@ -386,9 +386,9 @@ fn validate_filename(name: &str) -> Result<(), String> {
     }
     if !name
         .chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
+        .all(|c| (c.is_ascii_lowercase() || c.is_ascii_digit()) || c == '_' || c == '-' || c == '.')
     {
-        return Err("Invalid filename: Invalid characters".to_string());
+        return Err("Invalid filename: Only lowercase letters, numbers, underscores, hyphens, and periods are allowed".to_string());
     }
     Ok(())
 }

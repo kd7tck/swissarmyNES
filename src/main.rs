@@ -6,7 +6,10 @@ async fn main() {
     let app = server::app();
 
     // run it with hyper on localhost:3000
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    // Warning: Bound to 127.0.0.1 for local development security. Change to 0.0.0.0 for external access (e.g. Docker)
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+        .await
+        .unwrap();
     println!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
 }

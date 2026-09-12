@@ -1,3 +1,4 @@
+// KEEP
 use crate::compiler::ast::{
     BinaryOperator, DataType, Expression, Program, Statement, StatementKind, TopLevel,
     TopLevelKind, UnaryOperator,
@@ -3763,7 +3764,9 @@ impl CodeGenerator {
 
                             // 6. Setup Stride ($06)
                             // Re-calculate stride (safe now)
-                            let dtype = self.resolve_type(&args[0]).unwrap();
+                            let dtype = self
+                                .resolve_type(&args[0])
+                                .ok_or("Cannot resolve array type in Pool.Despawn")?;
                             let stride = if let DataType::Array(inner, _) = dtype {
                                 self.get_type_size(&inner)
                             } else {
@@ -4509,7 +4512,9 @@ impl CodeGenerator {
                         {
                             self.generate_address_expression(&args[0])?;
 
-                            let dtype = self.resolve_type(&args[0]).unwrap();
+                            let dtype = self
+                                .resolve_type(&args[0])
+                                .ok_or("Cannot resolve array type in Pool.Spawn")?;
                             let (count, stride) = if let DataType::Array(inner, size) = dtype {
                                 (size, self.get_type_size(&inner))
                             } else {
@@ -4823,7 +4828,9 @@ impl CodeGenerator {
                     // 1. Calc Address in $02/$03
                     self.generate_array_address(callee, &args[0])?;
 
-                    let rtype = self.resolve_type(expr).unwrap();
+                    let rtype = self
+                        .resolve_type(expr)
+                        .ok_or("Cannot resolve array element type")?;
                     self.emit("  LDY #0".to_string());
                     match rtype {
                         DataType::Byte | DataType::Bool | DataType::Int => {
@@ -5305,7 +5312,9 @@ impl CodeGenerator {
                 }
 
                 if let Ok(addr) = self.get_static_address(expr) {
-                    let dtype = self.resolve_type(expr).unwrap();
+                    let dtype = self
+                        .resolve_type(expr)
+                        .ok_or("Cannot resolve type for static address expression")?;
                     match dtype {
                         DataType::Word => {
                             self.emit(format!("  LDA ${:04X}", addr));
@@ -5331,7 +5340,9 @@ impl CodeGenerator {
                     Ok(dtype)
                 } else {
                     self.generate_address_expression(expr)?;
-                    let dtype = self.resolve_type(expr).unwrap();
+                    let dtype = self
+                        .resolve_type(expr)
+                        .ok_or("Cannot resolve type for dynamic address expression")?;
                     self.emit("  LDY #0".to_string());
                     match dtype {
                         DataType::Word => {

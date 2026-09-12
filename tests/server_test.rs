@@ -1,9 +1,11 @@
 #[cfg(test)]
 mod tests {
+    use axum::http::Method;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
+    use std::fs;
     use swissarmynes::server;
     use tower::ServiceExt;
 
@@ -66,5 +68,44 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_project_api() {
+        let app = server::app();
+
+        // 1. Create a project
+        let _ = fs::remove_dir_all("projects/test_api_project");
+
+        let create_res = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/projects")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(r#"{"name": "test_api_project"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(create_res.status(), StatusCode::CREATED);
+
+        // 2. List projects
+        let list_res = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/projects")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(list_res.status(), StatusCode::OK);
+
+        // 3. Cleanup
+        let _ = fs::remove_dir_all("projects/test_api_project");
     }
 }

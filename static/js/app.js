@@ -79,6 +79,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 await window.projectManager.saveCurrentProject(true);
             } catch (e) {
                 console.error("Auto-save failed:", e);
+                alert("Auto-save failed: " + e.message);
+                return; // Stop compilation if save fails
             }
         }
 

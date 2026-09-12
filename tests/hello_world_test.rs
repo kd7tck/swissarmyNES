@@ -49,11 +49,11 @@ mod tests {
         // 5. Assembler
         let assembler = Assembler::new();
         let rom = assembler
-            .assemble(&asm_source, None, vec![])
+            .assemble(&asm_lines, None, vec![])
             .expect("Assembly failed");
 
         // Verify ROM size (Header + PRG + CHR)
-        assert_eq!(rom.len(), 40976);
+        assert_eq!(rom.len(), 139280);
 
         // Verification Logic:
         // We look for the sequence of instructions corresponding to the POKEs.

@@ -5,6 +5,7 @@ pub struct SemanticAnalyzer {
     pub symbol_table: SymbolTable,
     errors: Vec<String>,
     unsafe_return_depth: usize,
+    current_bank: u8,
 }
 
 impl Default for SemanticAnalyzer {
@@ -19,6 +20,7 @@ impl SemanticAnalyzer {
             symbol_table: SymbolTable::new(),
             errors: Vec::new(),
             unsafe_return_depth: 0,
+            current_bank: 0,
         };
         analyzer.register_stdlib();
         analyzer
@@ -52,8 +54,12 @@ impl SemanticAnalyzer {
 
     pub fn analyze(&mut self, program: &Program) -> Result<(), Vec<String>> {
         // First pass: register all top-level symbols
+        self.current_bank = 0;
         for decl in &program.declarations {
             match &decl.kind {
+                TopLevelKind::Bank(b) => {
+                    self.current_bank = *b;
+                }
                 TopLevelKind::Const(name, val) => {
                     if let Err(e) =
                         self.symbol_table
@@ -99,6 +105,7 @@ impl SemanticAnalyzer {
                         DataType::Byte, // Placeholder
                         SymbolKind::Sub,
                         Some(param_types),
+                        Some(self.current_bank),
                     ) {
                         self.errors.push(e);
                     }
@@ -171,8 +178,12 @@ impl SemanticAnalyzer {
         }
 
         // Second pass: analyze bodies
+        self.current_bank = 0;
         for decl in &program.declarations {
             match &decl.kind {
+                TopLevelKind::Bank(b) => {
+                    self.current_bank = *b;
+                }
                 TopLevelKind::Sub(_name, params, body) => {
                     self.symbol_table.enter_scope();
                     for (p_name, p_type) in params {

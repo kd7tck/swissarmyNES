@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod tests {
+    use axum::http::Method;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
+    use std::fs;
     use swissarmynes::server;
     use tower::ServiceExt;
-    use axum::http::Method;
-    use std::fs;
 
     #[tokio::test]
     async fn test_static_file_serving() {

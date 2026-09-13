@@ -23,7 +23,7 @@ export class Emulator {
   get_palettes(): number;
   get_wram_len(): number;
   get_cpu_state(): CpuState;
-  add_breakpoint(addr: number): void;
+  add_breakpoint(bank: number, addr: number): void;
   get_nametables(): number;
   get_pixels_len(): number;
   set_sample_rate(rate: number): void;
@@ -32,7 +32,7 @@ export class Emulator {
   get_palettes_len(): number;
   clear_breakpoints(): void;
   get_audio_samples(): number;
-  remove_breakpoint(addr: number): void;
+  remove_breakpoint(bank: number, addr: number): void;
   update_nametables(): void;
   get_nametables_len(): number;
   get_pattern_tables(): number;
@@ -67,7 +67,7 @@ export interface InitOutput {
   readonly __wbg_set_cpustate_status: (a: number, b: number) => void;
   readonly __wbg_set_cpustate_x: (a: number, b: number) => void;
   readonly __wbg_set_cpustate_y: (a: number, b: number) => void;
-  readonly emulator_add_breakpoint: (a: number, b: number) => void;
+  readonly emulator_add_breakpoint: (a: number, b: number, c: number) => void;
   readonly emulator_clear_audio_samples: (a: number) => void;
   readonly emulator_clear_breakpoints: (a: number) => void;
   readonly emulator_get_audio_samples: (a: number) => number;
@@ -87,7 +87,7 @@ export interface InitOutput {
   readonly emulator_get_wram_len: (a: number) => number;
   readonly emulator_load_rom: (a: number, b: number, c: number) => [number, number];
   readonly emulator_new: () => number;
-  readonly emulator_remove_breakpoint: (a: number, b: number) => void;
+  readonly emulator_remove_breakpoint: (a: number, b: number, c: number) => void;
   readonly emulator_reset: (a: number) => void;
   readonly emulator_set_button: (a: number, b: number, c: number, d: number) => void;
   readonly emulator_set_sample_rate: (a: number, b: number) => void;

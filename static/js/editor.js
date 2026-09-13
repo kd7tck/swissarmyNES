@@ -164,7 +164,8 @@ class SwissEditor {
         // Find address for line
         // We look for exact match or first occurrence
         let addr = null;
-        for (const [sLine, sAddr] of this.sourceMap) {
+        let bank = null;
+        for (const [sLine, sBank, sAddr] of this.sourceMap) {
             if (sLine === line) {
                 addr = sAddr;
                 break;
@@ -212,9 +213,9 @@ class SwissEditor {
             // Or we can add all instructions on that line.
             // Usually just the start address is enough.
 
-            for (const [sLine, sAddr] of this.sourceMap) {
+            for (const [sLine, sBank, sAddr] of this.sourceMap) {
                 if (sLine === line) {
-                    this.emulator.add_breakpoint(sAddr);
+                    this.emulator.add_breakpoint(sBank, sAddr);
                     // Add all addresses belonging to this line?
                     // No, usually just the first one.
                     // If we add all, stepping over is harder if one line has multiple instructions.
@@ -646,8 +647,10 @@ class SwissEditor {
         if (!this.emulator) return null;
         try {
             const s = this.emulator.get_cpu_state();
+            const memory = this.getWRAM();
+            const current_prg_bank = memory[0x07F0]; // We put current_prg_bank at $07F0
             const res = {
-                pc: s.pc, sp: s.sp, acc: s.acc, x: s.x, y: s.y, status: s.status, cycles: s.cycles
+                pc: s.pc, sp: s.sp, acc: s.acc, x: s.x, y: s.y, status: s.status, cycles: s.cycles, bank: current_prg_bank
             };
             s.free();
             return res;
@@ -728,7 +731,7 @@ class SwissEditor {
             // Debug Update (Every frame)
             const s = this.getDebugState();
             if (s) {
-               this.updateDebugInfo(s.pc);
+               this.updateDebugInfo(s.pc, s.bank);
             }
 
             // Update Memory Viewer if open

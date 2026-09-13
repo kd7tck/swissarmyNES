@@ -3,6 +3,7 @@ use std::rc::Rc;
 use tetanes_core::common::{Reset, ResetKind};
 use tetanes_core::control_deck::ControlDeck;
 use tetanes_core::input::{JoypadBtn, Player};
+use tetanes_core::mem::Read;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -19,12 +20,11 @@ pub struct CpuState {
 #[wasm_bindgen]
 pub struct Emulator {
     deck: Rc<RefCell<ControlDeck>>,
-    breakpoints: Vec<u16>,
+    breakpoints: Vec<(u8, u16)>,
     // Visualization buffers
     pattern_table_buffer: Vec<u8>,
     nametable_buffer: Vec<u8>,
     palette_buffer: Vec<u8>,
-    oam_buffer: Vec<u8>, // For visual OAM
 }
 
 #[wasm_bindgen]
@@ -44,7 +44,6 @@ impl Emulator {
             // 1024 * 4 bytes
             palette_buffer: vec![0; 1024 * 4],
             // OAM: load_oam likely draws sprites. 256x240?
-            oam_buffer: vec![0; 256 * 240 * 4],
         }
     }
 
@@ -56,14 +55,14 @@ impl Emulator {
         }
     }
 
-    pub fn add_breakpoint(&mut self, addr: u16) {
-        if !self.breakpoints.contains(&addr) {
-            self.breakpoints.push(addr);
+    pub fn add_breakpoint(&mut self, bank: u8, addr: u16) {
+        if !self.breakpoints.contains(&(bank, addr)) {
+            self.breakpoints.push((bank, addr));
         }
     }
 
-    pub fn remove_breakpoint(&mut self, addr: u16) {
-        if let Some(pos) = self.breakpoints.iter().position(|&x| x == addr) {
+    pub fn remove_breakpoint(&mut self, bank: u8, addr: u16) {
+        if let Some(pos) = self.breakpoints.iter().position(|&x| x == (bank, addr)) {
             self.breakpoints.remove(pos);
         }
     }
@@ -90,7 +89,10 @@ impl Emulator {
 
         loop {
             let pc = deck.cpu().pc;
-            if self.breakpoints.contains(&pc) {
+            // The WRAM current_prg_bank is located at $07F0
+            // but we can query memory safely:
+            let bank = deck.cpu_mut().bus.read(0x07F0);
+            if self.breakpoints.contains(&(bank, pc)) {
                 return Ok(true);
             }
 
@@ -240,5 +242,11 @@ impl Emulator {
 
     pub fn get_oam_data_len(&self) -> usize {
         256
+    }
+}
+
+impl Default for Emulator {
+    fn default() -> Self {
+        Self::new()
     }
 }

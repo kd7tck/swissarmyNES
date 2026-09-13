@@ -364,10 +364,11 @@ export class Emulator {
         return CpuState.__wrap(ret);
     }
     /**
+     * @param {number} bank
      * @param {number} addr
      */
-    add_breakpoint(addr) {
-        wasm.emulator_add_breakpoint(this.__wbg_ptr, addr);
+    add_breakpoint(bank, addr) {
+        wasm.emulator_add_breakpoint(this.__wbg_ptr, bank, addr);
     }
     /**
      * @returns {number}
@@ -417,10 +418,11 @@ export class Emulator {
         return ret >>> 0;
     }
     /**
+     * @param {number} bank
      * @param {number} addr
      */
-    remove_breakpoint(addr) {
-        wasm.emulator_remove_breakpoint(this.__wbg_ptr, addr);
+    remove_breakpoint(bank, addr) {
+        wasm.emulator_remove_breakpoint(this.__wbg_ptr, bank, addr);
     }
     update_nametables() {
         wasm.emulator_update_nametables(this.__wbg_ptr);

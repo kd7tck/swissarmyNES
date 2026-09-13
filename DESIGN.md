@@ -322,43 +322,77 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
 
 ---
 
-## Phase 39: Mappers - MMC1
-**Goal:** Larger games (up to 256KB).
-- **Action Items:**
-    - Assembler/Linker support for bank switching.
-    - Compiler directives for `BANK 0`, `BANK 1`.
-    - Mapper #1 initialization code.
-- **Completion Criteria:** A 128KB ROM runs correctly.
+---
 
-## Phase 40: Mappers - MMC3
-**Goal:** Advanced raster effects and huge games.
-- **Action Items:**
-    - Mapper #4 support.
-    - IRQ handler abstraction (`ON SCANLINE 100 DO ...`).
-- **Completion Criteria:** Split-screen scrolling effect works.
+## Phase 39: Repository Ingestion & Bus/Cartridge Architecture
 
-## Phase 41: Optimization - Peephole
-**Goal:** Faster/Smaller code.
+**Goal:** Establish the foundation for the NES emulator architecture by parsing headers and routing the 16-bit CPU Memory Bus.
 - **Action Items:**
-    - Analyze generated ASM for redundant patterns (e.g., `LDA #0; STA $Var; LDA #0`).
-    - Remove redundant loads/stores.
-- **Completion Criteria:** Benchmark program runs 10% faster.
+    - Parse iNES (.nes) and NES 2.0 header structures (PRG-ROM/RAM sizes, CHR-ROM/RAM sizes, mirroring flags, mapper ID).
+    - Define the unified 16-bit CPU Memory Bus routing: 2 KB internal RAM with mirrors ($0000–$1FFF), PPU registers mirrored every 8 bytes ($2000–$3FFF), APU/IO registers ($4000–$4017), and cartridge memory space ($4020–$FFFF).
+    - Abstract the `Mapper` trait (`read_prg`, `write_prg`, `read_chr`, `write_chr`, `step_irq`).
+- **Completion Criteria:** ROM headers are parsed and a skeleton Memory Bus is functional.
 
-## Phase 42: Optimization - Liveness Analysis
-**Goal:** Reduce RAM usage.
+## Phase 40: Ricoh 2A03 (6502) CPU Core Hardening
+
+**Goal:** Implement a fully functional and accurate 6502 CPU core.
 - **Action Items:**
-    - Analyze variable life-spans.
-    - Re-use memory addresses for variables that don't overlap in scope.
-- **Completion Criteria:** Large program fits in 2KB RAM where it previously failed.
+    - Implement all 56 official 6502 instructions across all 12 addressing modes.
+    - Model hardware interrupts (RESET vector at $FFFC, NMI at $FFFA, IRQ/BRK at $FFFE).
+    - Support illegal/unofficial opcodes required by standard test suites (e.g., LAX, SAX, DCP, ISB).
+    - Validate using Kevtris’s `nestest.nes` in headless execution mode by piping instruction traces against the canonical reference log (golden log comparing PC, registers A, X, Y, P, SP, and cycle counters).
+- **Completion Criteria:** CPU passes `nestest.nes` validation logs flawlessly.
 
-## Phase 43: Interactive Tutorials
+## Phase 41: Ricoh 2C02 PPU (Picture Processing Unit)
+
+**Goal:** Build an accurate NES picture processing unit for rendering graphics.
+- **Action Items:**
+    - Implement the internal register state machine: PPUCTRL ($2000), PPUMASK ($2001), PPUSTATUS ($2002), OAMADDR/OAMDATA ($2003/$2004), PPUSCROLL ($2005), PPUADDR ($2006), and PPUDATA ($2007).
+    - Model Loopy’s internal VRAM address registers (v, t, x, w) for accurate scrolling and fine-X shifts.
+    - Frame timing state machine: 262 scanlines, 341 cycles per scanline (pre-render, visible scanlines 0–239, post-render line 240, VBlank lines 241–260).
+    - Sprite evaluation pipeline: primary OAM (64 sprites, 256 bytes), secondary OAM (8 sprites per scanline limit), 8×8 and 8×16 sprite rendering, and Sprite 0 Hit detection.
+    - Generate VBlank NMI interrupt to signal the CPU at cycle 1 of scanline 241.
+- **Completion Criteria:** PPU can correctly render a basic static screen and background graphics from standard ROMs.
+
+## Phase 42: Core Memory Mappers
+
+**Goal:** Support various cartridge hardware memory mappers.
+- **Action Items:**
+    - Mapper 0 (NROM): Zero bank switching; supports classics like Donkey Kong, Super Mario Bros., and Pac-Man.
+    - Mapper 1 (MMC1): 5-bit serial write shift register protocol, dynamic PRG/CHR banking, and configurable mirroring (The Legend of Zelda, Metroid, Mega Man 2).
+    - Mapper 2 (UxROM): Switchable PRG bank with fixed upper bank (Castlevania, Contra).
+    - Mapper 4 (MMC3): Scanline-based IRQ counter for split-screen status bars and mid-frame bank switches (Super Mario Bros. 3, Mega Man 3, Kirby’s Adventure).
+- **Completion Criteria:** Emulator successfully boots and runs games requiring NROM, MMC1, UxROM, and MMC3 logic.
+
+## Phase 43: Ricoh 2A03 APU (Audio Processing Unit)
+
+**Goal:** Add sound processing capabilities to the emulator.
+- **Action Items:**
+    - Synthesize five channels: Pulse 1 and 2 (with envelope and frequency sweep units), Triangle (with linear counter), Noise (15-bit/9-bit LFSR pseudo-random generator), and DMC (Delta Modulation Channel with direct DMA sample memory reads).
+    - Implement the Frame Counter sequencer (4-step 60 Hz and 5-step 48 Hz modes).
+    - Stream synchronized audio samples to the host via cpal using a ring buffer to eliminate audio crackling and underruns.
+- **Completion Criteria:** Basic sound generation for Pulse, Triangle, and Noise channels works correctly.
+
+## Phase 44: The "Swiss Army" Debugging Suite & Frontend
+
+**Goal:** Provide powerful real-time tools for retro developers in the frontend.
+- **Action Items:**
+    - Real-time inspection overlay built with egui or imgui-rs:
+    - Pattern Table Viewer: Live palette swapping over 16×16 tile sheets ($0000–$1FFF).
+    - Nametable Visualizer: Real-time 4-quadrant scrolling display with viewport bounding box overlay.
+    - OAM Sprite Viewer: Inspect coordinates, pattern addresses, and priority flags.
+    - CPU Disassembler & Memory Hex Editor: Set execution breakpoints, step single instructions, and patch RAM on the fly.
+    - State serialization via serde for instant save states and rewind buffers.
+- **Completion Criteria:** Debugging overlays function in real-time alongside emulator execution.
+
+## Phase 45: Interactive Tutorials
 **Goal:** Onboarding new users.
 - **Action Items:**
     - Overlay system highlighting UI elements.
     - Step-by-step "Make your first game" guide inside the IDE.
 - **Completion Criteria:** A user can follow prompt bubbles to compile "Hello World".
 
-## Phase 44: Asset Library
+## Phase 46: Asset Library
 **Goal:** Reusability.
 - **Action Items:**
     - "My Assets" panel.
@@ -366,7 +400,7 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Standard library of common assets (fonts, basic sprites).
 - **Completion Criteria:** Import a font from the global library.
 
-## Phase 45: Desktop Build
+## Phase 47: Desktop Build
 **Goal:** Offline development.
 - **Action Items:**
     - Wrap the application in Tauri (Rust-based Electron alternative).

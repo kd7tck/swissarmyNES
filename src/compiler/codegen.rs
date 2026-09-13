@@ -95,9 +95,22 @@ impl CodeGenerator {
             self.emit(".ORG $C000".to_string()); // Bank 7 starts at $C000
         }
 
-        // Trampoline placeholder
-        self.emit("Trampoline_BankSwitch:".to_string());
+        // MMC1 BankSwitch Routine
+        // Expects the target bank in A register.
+        // Uses X to preserve it if needed or just writes directly.
+        self.emit("MMC1_SetPrgBank:".to_string());
+        self.emit("  STA current_prg_bank".to_string());
+        self.emit("  STA $E000".to_string());
+        self.emit("  LSR A".to_string());
+        self.emit("  STA $E000".to_string());
+        self.emit("  LSR A".to_string());
+        self.emit("  STA $E000".to_string());
+        self.emit("  LSR A".to_string());
+        self.emit("  STA $E000".to_string());
+        self.emit("  LSR A".to_string());
+        self.emit("  STA $E000".to_string());
         self.emit("  RTS".to_string());
+        self.generate_trampolines(program);
 
         self.generate_sound_engine();
         self.generate_math_helpers();
@@ -598,6 +611,35 @@ impl CodeGenerator {
         self.emit("".to_string());
 
         Ok(())
+    }
+
+    fn generate_trampolines(&mut self, program: &Program) {
+        self.emit("; --- Cross-Bank Trampolines ---".to_string());
+        let mut trampolines_generated = std::collections::HashSet::new();
+        for decl in &program.declarations {
+            if let TopLevelKind::Sub(name, _, _) = &decl.kind {
+                if trampolines_generated.insert(name.clone()) {
+                    let target_bank = self
+                        .symbol_table
+                        .resolve(name)
+                        .and_then(|sym| sym.bank)
+                        .unwrap_or(0);
+                    self.emit(format!("Trampoline_{}:", name));
+                    // Save caller bank to stack
+                    self.emit("  LDA current_prg_bank".to_string());
+                    self.emit("  PHA".to_string());
+                    // Switch to target bank
+                    self.emit(format!("  LDA #${:02X}", target_bank));
+                    self.emit("  JSR MMC1_SetPrgBank".to_string());
+                    // Call the target subroutine
+                    self.emit(format!("  JSR {}", name));
+                    // Restore caller bank
+                    self.emit("  PLA".to_string());
+                    self.emit("  JSR MMC1_SetPrgBank".to_string());
+                    self.emit("  RTS".to_string());
+                }
+            }
+        }
     }
 
     fn generate_sound_engine(&mut self) {

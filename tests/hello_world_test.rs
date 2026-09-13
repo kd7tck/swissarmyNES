@@ -42,7 +42,6 @@ mod tests {
         let symbol_table = analyzer.symbol_table;
         let mut codegen = CodeGenerator::new(symbol_table);
         let (asm_lines, sourcemap) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
 
         assert!(!sourcemap.is_empty(), "Source map should not be empty");
 

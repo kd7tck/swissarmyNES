@@ -507,7 +507,7 @@ mod tests {
         let input = "if Then else";
         let tokens = tokenize(input);
 
-        let expected = vec![Token::If, Token::Then, Token::Else, Token::EOF];
+        let expected = [Token::If, Token::Then, Token::Else, Token::EOF];
 
         assert_eq!(tokens.len(), expected.len());
         for (i, (token, _)) in tokens.iter().enumerate() {
@@ -520,7 +520,7 @@ mod tests {
         let input = "foobar x y123 var_name";
         let tokens = tokenize(input);
 
-        let expected = vec![
+        let expected = [
             Token::Identifier("foobar".to_string()),
             Token::Identifier("x".to_string()),
             Token::Identifier("y123".to_string()),
@@ -539,7 +539,7 @@ mod tests {
         let input = "123 $FF %1010 \"Hello\"";
         let tokens = tokenize(input);
 
-        let expected = vec![
+        let expected = [
             Token::Integer(123),
             Token::Integer(255),
             Token::Integer(10),
@@ -558,7 +558,7 @@ mod tests {
         let input = "x = 1 ' This is a comment\ny = 2 REM Another comment";
         let tokens = tokenize(input);
 
-        let expected_tokens = vec![
+        let expected_tokens = [
             Token::Identifier("x".to_string()),
             Token::Equal,
             Token::Integer(1),
@@ -570,7 +570,7 @@ mod tests {
         ];
 
         // Lines: x=1 (1), Newline (1->2), y=2 (2), EOF
-        let expected_lines = vec![1, 1, 1, 1, 2, 2, 2, 2];
+        let expected_lines = [1, 1, 1, 1, 2, 2, 2, 2];
 
         assert_eq!(tokens.len(), expected_tokens.len());
         for (i, (token, line)) in tokens.iter().enumerate() {

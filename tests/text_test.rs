@@ -22,7 +22,7 @@ mod tests {
         analyzer.analyze(&program).expect("Analysis failed");
         let mut codegen = CodeGenerator::new(analyzer.symbol_table);
         let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+
         let assembler = Assembler::new();
         let rom = assembler
             .assemble(&asm_lines, None, vec![])
@@ -65,7 +65,7 @@ mod tests {
         analyzer.analyze(&program).expect("Analysis failed");
         let mut codegen = CodeGenerator::new(analyzer.symbol_table);
         let (asm_lines, _) = codegen.generate(&program).expect("Codegen failed");
-        let asm_source = asm_lines.join("\n");
+
         let assembler = Assembler::new();
         let rom = assembler
             .assemble(&asm_lines, None, vec![])

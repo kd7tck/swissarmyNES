@@ -714,6 +714,8 @@ dependencies = [
  "rs6502",
  "serde",
  "serde_json",
+ "swiss-emulator",
+ "tetanes-core",
  "tokio",
  "tower",
  "tower-http",

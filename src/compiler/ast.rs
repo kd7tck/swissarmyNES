@@ -73,6 +73,7 @@ pub enum StatementKind {
 pub struct Statement {
     pub kind: StatementKind,
     pub line: usize,
+    pub source_file: String,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -112,6 +113,7 @@ pub enum TopLevelKind {
 pub struct TopLevel {
     pub kind: TopLevelKind,
     pub line: usize,
+    pub source_file: String,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -136,6 +138,7 @@ impl Statement {
     pub fn Let(target: Expression, value: Expression) -> Self {
         Self {
             kind: StatementKind::Let(target, value),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -147,6 +150,7 @@ impl Statement {
     ) -> Self {
         Self {
             kind: StatementKind::If(cond, then_block, else_block),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -154,6 +158,7 @@ impl Statement {
     pub fn While(cond: Expression, body: Vec<Statement>) -> Self {
         Self {
             kind: StatementKind::While(cond, body),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -161,6 +166,7 @@ impl Statement {
     pub fn DoWhile(body: Vec<Statement>, cond: Expression) -> Self {
         Self {
             kind: StatementKind::DoWhile(body, cond),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -174,6 +180,7 @@ impl Statement {
     ) -> Self {
         Self {
             kind: StatementKind::For(var, start, end, step, body),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -181,6 +188,7 @@ impl Statement {
     pub fn Return(expr: Option<Expression>) -> Self {
         Self {
             kind: StatementKind::Return(expr),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -188,6 +196,7 @@ impl Statement {
     pub fn Call(target: Expression, args: Vec<Expression>) -> Self {
         Self {
             kind: StatementKind::Call(target, args),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -195,6 +204,7 @@ impl Statement {
     pub fn Poke(addr: Expression, val: Expression) -> Self {
         Self {
             kind: StatementKind::Poke(addr, val),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -202,6 +212,7 @@ impl Statement {
     pub fn PlaySfx(id: Expression) -> Self {
         Self {
             kind: StatementKind::PlaySfx(id),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -209,6 +220,7 @@ impl Statement {
     pub fn Print(args: Vec<Expression>) -> Self {
         Self {
             kind: StatementKind::Print(args),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -216,6 +228,7 @@ impl Statement {
     pub fn Asm(lines: Vec<String>) -> Self {
         Self {
             kind: StatementKind::Asm(lines),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -223,6 +236,7 @@ impl Statement {
     pub fn Comment(text: String) -> Self {
         Self {
             kind: StatementKind::Comment(text),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -230,6 +244,7 @@ impl Statement {
     pub fn On(evt: String, handler: String) -> Self {
         Self {
             kind: StatementKind::On(evt, handler),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -237,6 +252,7 @@ impl Statement {
     pub fn Read(vars: Vec<String>) -> Self {
         Self {
             kind: StatementKind::Read(vars),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -244,6 +260,7 @@ impl Statement {
     pub fn Restore(label: Option<String>) -> Self {
         Self {
             kind: StatementKind::Restore(label),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -255,6 +272,7 @@ impl Statement {
     ) -> Self {
         Self {
             kind: StatementKind::Select(expr, cases, else_block),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -262,17 +280,20 @@ impl Statement {
     pub fn Randomize(expr: Expression) -> Self {
         Self {
             kind: StatementKind::Randomize(expr),
+            source_file: String::new(),
             line: 0,
         }
     }
     #[allow(non_snake_case)]
     pub const WAIT_VBLANK: Self = Self {
         kind: StatementKind::WaitVBlank,
+        source_file: String::new(),
         line: 0,
     };
     #[allow(non_upper_case_globals)]
     pub const WaitVBlank: Self = Self {
         kind: StatementKind::WaitVBlank,
+        source_file: String::new(),
         line: 0,
     };
 }
@@ -282,6 +303,7 @@ impl TopLevel {
     pub fn Sub(name: String, params: Vec<(String, DataType)>, body: Vec<Statement>) -> Self {
         Self {
             kind: TopLevelKind::Sub(name, params, body),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -289,6 +311,7 @@ impl TopLevel {
     pub fn TypeDecl(name: String, members: Vec<(String, DataType)>) -> Self {
         Self {
             kind: TopLevelKind::TypeDecl(name, members),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -296,6 +319,7 @@ impl TopLevel {
     pub fn Interrupt(name: String, body: Vec<Statement>) -> Self {
         Self {
             kind: TopLevelKind::Interrupt(name, body),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -303,6 +327,7 @@ impl TopLevel {
     pub fn Const(name: String, val: Expression) -> Self {
         Self {
             kind: TopLevelKind::Const(name, val),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -310,6 +335,7 @@ impl TopLevel {
     pub fn Dim(name: String, dtype: DataType, init: Option<Expression>) -> Self {
         Self {
             kind: TopLevelKind::Dim(name, dtype, init),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -317,6 +343,7 @@ impl TopLevel {
     pub fn Asm(lines: Vec<String>) -> Self {
         Self {
             kind: TopLevelKind::Asm(lines),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -324,6 +351,7 @@ impl TopLevel {
     pub fn Data(label: Option<String>, exprs: Vec<Expression>) -> Self {
         Self {
             kind: TopLevelKind::Data(label, exprs),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -331,6 +359,7 @@ impl TopLevel {
     pub fn Include(filename: String) -> Self {
         Self {
             kind: TopLevelKind::Include(filename),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -338,6 +367,7 @@ impl TopLevel {
     pub fn Enum(name: String, members: Vec<(String, Option<i32>)>) -> Self {
         Self {
             kind: TopLevelKind::Enum(name, members),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -345,6 +375,7 @@ impl TopLevel {
     pub fn Macro(name: String, params: Vec<String>, body: Vec<Statement>) -> Self {
         Self {
             kind: TopLevelKind::Macro(name, params, body),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -352,6 +383,7 @@ impl TopLevel {
     pub fn Metasprite(name: String, tiles: Vec<MetaspriteTile>) -> Self {
         Self {
             kind: TopLevelKind::Metasprite(name, tiles),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -359,6 +391,7 @@ impl TopLevel {
     pub fn Animation(name: String, frames: Vec<AnimationFrame>, loops: bool) -> Self {
         Self {
             kind: TopLevelKind::Animation(name, frames, loops),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -366,6 +399,7 @@ impl TopLevel {
     pub fn Metatile(name: String, tiles: [u8; 4], attr: u8) -> Self {
         Self {
             kind: TopLevelKind::Metatile(name, tiles, attr),
+            source_file: String::new(),
             line: 0,
         }
     }
@@ -373,6 +407,7 @@ impl TopLevel {
     pub fn World(width: u32, height: u32, data: Vec<i32>) -> Self {
         Self {
             kind: TopLevelKind::World(width, height, data),
+            source_file: String::new(),
             line: 0,
         }
     }

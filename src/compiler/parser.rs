@@ -73,6 +73,7 @@ impl Parser {
             self.match_token(Token::Newline);
             return Ok(TopLevel {
                 kind: TopLevelKind::Bank(bank_num),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -89,6 +90,7 @@ impl Parser {
             self.match_token(Token::Newline);
             return Ok(TopLevel {
                 kind: TopLevelKind::Include(filename),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -107,6 +109,7 @@ impl Parser {
             self.match_token(Token::Newline);
             return Ok(TopLevel {
                 kind: TopLevelKind::Const(name, val),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -157,6 +160,7 @@ impl Parser {
             self.match_token(Token::Newline);
             return Ok(TopLevel {
                 kind: TopLevelKind::Dim(name, data_type, init_expr),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -225,6 +229,7 @@ impl Parser {
 
             return Ok(TopLevel {
                 kind: TopLevelKind::TypeDecl(name, members),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -288,6 +293,7 @@ impl Parser {
 
             return Ok(TopLevel {
                 kind: TopLevelKind::Enum(name, variants),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -334,6 +340,7 @@ impl Parser {
 
             return Ok(TopLevel {
                 kind: TopLevelKind::Sub(name, params, body),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -360,6 +367,7 @@ impl Parser {
 
             return Ok(TopLevel {
                 kind: TopLevelKind::Interrupt(name, body),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -400,6 +408,7 @@ impl Parser {
 
             return Ok(TopLevel {
                 kind: TopLevelKind::Macro(name, params, body),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -474,6 +483,7 @@ impl Parser {
 
             return Ok(TopLevel {
                 kind: TopLevelKind::Animation(name, frames, loops),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -523,6 +533,7 @@ impl Parser {
 
             return Ok(TopLevel {
                 kind: TopLevelKind::Metasprite(name, tiles),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -552,6 +563,7 @@ impl Parser {
             self.match_token(Token::Newline);
             return Ok(TopLevel {
                 kind: TopLevelKind::Data(data_label, exprs),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -583,6 +595,7 @@ impl Parser {
             self.consume(Token::Asm, "Expected ASM after END")?;
             return Ok(TopLevel {
                 kind: TopLevelKind::Asm(lines),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -629,6 +642,7 @@ impl Parser {
             let expr = self.parse_expression()?;
             return Ok(Statement {
                 kind: StatementKind::Let(target, expr),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -648,12 +662,14 @@ impl Parser {
             if self.check(Token::Newline) || self.check(Token::EOF) {
                 return Ok(Statement {
                     kind: StatementKind::Return(None),
+                    source_file: "main.swiss".to_string(),
                     line: start_line,
                 });
             }
             let expr = self.parse_expression()?;
             return Ok(Statement {
                 kind: StatementKind::Return(Some(expr)),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -665,6 +681,7 @@ impl Parser {
             self.consume(Token::RParen, "Expected ')' after POKE value")?;
             return Ok(Statement {
                 kind: StatementKind::Poke(addr, val),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -674,6 +691,7 @@ impl Parser {
             self.consume(Token::RParen, "Expected ')' after id")?;
             return Ok(Statement {
                 kind: StatementKind::PlaySfx(id),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -691,6 +709,7 @@ impl Parser {
             }
             return Ok(Statement {
                 kind: StatementKind::Print(args),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -711,6 +730,7 @@ impl Parser {
             }
             return Ok(Statement {
                 kind: StatementKind::Read(vars),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -725,6 +745,7 @@ impl Parser {
             }
             return Ok(Statement {
                 kind: StatementKind::Restore(label),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -755,6 +776,7 @@ impl Parser {
             self.consume(Token::Asm, "Expected ASM after END")?;
             return Ok(Statement {
                 kind: StatementKind::Asm(lines),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -768,12 +790,14 @@ impl Parser {
             if let Expression::Call(target, args) = expr {
                 return Ok(Statement {
                     kind: StatementKind::Call(*target, args),
+                    source_file: "main.swiss".to_string(),
                     line: start_line,
                 });
             } else if let Expression::Identifier(name) = expr {
                 // Call Name (Implicit args empty)
                 return Ok(Statement {
                     kind: StatementKind::Call(Expression::Identifier(name), vec![]),
+                    source_file: "main.swiss".to_string(),
                     line: start_line,
                 });
             } else {
@@ -808,6 +832,7 @@ impl Parser {
             };
             return Ok(Statement {
                 kind: StatementKind::On(vector, routine),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -815,6 +840,7 @@ impl Parser {
         if self.match_token(Token::WaitVBlank) {
             return Ok(Statement {
                 kind: StatementKind::WaitVBlank,
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -823,6 +849,7 @@ impl Parser {
             let expr = self.parse_expression()?;
             return Ok(Statement {
                 kind: StatementKind::Randomize(expr),
+                source_file: "main.swiss".to_string(),
                 line: start_line,
             });
         }
@@ -838,6 +865,7 @@ impl Parser {
                 let val = self.parse_expression()?;
                 return Ok(Statement {
                     kind: StatementKind::Let(expr, val),
+                    source_file: "main.swiss".to_string(),
                     line: start_line,
                 });
             }
@@ -845,6 +873,7 @@ impl Parser {
             if let Expression::Call(target, args) = expr {
                 return Ok(Statement {
                     kind: StatementKind::Call(*target, args),
+                    source_file: "main.swiss".to_string(),
                     line: start_line,
                 });
             }
@@ -853,6 +882,7 @@ impl Parser {
             if let Expression::Identifier(name) = expr {
                 return Ok(Statement {
                     kind: StatementKind::Call(Expression::Identifier(name), vec![]),
+                    source_file: "main.swiss".to_string(),
                     line: start_line,
                 });
             }
@@ -903,6 +933,7 @@ impl Parser {
         self.consume(Token::If, "Expected IF after END")?;
         Ok(Statement {
             kind: StatementKind::If(condition, then_block, else_block),
+            source_file: "main.swiss".to_string(),
             line,
         })
     }
@@ -914,6 +945,7 @@ impl Parser {
         self.consume(Token::Wend, "Expected WEND")?;
         Ok(Statement {
             kind: StatementKind::While(condition, body),
+            source_file: "main.swiss".to_string(),
             line,
         })
     }
@@ -926,6 +958,7 @@ impl Parser {
         let condition = self.parse_expression()?;
         Ok(Statement {
             kind: StatementKind::DoWhile(body, condition),
+            source_file: "main.swiss".to_string(),
             line,
         })
     }
@@ -957,6 +990,7 @@ impl Parser {
         }
         Ok(Statement {
             kind: StatementKind::For(var_name, start_expr, end_expr, step_expr, body),
+            source_file: "main.swiss".to_string(),
             line,
         })
     }
@@ -994,6 +1028,7 @@ impl Parser {
         self.consume(Token::Select, "Expected SELECT after END")?;
         Ok(Statement {
             kind: StatementKind::Select(expr, cases, case_else),
+            source_file: "main.swiss".to_string(),
             line,
         })
     }

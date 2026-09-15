@@ -17,9 +17,13 @@ class SwissEditor {
         this.wasmLoaded = false;
         this.wasmMemory = null;
         this.frameCount = 0;
+        this.frameRequest = null;
+        this.lastFrameTime = null;
+        this.frameDebt = 0;
 
         // Debug State
-        this.sourceMap = []; // Line (1-based) -> Address
+        this.sourceMap = { version: 1, sources: {}, entries: [] };
+        this.compiledProject = null;
         this.activeLine = -1;
         this.breakpoints = new Set(); // Set of line numbers (1-based)
 
@@ -49,9 +53,23 @@ class SwissEditor {
         if (!this.editor) return;
 
         // Bind events
-        this.editor.addEventListener('input', () => this.update());
+        this.editor.addEventListener('input', () => { this.update(); this.syncBreakpoints(); this.clearDebugHighlight(); this.hideAddressTooltip(); });
         this.editor.addEventListener('scroll', () => this.syncScroll());
         this.editor.addEventListener('keydown', (e) => this.handleKey(e));
+        window.addEventListener('project-loaded', () => {
+            this.sourceMap = { version: 1, sources: {}, entries: [] };
+            this.breakpoints.clear();
+            this.syncBreakpoints();
+            this.clearDebugHighlight();
+            this.update();
+        });
+        window.addEventListener('blur', () => this.releaseInputs());
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                this.releaseInputs();
+                if (this.emulatorRunning) this.togglePause();
+            }
+        });
 
         // Breakpoint toggle
         this.lineNumbers.addEventListener('click', (e) => {
@@ -119,6 +137,8 @@ class SwissEditor {
                 e.gamepad.index, e.gamepad.id);
             if (this.gamepadIndex === e.gamepad.index) {
                 this.gamepadIndex = null;
+                this.gamepadState.fill(false);
+                this.syncInputs();
             }
         });
     }
@@ -159,27 +179,22 @@ class SwissEditor {
             .join('');
     }
 
-    showAddressTooltip(line, x, y) {
-        if (!this.sourceMap) return;
-        // Find address for line
-        // We look for exact match or first occurrence
-        let addr = null;
-        let bank = null;
-        for (const [sLine, sBank, sAddr] of this.sourceMap) {
-            if (sLine === line) {
-                addr = sAddr;
-                break;
-            }
-        }
+    mappedEntries() {
+        if (this.compiledProject !== (window.projectManager?.currentProject || null)) return [];
+        const file = window.projectManager?.currentFile || 'main.swiss';
+        if (this.sourceMap?.version !== 1 || this.sourceMap.sources?.[file] !== this.editor.value) return [];
+        return this.sourceMap.entries.filter(entry => entry.file === file && entry.kind === 'instruction');
+    }
 
-        if (addr !== null) {
-            this.tooltip.innerText = `$${addr.toString(16).toUpperCase().padStart(4, '0')}`;
+    showAddressTooltip(line, x, y) {
+        const entry = this.mappedEntries().find(entry => entry.line === line);
+        if (entry) {
+            this.tooltip.innerText = `Bank ${entry.bank}: $${entry.cpu_start.toString(16).toUpperCase().padStart(4, '0')}`;
             this.tooltip.style.left = (x + 10) + 'px';
             this.tooltip.style.top = (y + 10) + 'px';
             this.tooltip.style.display = 'block';
         }
     }
-
     hideAddressTooltip() {
         if (this.tooltip) this.tooltip.style.display = 'none';
     }
@@ -202,31 +217,14 @@ class SwissEditor {
     }
 
     syncBreakpoints() {
-        if (!this.emulator || !this.sourceMap) return;
-
+        if (!this.emulator) return;
         this.emulator.clear_breakpoints();
-
+        const entries = this.mappedEntries();
         for (const line of this.breakpoints) {
-            // Find all addresses for this line
-            // SourceMap is [(line, addr), ...]
-            // Actually, we usually just want the first address for the line.
-            // Or we can add all instructions on that line.
-            // Usually just the start address is enough.
-
-            for (const [sLine, sBank, sAddr] of this.sourceMap) {
-                if (sLine === line) {
-                    this.emulator.add_breakpoint(sBank, sAddr);
-                    // Add all addresses belonging to this line?
-                    // No, usually just the first one.
-                    // If we add all, stepping over is harder if one line has multiple instructions.
-                    // But if we only add first, and we jump to middle of line (unlikely), we miss.
-                    // Let's stick to adding the first one we find for that line.
-                    break;
-                }
-            }
+            const entry = entries.find(entry => entry.line === line);
+            if (entry) this.emulator.add_breakpoint(entry.bank, entry.cpu_start);
         }
     }
-
     updateHighlighting(text) {
         const lines = text.split('\n');
         const highlightedLines = lines.map(line => this.highlightLine(line));
@@ -327,15 +325,12 @@ class SwissEditor {
             this.audioContext.resume();
         }
 
-        this.sourceMap = sourceMap;
-        console.log("Loaded Source Map with " + sourceMap.length + " entries.");
-
         try {
-            if (this.emulator) {
-                if (this.emulator.free) this.emulator.free();
-            }
-            this.emulator = new this.EmulatorClass();
+            if (!this.emulator) this.emulator = new this.EmulatorClass();
             this.emulator.load_rom(romData);
+            this.cancelFrame();
+            this.sourceMap = sourceMap;
+            this.compiledProject = window.projectManager?.currentProject || null;
             this.emulator.set_sample_rate(this.audioContext.sampleRate);
             this.nextStartTime = this.audioContext.currentTime;
 
@@ -355,7 +350,7 @@ class SwissEditor {
             // Start Loop
             this.emulatorRunning = true;
             this.updatePlayPauseButton();
-            requestAnimationFrame(() => this.emulatorLoop());
+            this.scheduleFrame();
         } catch (e) {
             console.error("Emulator error:", e);
             alert("Emulator crashed: " + e);
@@ -429,8 +424,11 @@ class SwissEditor {
             btnClose.style.backgroundColor = '#d9534f';
             btnClose.onclick = () => {
                 this.emulatorRunning = false;
+                this.cancelFrame();
+                this.releaseInputs();
                 overlay.style.display = 'none';
-                if(this.audioContext) this.audioContext.suspend();
+                this.cancelFrame();
+             if(this.audioContext) this.audioContext.suspend();
                 this.clearDebugHighlight();
                 if(this.ppuViewer.hide) this.ppuViewer.hide();
             };
@@ -538,8 +536,11 @@ class SwissEditor {
         this.updatePlayPauseButton();
         if (this.emulatorRunning) {
              if(this.audioContext && this.audioContext.state === 'suspended') this.audioContext.resume();
-             this.emulatorLoop();
+             this.lastFrameTime = null;
+             this.frameDebt = 0;
+             this.scheduleFrame();
         } else {
+             this.cancelFrame();
              if(this.audioContext) this.audioContext.suspend();
         }
     }
@@ -601,9 +602,9 @@ class SwissEditor {
             }
         }
 
-        if (this.gamepadIndex === null) return;
+        if (this.gamepadIndex === null) { this.gamepadState.fill(false); this.syncInputs(); return; }
         const gp = gamepads[this.gamepadIndex];
-        if (!gp || !gp.connected) return;
+        if (!gp || !gp.connected) { this.gamepadIndex = null; this.gamepadState.fill(false); this.syncInputs(); return; }
 
         const b = gp.buttons;
         const axes = gp.axes;
@@ -630,6 +631,12 @@ class SwissEditor {
             }
         }
         if (changed) this.syncInputs();
+    }
+
+    releaseInputs() {
+        this.keyboardState.fill(false);
+        this.gamepadState.fill(false);
+        this.syncInputs();
     }
 
     syncInputs() {
@@ -667,39 +674,17 @@ class SwissEditor {
     }
 
     updateDebugInfo(pc) {
-        if (!this.sourceMap || this.sourceMap.length === 0) return;
-
-        // Simple linear search for now, could be binary search
-        // Find line where line_addr <= pc < next_line_addr
-        // The map is Line -> Addr.
-        // But code generation emits map as we go.
-        // Map is [(line, addr), (line, addr), ...]
-
-        // Find the last entry where addr <= pc
-        let bestLine = -1;
-        // Optimization: Start searching near last active line?
-        // For now, linear scan is fast enough for < 10000 lines
-        for (let i = 0; i < this.sourceMap.length; i++) {
-            const [line, addr] = this.sourceMap[i];
-            if (addr <= pc) {
-                bestLine = line;
-            } else {
-                // Since map is sorted by execution order (address usually increasing),
-                // if we pass pc, we stop.
-                // Wait, generated code might jump around, but the map list is generated in order of emission.
-                // So addresses should be monotonic mostly.
-                // Exceptions: Loops/Jumps don't affect map order.
-                // Map is Line -> StartAddr of Line.
-                break;
-            }
-        }
-
-        if (bestLine !== -1 && bestLine !== this.activeLine) {
-            this.highlightDebugLine(bestLine);
-            this.activeLine = bestLine;
+        const offset = this.emulator?.prg_offset(pc);
+        const entry = this.mappedEntries().find(entry =>
+            entry.bank === Math.floor(offset / 16384) && pc >= entry.cpu_start && pc < entry.cpu_end);
+        if (entry) {
+            if (entry.line !== this.activeLine) this.highlightDebugLine(entry.line);
+            this.activeLine = entry.line;
+        } else {
+            this.clearDebugHighlight();
+            this.activeLine = -1;
         }
     }
-
     highlightDebugLine(lineNum) {
         // Clear previous
         this.clearDebugHighlight();
@@ -719,14 +704,39 @@ class SwissEditor {
         if (prev) prev.classList.remove('debug-active');
     }
 
-    emulatorLoop() {
+    scheduleFrame() {
+        if (!this.emulatorRunning || this.frameRequest !== null) return;
+        this.frameRequest = requestAnimationFrame(time => {
+            this.frameRequest = null;
+            this.emulatorLoop(time);
+        });
+    }
+
+    cancelFrame() {
+        if (this.frameRequest !== null) cancelAnimationFrame(this.frameRequest);
+        this.frameRequest = null;
+        this.lastFrameTime = null;
+        this.frameDebt = 0;
+    }
+
+    emulatorLoop(time) {
         if (!this.emulatorRunning) return;
 
         // Poll inputs
         this.pollGamepads();
 
         try {
-            const breakpointHit = this.emulator.step();
+            // Bound catch-up after slow frames; never accumulate a hidden-tab backlog.
+            const frameMs = 1000 / this.emulator.frame_rate();
+            if (this.lastFrameTime === null) this.lastFrameTime = time;
+            this.frameDebt += Math.min(Math.max(time - this.lastFrameTime, 0), frameMs * 4);
+            this.lastFrameTime = time;
+            if (this.frameDebt < frameMs) { this.scheduleFrame(); return; }
+            let breakpointHit = false;
+            while (this.frameDebt >= frameMs && !breakpointHit) {
+                breakpointHit = this.emulator.step();
+                this.frameDebt -= frameMs;
+            }
 
             // Debug Update (Every frame)
             const s = this.getDebugState();
@@ -752,6 +762,7 @@ class SwissEditor {
 
             if (breakpointHit) {
                 this.emulatorRunning = false;
+                this.cancelFrame();
                 this.updatePlayPauseButton();
                 // Force update views on break
                 if (this.memoryViewerOpen) this.updateMemoryView();
@@ -823,7 +834,7 @@ class SwissEditor {
                  this.emulator.clear_audio_samples();
             }
 
-            requestAnimationFrame(() => this.emulatorLoop());
+            this.scheduleFrame();
         } catch (e) {
             console.error(e);
             this.emulatorRunning = false;

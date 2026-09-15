@@ -3,10 +3,11 @@ use crate::compiler::{
     assembler::Assembler,
     ast::{AnimationFrame, Expression, MetaspriteTile, TopLevel, TopLevelKind},
     audio,
-    codegen::{CodeGenerator, SourceMap, ENVELOPE_TABLE_ADDR, NAMETABLE_ADDR},
+    codegen::{CodeGenerator, ENVELOPE_TABLE_ADDR, NAMETABLE_ADDR},
     lexer::Lexer,
     parser::Parser,
     preprocessor,
+    source_map::LinkedSourceMap as SourceMap,
 };
 use crate::server::project::{self, ProjectAssets};
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
@@ -89,6 +90,10 @@ pub fn compile_source(
         None
     };
 
+    if let Some(assets) = &resolved_assets {
+        assets.validate_for_compile()?;
+    }
+
     // 1. Lexing
     let mut lexer = Lexer::new(&source_code);
     let tokens = lexer
@@ -102,10 +107,18 @@ pub fn compile_source(
         .map_err(|e| format!("Parser Error: {:?}", e))?;
 
     // 2b. Preprocessing (Includes)
+    let sources = std::cell::RefCell::new(std::collections::BTreeMap::from([(
+        "main.swiss".to_string(),
+        source_code.clone(),
+    )]));
     let p_name = project_name.clone();
-    let provider = move |filename: &str| -> Result<String, String> {
+    let provider = |filename: &str| -> Result<String, String> {
         if let Some(name) = &p_name {
-            project::read_file(name, filename)
+            let contents = project::read_file(name, filename)?;
+            sources
+                .borrow_mut()
+                .insert(filename.to_string(), contents.clone());
+            Ok(contents)
         } else {
             Err("Includes are only supported within a named project context".to_string())
         }
@@ -134,6 +147,7 @@ pub fn compile_source(
                 .collect();
             program.declarations.push(TopLevel {
                 kind: TopLevelKind::Metasprite(ms.name.clone(), tiles),
+                source_file: "main.swiss".to_string(),
                 line: 0,
             });
         }
@@ -149,6 +163,7 @@ pub fn compile_source(
                 .collect();
             program.declarations.push(TopLevel {
                 kind: TopLevelKind::Animation(anim.name.clone(), frames, anim.does_loop),
+                source_file: "main.swiss".to_string(),
                 line: 0,
             });
         }
@@ -156,6 +171,7 @@ pub fn compile_source(
         for mt in &assets.metatiles {
             program.declarations.push(TopLevel {
                 kind: TopLevelKind::Metatile(mt.name.clone(), mt.tiles, mt.attr),
+                source_file: "main.swiss".to_string(),
                 line: 0,
             });
         }
@@ -163,6 +179,7 @@ pub fn compile_source(
         if let Some(world) = &assets.world {
             program.declarations.push(TopLevel {
                 kind: TopLevelKind::World(world.width, world.height, world.data.clone()),
+                source_file: "main.swiss".to_string(),
                 line: 0,
             });
         }
@@ -179,7 +196,7 @@ pub fn compile_source(
 
     // Create CodeGenerator
     let mut codegen = CodeGenerator::new(symbol_table);
-    let (asm_lines, source_map) = codegen
+    let (asm_lines, _) = codegen
         .generate_banks(&program)
         .map_err(|e| format!("Codegen Error: {:?}", e))?;
     // KEEP
@@ -261,11 +278,13 @@ pub fn compile_source(
         }
     }
 
-    let rom = assembler
-        .assemble_banks(&asm_lines, chr_data, injections)
+    let (rom, layout) = assembler
+        .assemble_with_layout(&asm_lines, chr_data, injections)
         .map_err(|e| format!("Assembler Error: {:?}", e))?;
 
-    Ok((rom, source_map))
+    let mut map = SourceMap::from_layout(layout);
+    map.sources = sources.into_inner();
+    Ok((rom, map))
 }
 
 // Project API Handlers

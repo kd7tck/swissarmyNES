@@ -146,14 +146,13 @@ class ProjectManager {
             const response = await fetch(`/api/projects/${this.currentProject}/files/${filename}`);
             if (!response.ok) throw new Error('Failed to load file');
             const content = await response.text();
+            this.currentFile = filename;
 
             const editor = document.getElementById('code-editor');
             if (editor) {
                 editor.value = content;
                 editor.dispatchEvent(new Event('input'));
             }
-
-            this.currentFile = filename;
 
             // Re-render list to update active class
             Array.from(this.fileList.children).forEach(li => {

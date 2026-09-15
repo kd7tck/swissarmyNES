@@ -321,11 +321,28 @@ export class Emulator {
         wasm.__wbg_emulator_free(ptr, 0);
     }
     /**
+     * Nominal frame cadence from the active backend region and CPU clock.
+     * @returns {number}
+     */
+    frame_rate() {
+        const ret = wasm.emulator_frame_rate(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * @returns {number}
      */
     get_pixels() {
         const ret = wasm.emulator_get_pixels(this.__wbg_ptr);
         return ret >>> 0;
+    }
+    /**
+     * Physical PRG offset, excluding the iNES header; -1 denotes non-ROM memory.
+     * @param {number} address
+     * @returns {number}
+     */
+    prg_offset(address) {
+        const ret = wasm.emulator_prg_offset(this.__wbg_ptr, address);
+        return ret;
     }
     /**
      * @param {number} player
@@ -355,6 +372,16 @@ export class Emulator {
     get_wram_len() {
         const ret = wasm.emulator_get_wram_len(this.__wbg_ptr);
         return ret >>> 0;
+    }
+    /**
+     * Owned snapshots remain valid across execution and WASM memory growth.
+     * @returns {Uint8Array}
+     */
+    ram_snapshot() {
+        const ret = wasm.emulator_ram_snapshot(this.__wbg_ptr);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
     }
     /**
      * @returns {CpuState}
@@ -424,6 +451,17 @@ export class Emulator {
     remove_breakpoint(bank, addr) {
         wasm.emulator_remove_breakpoint(this.__wbg_ptr, bank, addr);
     }
+    /**
+     * Capture pre-instruction state and execute exactly one instruction on the production core.
+     * @returns {CpuState}
+     */
+    trace_instruction() {
+        const ret = wasm.emulator_trace_instruction(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return CpuState.__wrap(ret[0]);
+    }
     update_nametables() {
         wasm.emulator_update_nametables(this.__wbg_ptr);
     }
@@ -468,6 +506,8 @@ export class Emulator {
         return this;
     }
     /**
+     * Execute to the next frame or stop immediately before a breakpoint.
+     * Continuing skips only the previously reported instruction, then re-arms it.
      * @returns {boolean}
      */
     step() {
@@ -497,6 +537,15 @@ export class Emulator {
         if (ret[1]) {
             throw takeFromExternrefTable0(ret[0]);
         }
+    }
+    /**
+     * Debug inspection must not advance controller shifts or acknowledge PPU/APU status.
+     * @param {number} address
+     * @returns {number}
+     */
+    peek_cpu(address) {
+        const ret = wasm.emulator_peek_cpu(this.__wbg_ptr, address);
+        return ret;
     }
 }
 if (Symbol.dispose) Emulator.prototype[Symbol.dispose] = Emulator.prototype.free;

@@ -15,3 +15,7 @@ serde_json = "1.0.145"
 tokio = { version = "1", features = ["full"] }
 tower = { version = "0.5.2", features = ["util"] }
 tower-http = { version = "0.6.8", features = ["fs"] }
+
+[dev-dependencies]
+tetanes-core = "=0.12.2"
+swiss-emulator = { path = "emulator" }

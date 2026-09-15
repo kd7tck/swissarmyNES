@@ -17,11 +17,23 @@ export class CpuState {
 export class Emulator {
   free(): void;
   [Symbol.dispose](): void;
+  /**
+   * Nominal frame cadence from the active backend region and CPU clock.
+   */
+  frame_rate(): number;
   get_pixels(): number;
+  /**
+   * Physical PRG offset, excluding the iNES header; -1 denotes non-ROM memory.
+   */
+  prg_offset(address: number): number;
   set_button(player: number, button: number, pressed: boolean): void;
   get_oam_data(): number;
   get_palettes(): number;
   get_wram_len(): number;
+  /**
+   * Owned snapshots remain valid across execution and WASM memory growth.
+   */
+  ram_snapshot(): Uint8Array;
   get_cpu_state(): CpuState;
   add_breakpoint(bank: number, addr: number): void;
   get_nametables(): number;
@@ -33,6 +45,10 @@ export class Emulator {
   clear_breakpoints(): void;
   get_audio_samples(): number;
   remove_breakpoint(bank: number, addr: number): void;
+  /**
+   * Capture pre-instruction state and execute exactly one instruction on the production core.
+   */
+  trace_instruction(): CpuState;
   update_nametables(): void;
   get_nametables_len(): number;
   get_pattern_tables(): number;
@@ -41,10 +57,18 @@ export class Emulator {
   update_pattern_tables(): void;
   get_pattern_tables_len(): number;
   constructor();
+  /**
+   * Execute to the next frame or stop immediately before a breakpoint.
+   * Continuing skips only the previously reported instruction, then re-arms it.
+   */
   step(): boolean;
   reset(): void;
   get_wram(): number;
   load_rom(rom_data: Uint8Array): void;
+  /**
+   * Debug inspection must not advance controller shifts or acknowledge PPU/APU status.
+   */
+  peek_cpu(address: number): number;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -70,6 +94,7 @@ export interface InitOutput {
   readonly emulator_add_breakpoint: (a: number, b: number, c: number) => void;
   readonly emulator_clear_audio_samples: (a: number) => void;
   readonly emulator_clear_breakpoints: (a: number) => void;
+  readonly emulator_frame_rate: (a: number) => number;
   readonly emulator_get_audio_samples: (a: number) => number;
   readonly emulator_get_audio_samples_len: (a: number) => number;
   readonly emulator_get_cpu_state: (a: number) => number;
@@ -87,11 +112,15 @@ export interface InitOutput {
   readonly emulator_get_wram_len: (a: number) => number;
   readonly emulator_load_rom: (a: number, b: number, c: number) => [number, number];
   readonly emulator_new: () => number;
+  readonly emulator_peek_cpu: (a: number, b: number) => number;
+  readonly emulator_prg_offset: (a: number, b: number) => number;
+  readonly emulator_ram_snapshot: (a: number) => [number, number];
   readonly emulator_remove_breakpoint: (a: number, b: number, c: number) => void;
   readonly emulator_reset: (a: number) => void;
   readonly emulator_set_button: (a: number, b: number, c: number, d: number) => void;
   readonly emulator_set_sample_rate: (a: number, b: number) => void;
   readonly emulator_step: (a: number) => [number, number, number];
+  readonly emulator_trace_instruction: (a: number) => [number, number, number];
   readonly emulator_update_nametables: (a: number) => void;
   readonly emulator_update_palettes: (a: number) => void;
   readonly emulator_update_pattern_tables: (a: number) => void;
@@ -100,6 +129,7 @@ export interface InitOutput {
   readonly __wbindgen_exn_store: (a: number) => void;
   readonly __externref_table_alloc: () => number;
   readonly __wbindgen_externrefs: WebAssembly.Table;
+  readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __externref_table_dealloc: (a: number) => void;
   readonly __wbindgen_start: () => void;
 }

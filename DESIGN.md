@@ -5,6 +5,8 @@ SwissArmyNES aims to be the definitive, all-in-one web-based development environ
 
 This document outlines the step-by-step path to achieving that vision, broken down into distinct, testable phases. Before starting a phase check how much of that phase might already be implemented, also when making huge changes to codebase make sure to update other components that might have become broken due to changes.
 
+**Implementation handoff:** [Detailed instructions through phase 40](docs/DEVELOPER_HANDOFF_THROUGH_PHASE_40.md) expand this roadmap into ordered repairs, per-phase tests, and completion gates. See the [baseline audit](docs/BASELINE_AUDIT.md) for verified findings. This planning addition does not mark any further phase complete or change the roadmap's scope.
+
 ---
 Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
 
@@ -406,3 +408,8 @@ Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
     - Wrap the application in Tauri (Rust-based Electron alternative).
     - Local file system access (bypass browser sandbox).
 - **Completion Criteria:** Standalone `.exe` / `.app` runs without internet.
+
+Implementation evidence (September 14, 2026): canonical nestest now matches all 8,991 records through the production CPU snapshot API, with separate exhaustive stack-status regressions. The palette debugger exports an explicit 16x2 RGBA image. Broader phase 39/40 acceptance remains pending in docs/PHASE_40_ACCEPTANCE_CHECKLIST.md.
+
+
+Additional phase-40 evidence: production-ROM BRK/RTI, stack/JMP wrapping, PPU NMI and OAM DMA alignment regressions pass; native and generated WASM match the same canonical trace. IRQ/DMC/reset edge cases and broader acceptance remain pending. Frontend pacing now consumes active backend region timing.

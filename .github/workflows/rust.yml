@@ -2,24 +2,49 @@ name: Rust
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [main, master]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [main, master]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
-    - name: Run Clippy
-      run: cargo clippy -- -D warnings
-    - name: Check Formatting
-      run: cargo fmt --check
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+      - name: Formatting
+        run: cargo +1.98.0 fmt --all -- --check
+      - name: Tests
+        run: cargo +1.98.0 test --workspace --all-targets --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Frontend regressions
+        run: node --test tests/js/*.test.cjs
+      - name: Clippy
+        run: cargo +1.98.0 clippy --workspace --all-targets --locked -- -D warnings
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust and WASM target
+        run: rustup toolchain install 1.98.0 --profile minimal --target wasm32-unknown-unknown
+      - name: Build production emulator
+        run: cargo +1.98.0 build -p swiss-emulator --release --target wasm32-unknown-unknown --locked
+      - name: Install matching binding generator
+        run: cargo +1.98.0 install wasm-bindgen-cli --version 0.2.106 --locked
+      - name: Generate browser bindings
+        run: wasm-bindgen --target web --out-dir static/wasm --out-name swiss_emulator target/wasm32-unknown-unknown/release/swiss_emulator.wasm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate freshly generated browser WASM
+        run: node --test tests/js/*.test.cjs

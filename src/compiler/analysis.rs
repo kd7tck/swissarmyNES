@@ -125,12 +125,18 @@ impl SemanticAnalyzer {
                     }
                 }
                 TopLevelKind::TypeDecl(name, members) => {
-                    let mut offset = 0;
+                    let mut offset = 0u16;
                     let mut member_defs = Vec::new();
                     let mut error = false;
 
                     for (m_name, m_type) in members {
-                        let size = self.get_type_size(m_type);
+                        let Some(size) = self.get_type_size(m_type) else {
+                            self.errors.push(format!(
+                                "Type size overflow for member '{m_name}' in struct '{name}'"
+                            ));
+                            error = true;
+                            continue;
+                        };
                         if size == 0 && matches!(m_type, DataType::Struct(_)) {
                             self.errors.push(format!(
                                 "Undefined or invalid type for member '{}' in struct '{}'",
@@ -139,7 +145,13 @@ impl SemanticAnalyzer {
                             error = true;
                         }
                         member_defs.push((m_name.clone(), m_type.clone(), offset));
-                        offset += size;
+                        if let Some(next) = offset.checked_add(size) {
+                            offset = next;
+                        } else {
+                            self.errors
+                                .push(format!("Type size overflow in struct '{name}'"));
+                            error = true;
+                        }
                     }
 
                     if !error {
@@ -1215,19 +1227,21 @@ impl SemanticAnalyzer {
         }
     }
 
-    fn get_type_size(&self, dt: &DataType) -> u16 {
+    fn get_type_size(&self, dt: &DataType) -> Option<u16> {
         match dt {
-            DataType::Byte | DataType::Int | DataType::Bool | DataType::Enum(_) => 1,
-            DataType::Word | DataType::String => 2,
+            DataType::Byte | DataType::Int | DataType::Bool | DataType::Enum(_) => Some(1),
+            DataType::Word | DataType::String => Some(2),
             DataType::Struct(name) => {
                 if let Some(sym) = self.symbol_table.resolve(name) {
                     if let Some(size) = sym.value {
-                        return size as u16;
+                        return u16::try_from(size).ok();
                     }
                 }
-                0
+                Some(0)
             }
-            DataType::Array(inner, size) => self.get_type_size(inner) * (*size as u16),
+            DataType::Array(inner, size) => self
+                .get_type_size(inner)?
+                .checked_mul(u16::try_from(*size).ok()?),
         }
     }
 }

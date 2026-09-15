@@ -181,39 +181,17 @@ class PpuViewer {
         if (len === 0) return;
 
         const memory = new Uint8Array(window.wasmMemory.buffer, ptr, len);
-        // This is RGBA data. Size depends on implementation.
-        // If it's 256x256 buffer but we only care about swatches.
-        // Actually the tetanes implementation renders a full palette viewer?
-        // Let's assume it renders swatches.
-        // If it's 512*4 bytes, that's 2048 bytes.
-
-        // I'll try to guess dimensions or just draw it.
-        // 512 pixels total area? No, 512*4 bytes = 512 pixels.
-        // 32 palettes * 16x16 size?
-        // Let's just put it on canvas 256x32 and see what happens.
-
+        // The emulator exports exactly 32 RGBA entries in two rows of 16.
+        if (len !== 32 * 4) throw new Error('Invalid palette buffer length');
         const ctx = this.paletteCanvas.getContext('2d');
-        // We might need to resize canvas if the buffer size implies different dims.
-        // len is bytes. pixels = len / 4.
-        const pixels = len / 4;
-
-        // If pixels == 256 * 256 (65536), then it's a big image.
-        // If pixels == 512, it's small.
-
-        // My Emulator::new allocated 512*4.
-        // So it's 512 pixels.
-        // That's 16 pixels per color? (512 / 32 = 16).
-        // So a 16x1 strip per color.
-
-        // I'll make the canvas width=pixels, height=1, and scale it up via CSS.
-        this.paletteCanvas.width = pixels;
-        this.paletteCanvas.height = 1;
-        const imgData = ctx.createImageData(pixels, 1);
+        this.paletteCanvas.width = 16;
+        this.paletteCanvas.height = 2;
+        const imgData = ctx.createImageData(16, 2);
         imgData.data.set(memory);
         ctx.putImageData(imgData, 0, 0);
-        this.paletteCanvas.style.height = '50px'; // Stretch vertically
+        this.paletteCanvas.style.height = '50px';
+        this.paletteCanvas.style.imageRendering = 'pixelated';
     }
-
     drawOAM() {
         if (!this.emulator.get_oam_data) return;
         const ptr = this.emulator.get_oam_data();

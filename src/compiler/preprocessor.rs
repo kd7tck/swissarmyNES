@@ -36,9 +36,18 @@ fn expand_program(
                     .map_err(|e| format!("Lexer error in {}: {}", filename, e))?;
 
                 let mut parser = Parser::new(tokens);
-                let included_program = parser
+                let mut included_program = parser
                     .parse()
                     .map_err(|e| format!("Parser error in {}: {}", filename, e))?;
+                for declaration in &mut included_program.declarations {
+                    declaration.source_file = filename.clone();
+                    match &mut declaration.kind {
+                        TopLevelKind::Sub(_, _, body)
+                        | TopLevelKind::Interrupt(_, body)
+                        | TopLevelKind::Macro(_, _, body) => stamp_statements(body, filename, None),
+                        _ => {}
+                    }
+                }
 
                 // Recursively expand
                 let expanded_program =
@@ -85,6 +94,7 @@ pub fn expand_macros(program: Program) -> Result<Program, String> {
                 let expanded_body = expand_statements(body, &macros, 0)?;
                 final_declarations.push(TopLevel {
                     kind: TopLevelKind::Sub(name, params, expanded_body),
+                    source_file: decl.source_file.clone(),
                     line: decl.line,
                 });
             }
@@ -92,6 +102,7 @@ pub fn expand_macros(program: Program) -> Result<Program, String> {
                 let expanded_body = expand_statements(body, &macros, 0)?;
                 final_declarations.push(TopLevel {
                     kind: TopLevelKind::Interrupt(name, expanded_body),
+                    source_file: decl.source_file.clone(),
                     line: decl.line,
                 });
             }
@@ -141,7 +152,9 @@ fn expand_statements(
                 let body_with_args = replace_args_in_statements(&macro_def.body, &mapping);
 
                 // 2. Recursively expand any macros inside the result
-                let fully_expanded = expand_statements(body_with_args, macros, depth + 1)?;
+                let mut fully_expanded = expand_statements(body_with_args, macros, depth + 1)?;
+                // Expanded instructions belong to the call site for debugging.
+                stamp_statements(&mut fully_expanded, &stmt.source_file, Some(stmt.line));
 
                 new_stmts.extend(fully_expanded);
                 expanded = true;
@@ -173,14 +186,17 @@ fn expand_nested_statements(
                     None
                 },
             ),
+            source_file: stmt.source_file.clone(),
             line: stmt.line,
         }),
         StatementKind::While(cond, body) => Ok(Statement {
             kind: StatementKind::While(cond, expand_statements(body, macros, depth)?),
+            source_file: stmt.source_file.clone(),
             line: stmt.line,
         }),
         StatementKind::DoWhile(body, cond) => Ok(Statement {
             kind: StatementKind::DoWhile(expand_statements(body, macros, depth)?, cond),
+            source_file: stmt.source_file.clone(),
             line: stmt.line,
         }),
         StatementKind::For(var, start, end, step, body) => Ok(Statement {
@@ -191,6 +207,7 @@ fn expand_nested_statements(
                 step,
                 expand_statements(body, macros, depth)?,
             ),
+            source_file: stmt.source_file.clone(),
             line: stmt.line,
         }),
         StatementKind::Select(expr, cases, else_block) => {
@@ -205,6 +222,7 @@ fn expand_nested_statements(
             };
             Ok(Statement {
                 kind: StatementKind::Select(expr, new_cases, new_else),
+                source_file: stmt.source_file.clone(),
                 line: stmt.line,
             })
         }
@@ -310,6 +328,7 @@ fn replace_args_in_statement(stmt: &Statement, mapping: &HashMap<String, Express
 
     Statement {
         kind: new_kind,
+        source_file: stmt.source_file.clone(),
         line: stmt.line,
     }
 }
@@ -351,6 +370,36 @@ fn replace_args_in_expression(
     }
 }
 
+// Preserve provenance recursively through includes and macro expansion.
+fn stamp_statements(statements: &mut [Statement], file: &str, line: Option<usize>) {
+    for statement in statements {
+        statement.source_file = file.to_string();
+        if let Some(line) = line {
+            statement.line = line;
+        }
+        match &mut statement.kind {
+            StatementKind::If(_, body, otherwise) => {
+                stamp_statements(body, file, line);
+                if let Some(body) = otherwise {
+                    stamp_statements(body, file, line);
+                }
+            }
+            StatementKind::While(_, body)
+            | StatementKind::DoWhile(body, _)
+            | StatementKind::For(_, _, _, _, body) => stamp_statements(body, file, line),
+            StatementKind::Select(_, cases, otherwise) => {
+                for (_, body) in cases {
+                    stamp_statements(body, file, line);
+                }
+                if let Some(body) = otherwise {
+                    stamp_statements(body, file, line);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -374,10 +423,12 @@ mod tests {
             declarations: vec![
                 TopLevel {
                     kind: TopLevelKind::Include("lib.swiss".to_string()),
+                    source_file: "main.swiss".to_string(),
                     line: 1,
                 },
                 TopLevel {
                     kind: TopLevelKind::Sub("Main".to_string(), vec![], vec![]),
+                    source_file: "main.swiss".to_string(),
                     line: 2,
                 },
             ],
@@ -424,6 +475,7 @@ mod tests {
         let program = Program {
             declarations: vec![TopLevel {
                 kind: TopLevelKind::Include("A.swiss".to_string()),
+                source_file: "main.swiss".to_string(),
                 line: 1,
             }],
         };

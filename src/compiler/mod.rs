@@ -6,4 +6,5 @@ pub mod codegen;
 pub mod lexer;
 pub mod parser;
 pub mod preprocessor;
+pub mod source_map;
 pub mod symbol_table;

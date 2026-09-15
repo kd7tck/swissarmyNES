@@ -4,7 +4,8 @@
 
 ## Current Status
 The project is currently in active development, following a strict roadmap defined in `DESIGN.md`.
-**Completed Phases:** 1 through 30.
+For the current completion plan, read the [developer handoff through phase 40](docs/DEVELOPER_HANDOFF_THROUGH_PHASE_40.md), [baseline audit](docs/BASELINE_AUDIT.md), and [acceptance worksheet](docs/PHASE_40_ACCEPTANCE_CHECKLIST.md). The September 2026 audit found that native tests pass but the production compile API fails on minimal programs; historical completion labels below do not constitute end-to-end acceptance.
+**Historically marked complete:** phases 1 through 30.
 - **Core Compiler**: Lexer, Parser, AST, Symbol Table, Code Generation, Assembly.
 - **Language Features**: Strings, Arrays (`DIM`), Structures (`TYPE`), Enums (`ENUM`), Macros (`DEF MACRO`), Advanced Math (16-bit, Signed), Control Flow (`SELECT CASE`, `FOR`, `WHILE`).
 - **Standard Library**: Controller Input (`Controller.Read`, `IsPressed`), Sprite/Animation System, Object Pooling.
@@ -117,3 +118,8 @@ This project heavily utilizes AI agents for development. Contributors should:
 
 ## License
 [License Information]
+
+CPU validation now includes the complete 8,991-record canonical nestest trace and exhaustive PLP/PHP/RTI status serialization checks. See docs/IMPLEMENTATION_RESUME.md for evidence and remaining phase gates. This does not constitute phase-40 acceptance.
+
+
+The generated browser WASM also matches all 8,991 canonical CPU records. Run node --test tests/js/*.test.cjs for bundle, palette, and regional pacing regressions. Playback cadence now follows the backend NTSC/PAL/Dendy region.

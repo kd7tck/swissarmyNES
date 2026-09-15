@@ -392,3 +392,75 @@ fn validate_filename(name: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
+impl ProjectAssets {
+    /// Validate dimensions before any slicing, narrowing conversions, or code generation.
+    pub fn validate_for_compile(&self) -> Result<(), String> {
+        if self.chr_bank.len() > 8192 {
+            return Err("CHR data exceeds 8192 bytes".into());
+        }
+        for palette in &self.palettes {
+            if palette.colors.iter().any(|color| *color > 63) {
+                return Err(format!(
+                    "Palette '{}' contains a color outside 0..63",
+                    palette.name
+                ));
+            }
+        }
+        for table in &self.nametables {
+            if table.data.len() != 960 {
+                return Err(format!(
+                    "Nametable '{}' needs exactly 960 tile bytes, got {}",
+                    table.name,
+                    table.data.len()
+                ));
+            }
+            // Empty attributes are the documented legacy-project default (all palette zero).
+            if !table.attrs.is_empty() && table.attrs.len() != 64 {
+                return Err(format!(
+                    "Nametable '{}' needs 64 attribute bytes or an empty legacy default",
+                    table.name
+                ));
+            }
+        }
+        for tile in &self.metatiles {
+            if tile.attr > 3 {
+                return Err(format!("Metatile '{}' palette must be 0..3", tile.name));
+            }
+        }
+        for sprite in &self.metasprites {
+            if sprite.tiles.is_empty() || sprite.tiles.len() > 64 {
+                return Err(format!("Metasprite '{}' needs 1..64 tiles", sprite.name));
+            }
+        }
+        for animation in &self.animations {
+            if animation.frames.is_empty() || animation.frames.len() > 255 {
+                return Err(format!(
+                    "Animation '{}' needs 1..255 frames",
+                    animation.name
+                ));
+            }
+            if animation.frames.iter().any(|frame| frame.duration == 0) {
+                return Err(format!(
+                    "Animation '{}' has a zero-duration frame",
+                    animation.name
+                ));
+            }
+        }
+        if let Some(world) = &self.world {
+            let expected = world
+                .width
+                .checked_mul(world.height)
+                .ok_or("World dimensions overflow")?;
+            if world.width > 255 || world.height > 255 || expected as usize != world.data.len() {
+                return Err("World dimensions must fit 0..255 and match its cell count".into());
+            }
+            for index in &world.data {
+                if *index < -1 || (*index >= 0 && *index as usize >= self.nametables.len()) {
+                    return Err(format!("World refers to missing nametable {index}"));
+                }
+            }
+        }
+        Ok(())
+    }
+}

@@ -50,7 +50,47 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
-Phases 31-38 are complete.
+### CPU integration continuation — September 14, 2026
+
+- Latest resume checkpoint records five new CPU integration regressions, backend-region frame pacing, and full canonical trace equivalence in the generated WASM. Five Node tests and strict Clippy pass. No phase signoff or commit yet; final delivery is commit when complete.
+
+### Latest delivery instruction — September 14, 2026
+
+- User superseded the diff-tree request: commit only when implementation and required checks are complete. No commit yet. Historical diff-tree instructions below are obsolete.
+- CPU comparator negative tests now pass for every field and every status bit. See the newest resume checkpoint.
+
+### Active continuation — September 14, 2026
+
+- User resumed. See the first section of docs/IMPLEMENTATION_RESUME.md. All 8,991 canonical nestest records now match; exhaustive PLP/PHP/RTI status tests pass. Prior failing-trace notes below are historical.
+- Exact 16x2 RGBA palette export/viewer implemented and tested; WASM regenerated. Full native suite passed before palette edits, emulator suite after, strict Clippy and three Node tests pass. Remaining phase gates and final diff delivery are incomplete; no commits.
+
+### Third low-credit pause — September 14, 2026
+
+- Latest state is the **first section** of [IMPLEMENTATION_RESUME.md](docs/IMPLEMENTATION_RESUME.md). User requested another pause; no commit, eventual delivery is a final diff tree.
+- New canonical nestest test currently fails at record104: expected P=EF, observed P=FF, other fields match. Investigate the status B-bit representation; do not claim phase40 complete or silently weaken comparison.
+- Source-map browser breakpoint/re-hit, cartridge/trainer execution, asset checks, deterministic compiler reuse and refresh-independent pacing have new passing regressions. Strict all-target Clippy passes. Full current suite is not green because of the CPU trace failure.
+
+### Latest pause — September 14, 2026
+
+- Read the **top section** of [docs/IMPLEMENTATION_RESUME.md](docs/IMPLEMENTATION_RESUME.md) first. User requested a second low-credit pause.
+- Delivery changed: **generate a final diff tree, not a commit**. Nothing is committed; phase 40 remains incomplete.
+- The two earlier execution failures are fixed. Production source maps now use a versioned object with exact source snapshots and linker-resolved ranges; frontend consumers were migrated but browser verification and sourcemap.json download remain pending.
+- Native/WASM builds, debugger regressions, and targeted source-map/compiler tests have passed as recorded in the checkpoint. Do not equate those with complete phase acceptance.
+
+### Implementation pause — September 13, 2026
+
+- User requested a pause for low credits. Resume from [docs/IMPLEMENTATION_RESUME.md](docs/IMPLEMENTATION_RESUME.md), which records changes, verification, failing fixtures, and next steps.
+- All work remains uncommitted by user instruction. Implementation through phase 40 is incomplete. The latest phase 11–20 execution tests have two unresolved failures; do not report full acceptance.
+- The production linker now uses the rs6502 opcode catalog with its own data emission and branch relaxation; the older assembler limitation note above describes the upstream library.
+
+### September 2026 audit and developer handoff
+
+- Read [the phase 40 developer handoff](docs/DEVELOPER_HANDOFF_THROUGH_PHASE_40.md), [baseline audit](docs/BASELINE_AUDIT.md), and [acceptance worksheet](docs/PHASE_40_ACCEPTANCE_CHECKLIST.md) before resuming implementation.
+- Audited commit: `4610516840d7991bce7e1d879e1f4e2fa831f10e`. Native workspace tests, formatting, and strict Clippy pass, but three production compile API probes return HTTP 400 assembler errors, including an empty Main. Restore that path first.
+- The current DESIGN phase 39 is Repository Ingestion & Bus/Cartridge Architecture; phase 40 is CPU Core Hardening. The older MMC1 next-step note below is historical and superseded by the current roadmap.
+- The notes below are prior implementation claims, not newly verified acceptance. This handoff work changed documentation only; no implementation phase was completed during the audit.
+
+Historical implementation summary: phases 31-38 were marked complete.
 
 ### Phase 31: Emulator - WASM Integration (Completed)
 - **Implemented**: `swiss-emulator` crate in `emulator/` directory using `tetanes-core`.

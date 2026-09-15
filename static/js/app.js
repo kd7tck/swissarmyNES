@@ -70,6 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Compilation Logic
+    let compileRevision = 0;
+    codeEditor?.addEventListener('input', () => { compileRevision++; });
     async function performCompile(download = true) {
         if (!codeEditor) return;
 
@@ -87,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const source = codeEditor.value;
         const assets = window.projectManager ? window.projectManager.assets : null;
         const projectName = window.projectManager ? window.projectManager.currentProject : null;
+        const revision = ++compileRevision;
 
         const payload = {
             source: projectName ? null : source, // Use editor content only if no project
@@ -103,6 +106,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (response.ok) {
                 const json = await response.json();
+                if (revision !== compileRevision || projectName !== (window.projectManager?.currentProject || null)) {
+                    return; // A newer edit, compilation, or project superseded this result.
+                }
 
                 // Decode Base64 ROM
                 const binaryString = atob(json.rom);
@@ -121,8 +127,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     a.download = 'game.nes';
                     document.body.appendChild(a);
                     a.click();
+                    a.remove();
                     window.URL.revokeObjectURL(url);
-                    alert('Compilation Successful! ROM downloaded.');
+                    const mapUrl = URL.createObjectURL(new Blob([JSON.stringify(json.map, null, 2)], {type: 'application/json'}));
+                    const mapLink = document.createElement('a');
+                    mapLink.href = mapUrl;
+                    mapLink.download = 'sourcemap.json';
+                    document.body.appendChild(mapLink);
+                    mapLink.click();
+                    mapLink.remove();
+                    URL.revokeObjectURL(mapUrl);
+                    alert('Compilation successful. ROM and source map downloads requested.');
                 } else {
                     // Send to Emulator
                     const event = new CustomEvent('emulator-load-rom', {

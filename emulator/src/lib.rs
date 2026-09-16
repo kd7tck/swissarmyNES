@@ -1,8 +1,10 @@
 use std::cell::RefCell;
 pub mod cartridge;
+use cartridge::Mapper;
 use std::rc::Rc;
 use tetanes_core::common::{NesRegion, Regional, Reset, ResetKind};
 use tetanes_core::control_deck::ControlDeck;
+use tetanes_core::cpu::{Cpu, Irq};
 use tetanes_core::input::{JoypadBtn, Player};
 use tetanes_core::mapper::{MapRead, MappedRead};
 use tetanes_core::mem::{Read, Write};
@@ -359,6 +361,28 @@ impl Emulator {
 
     pub fn get_oam_data_len(&self) -> usize {
         256
+    }
+}
+
+impl Mapper for Emulator {
+    fn read_prg(&self, addr: u16) -> u8 {
+        self.peek_cpu(addr)
+    }
+
+    fn write_prg(&mut self, addr: u16, val: u8) {
+        self.deck.borrow_mut().cpu_mut().bus.write(addr, val);
+    }
+
+    fn read_chr(&self, addr: u16) -> u8 {
+        self.deck.borrow().ppu().bus.peek_chr(addr)
+    }
+
+    fn write_chr(&mut self, addr: u16, val: u8) {
+        self.deck.borrow_mut().ppu_mut().bus.write(addr, val);
+    }
+
+    fn step_irq(&mut self) -> bool {
+        Cpu::has_irq(Irq::MAPPER)
     }
 }
 

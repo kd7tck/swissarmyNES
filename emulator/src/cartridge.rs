@@ -46,6 +46,15 @@ fn ram_size(shift: u8) -> usize {
     }
 }
 
+/// Mapper abstraction trait as outlined in DESIGN.md and docs/DEVELOPER_HANDOFF_THROUGH_PHASE_40.md.
+pub trait Mapper {
+    fn read_prg(&self, addr: u16) -> u8;
+    fn write_prg(&mut self, addr: u16, val: u8);
+    fn read_chr(&self, addr: u16) -> u8;
+    fn write_chr(&mut self, addr: u16, val: u8);
+    fn step_irq(&mut self) -> bool;
+}
+
 impl CartridgeInfo {
     pub fn parse(rom: &[u8]) -> Result<Self, String> {
         let header = rom.get(..16).ok_or("Truncated iNES header")?;

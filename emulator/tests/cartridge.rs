@@ -24,6 +24,44 @@ fn legacy_defaults_and_trainer_length() {
 }
 
 #[test]
+fn nes2_ram_and_nvram_shift_decoding() {
+    let mut h = header();
+    h[7] = 8; // NES 2.0
+    h[10] = 0x70; // NVRAM shift 7 = 64 << 7 = 8192 bytes, RAM shift 0 = 0
+    h[11] = 0x05; // CHR NVRAM shift 0 = 0, CHR RAM shift 5 = 64 << 5 = 2048
+    let parsed = CartridgeInfo::parse(&image(h, 16384 + 8192)).unwrap();
+    assert_eq!(parsed.prg_ram_bytes, 0);
+    assert_eq!(parsed.prg_nvram_bytes, 8192);
+    assert_eq!(parsed.chr_ram_bytes, 2048);
+    assert_eq!(parsed.chr_nvram_bytes, 0);
+}
+
+#[test]
+fn four_screen_mirroring_and_battery_flags() {
+    let mut h = header();
+    h[6] = 0x0a; // Bit 1 = battery (2), Bit 3 = four_screen (8) -> 10 (0x0A)
+    let parsed = CartridgeInfo::parse(&image(h, 16384 + 8192)).unwrap();
+    assert!(parsed.battery);
+    assert!(parsed.four_screen);
+
+    h[6] = 0x00;
+    let parsed = CartridgeInfo::parse(&image(h, 16384 + 8192)).unwrap();
+    assert!(!parsed.battery);
+    assert!(!parsed.four_screen);
+}
+
+#[test]
+fn nes2_submapper_and_12bit_mapper_decoding() {
+    let mut h = header();
+    h[6] = 0x30; // mapper low nibble = 3
+    h[7] = 0x28; // nes2 flag (8) | mapper mid nibble = 2 -> 0x23
+    h[8] = 0x51; // submapper = 5, mapper high nibble = 1 -> 0x123
+    let parsed = CartridgeInfo::parse(&image(h, 16384 + 8192)).unwrap();
+    assert_eq!(parsed.mapper, 0x123);
+    assert_eq!(parsed.submapper, 5);
+}
+
+#[test]
 fn nes2_metadata_and_exponent_sizes() {
     let mut h = header();
     h[4] = 14 << 2;

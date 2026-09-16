@@ -105,10 +105,11 @@ A hybrid language designed for the NES, combining BASIC simplicity with low-leve
    cargo +1.98.0 test --workspace --all-targets --locked
    node --test tests/js/*.test.cjs
    ```
-   The fixture script downloads the external nestest ROM and reference trace at
-   a pinned revision and verifies SHA-256 before use. Subsequent runs verify local
-   files without downloading again. These inputs are ignored, as are generated
-   browser artifacts. WASM tests require the build in step 2.
+   The fixture script downloads the external nestest ROM (`nestest.nes`), reference trace (`nestest.trace`),
+   and author documentation (`nestest-readme.txt` / upstream `nestest.txt`, available online at
+   `https://github.com/christopherpow/nes-test-roms/blob/master/other/nestest.txt`) at a pinned revision
+   and verifies SHA-256 before use. Subsequent runs verify local files without downloading again.
+   These inputs are ignored from git, as are generated browser artifacts. WASM tests require the build in step 2.
 
 ## Project Structure
 

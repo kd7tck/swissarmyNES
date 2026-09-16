@@ -3,9 +3,10 @@
 Source repository: https://github.com/christopherpow/nes-test-roms
 Pinned revision: 95d8f621ae55cee0d09b91519a8989ae0e64753b
 Upstream paths: other/nestest.nes, other/nestest.log, other/nestest.txt
-ROM author: Kevin Horton (see retained nestest-readme.txt).
+ROM author: Kevin Horton.
+Online NES Test README reference: https://raw.githubusercontent.com/christopherpow/nes-test-roms/95d8f621ae55cee0d09b91519a8989ae0e64753b/other/nestest.txt (browse online at https://github.com/christopherpow/nes-test-roms/blob/master/other/nestest.txt)
 
-Run node scripts/fetch-test-fixtures.mjs to obtain these ignored external inputs. Files are verified and preserved byte-for-byte; nestest.log is downloaded as nestest.trace. Compiled ROMs and downloaded fixture payloads are not committed.
+Run `node scripts/fetch-test-fixtures.mjs` to obtain these external test inputs locally (`nestest.nes`, `nestest.trace`, and `nestest-readme.txt`). Files are verified and preserved byte-for-byte. Compiled ROMs and downloaded fixture payloads are excluded from version control per payload policy, but are downloaded automatically into `emulator/tests/fixtures/` for local development.
 
 SHA-256:
 - nestest.nes: f67d55fd6b3cf0bad1cc85f1df0d739c65b53e79cecb7fea8f77ec0eadab0004

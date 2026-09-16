@@ -677,6 +677,24 @@ impl SemanticAnalyzer {
                                     .push(format!("Unknown PPU command '{}'", member));
                                 return;
                             }
+                        } else if base_name.eq_ignore_ascii_case("Memory") {
+                            if member.eq_ignore_ascii_case("Fill") {
+                                if args.len() != 3 {
+                                    self.errors.push(
+                                        "Memory.Fill expects 3 arguments (address, length, value)"
+                                            .to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                    self.analyze_expression(&args[2]);
+                                }
+                                return;
+                            } else {
+                                self.errors
+                                    .push(format!("Unknown Memory command '{}' (Fill)", member));
+                                return;
+                            }
                         }
                     }
                 }
@@ -857,6 +875,9 @@ impl SemanticAnalyzer {
                         return;
                     }
                     if base_name.eq_ignore_ascii_case("Math") {
+                        return;
+                    }
+                    if base_name.eq_ignore_ascii_case("Memory") {
                         return;
                     }
                 }
@@ -1053,18 +1074,26 @@ impl SemanticAnalyzer {
                 // Controller Methods
                 if let Expression::MemberAccess(base, member) = &**callee {
                     if let Expression::Identifier(base_name) = &**base {
-                        if base_name.eq_ignore_ascii_case("Math")
-                            && (member.eq_ignore_ascii_case("Min")
-                                || member.eq_ignore_ascii_case("Max"))
-                        {
-                            if args.len() != 2 {
-                                self.errors
-                                    .push(format!("Math.{} expects 2 arguments", member));
-                            } else {
-                                self.analyze_expression(&args[0]);
-                                self.analyze_expression(&args[1]);
+                        if base_name.eq_ignore_ascii_case("Math") {
+                            if member.eq_ignore_ascii_case("Min")
+                                || member.eq_ignore_ascii_case("Max")
+                            {
+                                if args.len() != 2 {
+                                    self.errors
+                                        .push(format!("Math.{} expects 2 arguments", member));
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                }
+                                return;
+                            } else if member.eq_ignore_ascii_case("Abs") {
+                                if args.len() != 1 {
+                                    self.errors.push("Math.Abs expects 1 argument".to_string());
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                }
+                                return;
                             }
-                            return;
                         }
                         if base_name.eq_ignore_ascii_case("Controller")
                             && (member.eq_ignore_ascii_case("IsPressed")
@@ -1230,9 +1259,18 @@ impl SemanticAnalyzer {
                     }
                 }
 
-                // Controller
+                // Controller / Math Intrinsics
                 if let Expression::MemberAccess(base, member) = &**callee {
                     if let Expression::Identifier(base_name) = &**base {
+                        if base_name.eq_ignore_ascii_case("Math")
+                            && member.eq_ignore_ascii_case("Abs")
+                        {
+                            if let Some(arg_type) = args.first().and_then(|a| self.resolve_type(a))
+                            {
+                                return Some(arg_type);
+                            }
+                            return Some(DataType::Int);
+                        }
                         if base_name.eq_ignore_ascii_case("Controller")
                             && (member.eq_ignore_ascii_case("IsPressed")
                                 || member.eq_ignore_ascii_case("IsHeld")
@@ -1293,6 +1331,9 @@ impl SemanticAnalyzer {
                         return None;
                     }
                     if base_name.eq_ignore_ascii_case("Math") {
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("Memory") {
                         return None;
                     }
                 }

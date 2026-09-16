@@ -1,4 +1,33 @@
-# Latest checkpoint — Mapper Trait Abstraction and Cartridge Header Testing, September 16, 2026
+# Latest checkpoint — Loop 5: Frontend Debugger Enhancements & JS Unit Tests
+
+- Enhanced PPU Debugger OAM formatting in `static/js/ppu_viewer.js`.
+- Added OAM entry formatting test coverage in `tests/js/ppu_viewer.test.cjs`.
+- All native Rust workspace tests and Node.js frontend tests pass.
+
+# Earlier checkpoint — Loop 4: UxROM (Mapper 2) Support in Emulator Engine
+
+- Verified UxROM (Mapper 2) switchable $8000-$BFFF bank and fixed $C000-$FFFF bank execution.
+- Added integration test `test_uxrom_mapper_2_bank_switching` in `emulator/tests/mapper_test.rs`.
+- All emulator tests pass.
+
+# Earlier checkpoint — Loop 3: Compiler Memory Utility Intrinsic (`Memory.Fill`)
+
+- Added `Memory.Fill(address, length, value)` intrinsic in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Generates efficient 6502 RAM fill loops. Added test coverage in `tests/memory_intrinsics_test.rs`.
+
+# Earlier checkpoint — Loop 2: Compiler Math Intrinsics (`Math.Abs`)
+
+- Added `Math.Abs` intrinsic in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Supports 8-bit and 16-bit signed operands, generating 6502 assembly sign checks and two's complement negations.
+- Added tests in `tests/math_intrinsics_test.rs`.
+
+# Earlier checkpoint — Loop 1: Cartridge Header Parsing & NES 2.0 Hardening
+
+- Hardened and tested `CartridgeInfo::parse` in `emulator/src/cartridge.rs` and `emulator/tests/cartridge.rs`.
+- Verified validation for invalid signature ("NES\x1a"), corrupted header variant flags, truncated headers, zero PRG ROM, and invalid NES 2.0 RAM sizes.
+- All emulator tests pass.
+
+# Earlier checkpoint — Mapper Trait Abstraction and Cartridge Header Testing, September 16, 2026
 
 - Implemented the `Mapper` trait in `emulator/src/cartridge.rs` (`read_prg`, `write_prg`, `read_chr`, `write_chr`, `step_irq`) and implemented it for `Emulator` in `emulator/src/lib.rs`.
 - Added `emulator/tests/mapper_test.rs` integration tests to exercise `read_prg`, `write_prg`, `read_chr`, `write_chr`, and `step_irq` via the `Mapper` trait.

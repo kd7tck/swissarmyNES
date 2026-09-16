@@ -252,5 +252,20 @@ Historical implementation summary: phases 31-38 were marked complete.
     - Enhanced `Lexer` with column position tracking (`column: usize`) and line:column error formatting.
     - Expanded JS unit tests in `tests/js/editor.test.cjs` covering pause/unpause state transitions and emulator reset.
 
+- **Dev Loop 1: Cartridge Header Parsing & NES 2.0 Hardening**:
+    - Enhanced `CartridgeInfo::parse` unit tests in `emulator/tests/cartridge.rs` to verify edge cases including invalid magic signature, corrupted iNES variants, submapper masks, and NES 2.0 flags.
+
+- **Dev Loop 2: Compiler Math Intrinsics (`Math.Abs`)**:
+    - Implemented `Math.Abs` intrinsic in `src/compiler/analysis.rs` and `src/compiler/codegen.rs` supporting 8-bit and 16-bit signed operands. Added test coverage in `tests/math_intrinsics_test.rs`.
+
+- **Dev Loop 3: Compiler Memory Utility Intrinsic (`Memory.Fill`)**:
+    - Implemented `Memory.Fill(address, length, value)` intrinsic in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`. Added test coverage in `tests/memory_intrinsics_test.rs`.
+
+- **Dev Loop 4: UxROM (Mapper 2) Support in Emulator Engine**:
+    - Verified and tested UxROM (Mapper 2) PRG bank switching support in `emulator/tests/mapper_test.rs`.
+
+- **Dev Loop 5: Frontend Debugger Enhancements & JS Unit Tests**:
+    - Enhanced `PpuViewer.formatOamEntries` in `static/js/ppu_viewer.js` and added JS unit test in `tests/js/ppu_viewer.test.cjs`.
+
 - **Next Steps**:
-    - Continue PPU and APU accuracy enhancements as detailed in DESIGN.md.
+    - Run pre-commit checks and submit completed work.

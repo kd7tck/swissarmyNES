@@ -4081,6 +4081,34 @@ impl CodeGenerator {
                                 self.emit("  STA $2001".to_string());
                                 return Ok(());
                             }
+                        } else if base_name.eq_ignore_ascii_case("Memory")
+                            && member.eq_ignore_ascii_case("Fill")
+                        {
+                            // Memory.Fill(address, length, value)
+                            // 1. Value -> A
+                            self.generate_expression(&args[2])?;
+                            self.emit("  PHA".to_string()); // Save Value
+
+                            // 2. Length -> A (Byte or Low Byte of Word)
+                            self.generate_expression(&args[1])?;
+                            self.emit("  STA $00".to_string()); // Length in $00
+
+                            // 3. Address -> $02/$03
+                            self.generate_address_expression(&args[0])?;
+
+                            // Loop: Fill memory from $02/$03 using Y index
+                            let fill_loop = self.new_label();
+                            let fill_end = self.new_label();
+                            self.emit("  PLA".to_string()); // Restore Value in A
+                            self.emit("  LDY #0".to_string());
+                            self.emit(format!("{}:", fill_loop));
+                            self.emit("  CPY $00".to_string());
+                            self.emit(format!("  BEQ {}", fill_end));
+                            self.emit("  STA ($02),Y".to_string());
+                            self.emit("  INY".to_string());
+                            self.emit(format!("  JMP {}", fill_loop));
+                            self.emit(format!("{}:", fill_end));
+                            return Ok(());
                         }
                     }
                 }
@@ -4806,6 +4834,36 @@ impl CodeGenerator {
                                 self.emit("  TYA".to_string());
                                 self.emit("  LDX #0".to_string());
                                 return Ok(DataType::Byte);
+                            }
+                        }
+                        if base_name.eq_ignore_ascii_case("Math")
+                            && member.eq_ignore_ascii_case("Abs")
+                        {
+                            let dtype = self.generate_expression(&args[0])?;
+                            if dtype == DataType::Word || dtype == DataType::Int {
+                                self.emit("  CPX #$80".to_string());
+                                let pos_lbl = self.new_label();
+                                self.emit(format!("  BCC {}", pos_lbl));
+                                self.emit("  EOR #$FF".to_string());
+                                self.emit("  CLC".to_string());
+                                self.emit("  ADC #1".to_string());
+                                self.emit("  PHA".to_string());
+                                self.emit("  TXA".to_string());
+                                self.emit("  EOR #$FF".to_string());
+                                self.emit("  ADC #0".to_string());
+                                self.emit("  TAX".to_string());
+                                self.emit("  PLA".to_string());
+                                self.emit(format!("{}:", pos_lbl));
+                                return Ok(dtype);
+                            } else {
+                                self.emit("  CMP #$80".to_string());
+                                let pos_lbl = self.new_label();
+                                self.emit(format!("  BCC {}", pos_lbl));
+                                self.emit("  EOR #$FF".to_string());
+                                self.emit("  CLC".to_string());
+                                self.emit("  ADC #1".to_string());
+                                self.emit(format!("{}:", pos_lbl));
+                                return Ok(dtype);
                             }
                         }
                         if base_name.eq_ignore_ascii_case("Math")

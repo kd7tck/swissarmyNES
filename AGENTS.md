@@ -50,6 +50,11 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
+### Mapper Trait & Cartridge Header Testing — September 16, 2026
+
+- Implemented the `Mapper` trait in `emulator/src/cartridge.rs` with `read_prg`, `write_prg`, `read_chr`, `write_chr`, and `step_irq` operations, implemented for `Emulator` in `emulator/src/lib.rs`.
+- Added integration tests in `emulator/tests/mapper_test.rs` and unit tests in `emulator/tests/cartridge.rs` for submapper/12-bit mapper decoding, four-screen/battery flags, and RAM/NVRAM shift decoding. Native tests, Clippy, formatting, and WASM/Node JS tests pass.
+
 ### Trainer reset checkpoint — September 15, 2026
 
 - CPU bus routing & mirroring tests (P39-06) added in `emulator/tests/bus_test.rs`. Verified 2KB internal RAM mirroring across $0800-$1FFF, PPU register mirrors, PRG-ROM write protection, and side-effect-free peeking. All native tests, Clippy, formatting, and WASM/Node JS tests pass.

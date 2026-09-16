@@ -8,6 +8,8 @@ Header rules come from [NESdev NES 2.0](https://www.nesdev.org/wiki/NES_2.0) and
 
 Debugger address identity comes from `MapRead::map_peek` on the production mapper. Physical PRG offsets exclude the header; debug breakpoints use 16 KiB bank units. Source-map `rom_offset`, in contrast, is a file offset including the header; it describes compiler-generated images without trainers. CPU peeks use the backend's side-effect-free Read::peek.
 
+Bus routing and mirroring (P39-06) is tested and verified in `emulator/tests/bus_test.rs`: 2KB internal RAM ($0000-$07FF) and its mirrors ($0800-$1FFF) alias the same underlying memory; PPU register mirrors ($2008-$3FFF) route properly; PRG-ROM writes are ignored (read-only); and peeking CPU state does not advance registers or alter PC/cycles.
+
 ## Remaining phase-39 work
 
 This is not complete architecture acceptance. In particular:

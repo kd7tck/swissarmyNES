@@ -61,8 +61,10 @@ A hybrid language designed for the NES, combining BASIC simplicity with low-leve
 ## Getting Started
 
 ### Prerequisites
-- **Rust**: Latest stable version.
+- **Rust**: 1.98.0, including the `wasm32-unknown-unknown` target.
 - **Cargo**: Included with Rust.
+- **Node.js**: 22 or newer, for fixture downloads and frontend/WASM tests.
+- **Git and tar**: Used to prepare the checksum-pinned emulator dependency.
 
 ### Running Locally
 
@@ -72,17 +74,42 @@ A hybrid language designed for the NES, combining BASIC simplicity with low-leve
    cd SwissArmyNES
    ```
 
-2. **Run the server:**
+2. **Build the browser emulator from source:**
+   Generated WASM and bindings are deliberately excluded from version control.
+   ```bash
+   node scripts/prepare-core.mjs
+   rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+   cargo +1.98.0 install wasm-bindgen-cli --version 0.2.106 --locked
+   cargo +1.98.0 build -p swiss-emulator --release --target wasm32-unknown-unknown --locked
+   wasm-bindgen --target web --out-dir static/wasm --out-name swiss_emulator target/wasm32-unknown-unknown/release/swiss_emulator.wasm
+   ```
+   Repeat the last two commands after changing emulator source. Keep the binding
+   generator version aligned with `Cargo.lock`.
+   The preparation script verifies TetaNES 0.12.2 against its registry checksum,
+   applies `patches/tetanes-core-0.12.2.patch`, and writes the patched dependency
+   into ignored `.tools/tetanes-core`. Run it before any Cargo command on a fresh
+   checkout and again after changing the patch. It uses Cargo's archive cache
+   when available; otherwise it downloads the pinned package. Run preparation
+   while no build is using that generated dependency directory.
+
+3. **Run the server:**
    ```bash
    cargo run
    ```
    The server will start at `http://0.0.0.0:3000`. Open your browser to access the IDE.
 
-3. **Run Tests:**
+4. **Run Tests:**
    The project includes a comprehensive suite of unit and integration tests.
    ```bash
-   cargo test
+   node scripts/fetch-test-fixtures.mjs
+   cargo +1.98.0 test --workspace --all-targets --locked
+   node --test tests/js/*.test.cjs
    ```
+   The fixture script downloads the external nestest ROM (`nestest.nes`), reference trace (`nestest.trace`),
+   and author documentation (`nestest-readme.txt` / upstream `nestest.txt`, available online at
+   `https://github.com/christopherpow/nes-test-roms/blob/master/other/nestest.txt`) at a pinned revision
+   and verifies SHA-256 before use. Subsequent runs verify local files without downloading again.
+   These inputs are ignored from git, as are generated browser artifacts. WASM tests require the build in step 2.
 
 ## Project Structure
 
@@ -123,3 +150,7 @@ CPU validation now includes the complete 8,991-record canonical nestest trace an
 
 
 The generated browser WASM also matches all 8,991 canonical CPU records. Run node --test tests/js/*.test.cjs for bundle, palette, and regional pacing regressions. Playback cadence now follows the backend NTSC/PAL/Dendy region.
+
+ON NMI DO Handler and ON IRQ DO Handler accept zero-argument routines, including routines in switchable banks. Binding updates are atomic and handlers may rebind themselves. The compiler supports up to 255 distinct dynamically bound handlers, subject to available ROM space.
+
+Runtime interrupt regressions cover helper argument/audio scratch preservation and inactive-channel updates. The measured idle NMI takes 1774 CPU cycles including DMA; active audio, VRAM and user-handler timing still needs validation.

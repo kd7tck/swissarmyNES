@@ -40,6 +40,7 @@ export const emulator_load_rom: (a: number, b: number, c: number) => [number, nu
 export const emulator_new: () => number;
 export const emulator_peek_cpu: (a: number, b: number) => number;
 export const emulator_prg_offset: (a: number, b: number) => number;
+export const emulator_prg_ram_len: (a: number) => number;
 export const emulator_ram_snapshot: (a: number) => [number, number];
 export const emulator_remove_breakpoint: (a: number, b: number, c: number) => void;
 export const emulator_reset: (a: number) => void;

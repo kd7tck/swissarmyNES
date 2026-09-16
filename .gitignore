@@ -1,5 +1,11 @@
 target/
 .tools/
+# Generated browser bindings and binaries are rebuilt from emulator/src.
+/static/wasm/
+# Pinned external test inputs: node scripts/fetch-test-fixtures.mjs
+/emulator/tests/fixtures/nestest.nes
+/emulator/tests/fixtures/nestest.trace
+/emulator/tests/fixtures/nestest-readme.txt
 **/*.log
 projects/*
 !projects/.gitkeep

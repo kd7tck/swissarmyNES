@@ -129,3 +129,45 @@ fn oam_dma_stalls_reads_for_both_cpu_alignments() {
     // DMA consumes 513 or 514 cycles; the pending NOP still consumes its own two.
     assert_eq!(observed, [515, 516]);
 }
+
+#[test]
+fn frame_irq_is_masked_until_cli_delay_and_remains_asserted_after_rti() {
+    // Start the APU four-step frame sequencer, then wait longer than one frame
+    // with I set. No handler acknowledges $4015, so the IRQ level stays asserted.
+    let mut emulator = program(&[
+        0x78, 0xa9, 0x00, 0x8d, 0x17, 0x40, 0xa0, 0x20, 0xa2, 0x00, 0xca, 0xd0, 0xfd, 0x88, 0xd0,
+        0xf8, 0x58, 0x4c, 0x11, 0x80,
+    ]);
+    let mut reached_cli = false;
+    for _ in 0..25000 {
+        let state = emulator.get_cpu_state();
+        assert_ne!(state.pc, 0x8100, "IRQ was taken while I was set");
+        if state.pc == 0x8010 {
+            reached_cli = true;
+            break;
+        }
+        emulator.trace_instruction().unwrap();
+    }
+    assert!(reached_cli);
+    assert_ne!(
+        emulator.peek_cpu(0x4015) & 0x40,
+        0,
+        "frame IRQ never asserted"
+    );
+    emulator.trace_instruction().unwrap(); // CLI does not take the IRQ yet.
+    let after_cli = emulator.get_cpu_state();
+    assert_eq!(after_cli.pc, 0x8011);
+    assert_eq!(after_cli.status & 4, 0);
+    emulator.trace_instruction().unwrap(); // JMP followed by IRQ entry.
+    let entered = emulator.get_cpu_state();
+    assert_eq!(entered.pc, 0x8100);
+    assert_eq!(entered.cycles - after_cli.cycles, 10);
+    assert_eq!(emulator.peek_cpu(0x1fd), 0x80);
+    assert_eq!(emulator.peek_cpu(0x1fc), 0x11);
+    assert_eq!(emulator.peek_cpu(0x1fb) & 0x34, 0x20);
+    emulator.trace_instruction().unwrap(); // RTI immediately re-enters held IRQ.
+    let reentered = emulator.get_cpu_state();
+    assert_eq!(reentered.pc, 0x8100);
+    assert_eq!(reentered.sp, entered.sp);
+    assert_eq!(reentered.cycles - entered.cycles, 13);
+}

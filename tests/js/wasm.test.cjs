@@ -28,5 +28,15 @@ test('generated browser WASM matches every canonical CPU trace record', async ()
         emulator.update_palettes();
         assert.equal(emulator.get_palettes_len(), 128);
         assert.ok(Math.abs(emulator.frame_rate() - 60.0988) < 0.002);
+        // Verify the generated bundle resolves the same corrected cartridge
+        // loader as native, including absence and nonvolatile-only declarations.
+        for (const [declaration, capacity] of [[0, 0], [1, 128], [0x70, 8192]]) {
+            const image = new Uint8Array(16 + 16384 + 8192);
+            image.set([0x4e, 0x45, 0x53, 0x1a, 1, 1, declaration & 0xf0 ? 2 : 0, 8]);
+            image[10] = declaration;
+            image[16 + 0x3ffd] = 0x80;
+            emulator.load_rom(image);
+            assert.equal(emulator.prg_ram_len(), capacity);
+        }
     } finally { emulator.free(); }
 });

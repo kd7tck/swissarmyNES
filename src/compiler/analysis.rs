@@ -750,6 +750,23 @@ impl SemanticAnalyzer {
                 }
                 self.unsafe_return_depth -= 1;
             }
+            StatementKind::On(event, handler) => {
+                if !matches!(event.to_ascii_uppercase().as_str(), "NMI" | "IRQ") {
+                    self.errors
+                        .push(format!("Unsupported interrupt event {event}"));
+                }
+                match self.symbol_table.resolve(handler) {
+                    Some(symbol)
+                        if symbol.kind == SymbolKind::Sub
+                            && symbol
+                                .params
+                                .as_ref()
+                                .is_none_or(|params| params.is_empty()) => {}
+                    _ => self.errors.push(format!(
+                        "Interrupt handler {handler} must be a zero-argument routine"
+                    )),
+                }
+            }
             StatementKind::WaitVBlank => {}
             StatementKind::Randomize(expr) => {
                 self.analyze_expression(expr);

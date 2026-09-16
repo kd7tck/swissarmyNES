@@ -33,11 +33,66 @@ pub struct CodeGenerator {
     label_counter: usize,
     data_table_offsets: HashMap<String, u16>,
     sub_signatures: HashMap<String, (u8, Vec<(u16, DataType)>)>,
+    interrupt_targets: Vec<(String, String)>,
     string_literals: HashMap<String, String>,
     select_stack_depth: usize,
 }
 
 impl CodeGenerator {
+    fn generate_interrupt_scratch(&mut self, event: &str, restore: bool) {
+        // Save only transient bytes. Persistent controller, sprite, text,
+        // scroll and RNG state intentionally remains visible after a handler.
+        let action = if restore { "Restore" } else { "Save" };
+        let label = format!("{action}_{event}_Scratch");
+        self.emit(format!("  LDX #{}", if restore { 27 } else { 0 }));
+        self.emit(format!("{label}:"));
+        self.emit("  LDY InterruptScratchAddresses,X".into());
+        if restore {
+            self.emit("  PLA".into());
+            self.emit("  STA $0000,Y".into());
+            self.emit("  DEX".into());
+            self.emit(format!("  BPL {label}"));
+        } else {
+            self.emit("  LDA $0000,Y".into());
+            self.emit("  PHA".into());
+            self.emit("  INX".into());
+            self.emit("  CPX #28".into());
+            self.emit(format!("  BNE {label}"));
+        }
+    }
+    fn collect_interrupt_bindings(
+        block: &[Statement],
+        targets: &mut std::collections::BTreeSet<String>,
+    ) {
+        for statement in block {
+            match &statement.kind {
+                StatementKind::On(_, handler) => {
+                    targets.insert(handler.clone());
+                }
+                StatementKind::If(_, then_block, else_block) => {
+                    Self::collect_interrupt_bindings(then_block, targets);
+                    if let Some(block) = else_block {
+                        Self::collect_interrupt_bindings(block, targets);
+                    }
+                }
+                StatementKind::While(_, body)
+                | StatementKind::DoWhile(body, _)
+                | StatementKind::For(_, _, _, _, body) => {
+                    Self::collect_interrupt_bindings(body, targets)
+                }
+                StatementKind::Select(_, cases, otherwise) => {
+                    for (_, body) in cases {
+                        Self::collect_interrupt_bindings(body, targets);
+                    }
+                    if let Some(body) = otherwise {
+                        Self::collect_interrupt_bindings(body, targets);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn get_pc(&self) -> u16 {
         *self.pc_per_bank.get(&self.current_bank).unwrap_or(&0x8000)
     }
@@ -72,6 +127,34 @@ impl CodeGenerator {
         self.string_literals.clear();
         self.data_table_offsets.clear();
         self.sub_signatures.clear();
+        self.interrupt_targets.clear();
+        let mut bound_handlers = std::collections::BTreeSet::new();
+        for declaration in &program.declarations {
+            if let TopLevelKind::Sub(_, _, body) | TopLevelKind::Interrupt(_, body) =
+                &declaration.kind
+            {
+                Self::collect_interrupt_bindings(body, &mut bound_handlers);
+            }
+        }
+        // Selector zero retains the default vector. Other selectors identify
+        // immutable linked addresses, so ON publishes a binding in one store.
+        for declaration in &program.declarations {
+            match &declaration.kind {
+                TopLevelKind::Sub(name, params, _)
+                    if params.is_empty() && bound_handlers.contains(name) =>
+                {
+                    self.interrupt_targets
+                        .push((name.clone(), format!("Trampoline_{name}")));
+                }
+                TopLevelKind::Interrupt(name, _) if bound_handlers.contains(name) => {
+                    self.interrupt_targets.push((name.clone(), name.clone()));
+                }
+                _ => {}
+            }
+        }
+        if self.interrupt_targets.len() > 255 {
+            return Err("Interrupt dispatch supports at most 255 distinct bound handlers".into());
+        }
         self.label_counter = 0;
         self.current_line = 0;
         self.current_bank = 0;
@@ -118,9 +201,16 @@ impl CodeGenerator {
 
         // MMC1 BankSwitch Routine
         // Expects the target bank in A register.
-        // Uses X to preserve it if needed or just writes directly.
+        // Interrupts may use the same serial mapper register. They flag the
+        // interrupted sequence for a full reset/retry before switchable code runs.
         self.emit("MMC1_SetPrgBank:".to_string());
         self.emit("  STA $07F0".to_string());
+        self.emit("MMC1_RetryPrgBank:".to_string());
+        self.emit("  LDA #0".to_string());
+        self.emit("  STA $07F2".to_string());
+        self.emit("  LDA #$80".to_string());
+        self.emit("  STA $8000".to_string());
+        self.emit("  LDA $07F0".to_string());
         self.emit("  STA $E000".to_string());
         self.emit("  LSR".to_string());
         self.emit("  STA $E000".to_string());
@@ -130,6 +220,8 @@ impl CodeGenerator {
         self.emit("  STA $E000".to_string());
         self.emit("  LSR".to_string());
         self.emit("  STA $E000".to_string());
+        self.emit("  LDA $07F2".to_string());
+        self.emit("  BNE MMC1_RetryPrgBank".to_string());
         self.emit("  RTS".to_string());
         self.generate_trampolines(program);
 
@@ -167,6 +259,7 @@ impl CodeGenerator {
             label_counter: 0,
             data_table_offsets: HashMap::new(),
             sub_signatures: HashMap::new(),
+            interrupt_targets: Vec::new(),
             string_literals: HashMap::new(),
             select_stack_depth: 0,
         }
@@ -474,10 +567,12 @@ impl CodeGenerator {
         self.emit("  PHA".to_string());
         self.emit("  TYA".to_string());
         self.emit("  PHA".to_string());
-        for i in 0..16 {
-            self.emit(format!("  LDA ${:02X}", i));
-            self.emit("  PHA".to_string());
-        }
+        // A cross-bank caller may be interrupted while its return value lives
+        // in shared scratch. Stack it so nested handler calls cannot replace it.
+        self.emit("  LDA $07F1".to_string());
+        self.emit("  PHA".to_string());
+        // Compact loop leaves space for runtime helpers below the fixed data area.
+        self.generate_interrupt_scratch("NMI", false);
 
         // OAM DMA
         self.emit("  LDA #$00".to_string());
@@ -550,10 +645,13 @@ impl CodeGenerator {
         self.emit("  LDA $E1".to_string());
         self.emit("  STA $2005".to_string());
 
-        for i in (0..16).rev() {
-            self.emit("  PLA".to_string());
-            self.emit(format!("  STA ${:02X}", i));
-        }
+        self.generate_interrupt_scratch("NMI", true);
+        // Mark even a handler with no bank calls: an interrupted writer can
+        // safely restart, and nested bank calls may have reset this flag.
+        self.emit("  LDA #1".to_string());
+        self.emit("  STA $07F2".to_string());
+        self.emit("  PLA".to_string());
+        self.emit("  STA $07F1".to_string());
         self.emit("  PLA".to_string());
         self.emit("  TAY".to_string());
         self.emit("  PLA".to_string());
@@ -562,6 +660,8 @@ impl CodeGenerator {
         self.emit("  RTI".to_string());
 
         self.emit("CallUserNMI:".to_string());
+        self.emit("  LDX $07F8".to_string());
+        self.emit("  BNE DispatchSelectedInterrupt".to_string());
         self.emit("  JMP ($07F4)".to_string());
 
         self.emit("TrampolineIRQ:".to_string());
@@ -570,10 +670,12 @@ impl CodeGenerator {
         self.emit("  PHA".to_string());
         self.emit("  TYA".to_string());
         self.emit("  PHA".to_string());
-        for i in 0..16 {
-            self.emit(format!("  LDA ${:02X}", i));
-            self.emit("  PHA".to_string());
-        }
+        // A cross-bank caller may be interrupted while its return value lives
+        // in shared scratch. Stack it so nested handler calls cannot replace it.
+        self.emit("  LDA $07F1".to_string());
+        self.emit("  PHA".to_string());
+        // Compact loop leaves space for runtime helpers below the fixed data area.
+        self.generate_interrupt_scratch("IRQ", false);
 
         self.emit("  LDA $07F6".to_string());
         self.emit("  ORA $07F7".to_string());
@@ -581,10 +683,11 @@ impl CodeGenerator {
         self.emit("  JSR CallUserIRQ".to_string());
         self.emit("SkipIRQ:".to_string());
 
-        for i in (0..16).rev() {
-            self.emit("  PLA".to_string());
-            self.emit(format!("  STA ${:02X}", i));
-        }
+        self.generate_interrupt_scratch("IRQ", true);
+        self.emit("  LDA #1".to_string());
+        self.emit("  STA $07F2".to_string());
+        self.emit("  PLA".to_string());
+        self.emit("  STA $07F1".to_string());
         self.emit("  PLA".to_string());
         self.emit("  TAY".to_string());
         self.emit("  PLA".to_string());
@@ -593,7 +696,29 @@ impl CodeGenerator {
         self.emit("  RTI".to_string());
 
         self.emit("CallUserIRQ:".to_string());
+        self.emit("  LDX $07F9".to_string());
+        self.emit("  BNE DispatchSelectedInterrupt".to_string());
         self.emit("  JMP ($07F6)".to_string());
+        self.emit("DispatchSelectedInterrupt:".to_string());
+        // Wrappers already saved these scratch bytes and X on the stack.
+        self.emit("  LDA InterruptTargetLow,X".to_string());
+        self.emit("  STA $00".to_string());
+        self.emit("  LDA InterruptTargetHigh,X".to_string());
+        self.emit("  STA $01".to_string());
+        self.emit("  JMP ($0000)".to_string());
+        // The sparse table avoids saving persistent application state and
+        // keeps both interrupt wrappers small enough for fixed-bank code.
+        self.emit("InterruptScratchAddresses:".into());
+        for address in (0..16).chain(0x14..=0x17).chain(0xf0..=0xf7) {
+            self.emit(format!("  DB ${address:02X}"));
+        }
+        for (table, prefix) in [("InterruptTargetLow", '<'), ("InterruptTargetHigh", '>')] {
+            self.emit(format!("{table}:"));
+            self.emit("  DB 0".to_string());
+            for (_, target) in self.interrupt_targets.clone() {
+                self.emit(format!("  DB {prefix}{target}"));
+            }
+        }
         self.emit("".to_string());
 
         Ok(())
@@ -840,34 +965,25 @@ impl CodeGenerator {
         self.emit("  TYA".to_string());
         self.emit("  PHA".to_string());
 
+        // An inactive channel has no envelope or note work. In particular,
+        // zero-initialized channel data must not be interpreted as envelope 0.
         self.emit("  LDX #0".to_string());
+        self.emit("SoundChannelLoop:".to_string());
+        self.emit(format!("  LDA ${SOUND_RAM_START:04X},X"));
+        self.emit("  BEQ SoundChannelNext".to_string());
         self.emit("  JSR SndChUpdate".to_string());
+        self.emit(format!("  LDA ${SOUND_RAM_START:04X},X"));
+        self.emit("  BEQ SoundChannelNext".to_string());
         self.emit("  JSR SndEnvUpdate".to_string());
         self.emit("  JSR SndPitchUpdate".to_string());
         self.emit("  JSR SndDutyUpdate".to_string());
         self.emit("  JSR SndArpUpdate".to_string());
-
-        self.emit("  LDX #$20".to_string());
-        self.emit("  JSR SndChUpdate".to_string());
-        self.emit("  JSR SndEnvUpdate".to_string());
-        self.emit("  JSR SndPitchUpdate".to_string());
-        self.emit("  JSR SndDutyUpdate".to_string());
-        self.emit("  JSR SndArpUpdate".to_string());
-
-        self.emit("  LDX #$40".to_string());
-        self.emit("  JSR SndChUpdate".to_string());
-        self.emit("  JSR SndEnvUpdate".to_string());
-        self.emit("  JSR SndPitchUpdate".to_string());
-        self.emit("  JSR SndDutyUpdate".to_string());
-        self.emit("  JSR SndArpUpdate".to_string());
-
-        self.emit("  LDX #$60".to_string());
-        self.emit("  JSR SndChUpdate".to_string());
-        self.emit("  JSR SndEnvUpdate".to_string());
-        self.emit("  JSR SndPitchUpdate".to_string());
-        self.emit("  JSR SndDutyUpdate".to_string());
-        self.emit("  JSR SndArpUpdate".to_string());
-
+        self.emit("SoundChannelNext:".to_string());
+        self.emit("  TXA".to_string());
+        self.emit("  CLC".to_string());
+        self.emit("  ADC #$20".to_string());
+        self.emit("  TAX".to_string());
+        self.emit("  BPL SoundChannelLoop".to_string());
         self.emit("  PLA".to_string());
         self.emit("  TAY".to_string());
         self.emit("  PLA".to_string());
@@ -4178,6 +4294,23 @@ impl CodeGenerator {
                     self.emit(format!("  LDA ${:04X}", addr + 1));
                     self.emit("  STA $05".to_string());
                 }
+            }
+            StatementKind::On(event, handler) => {
+                let selector = match event.to_ascii_uppercase().as_str() {
+                    "NMI" => 0x07f8,
+                    "IRQ" => 0x07f9,
+                    _ => return Err(format!("Unsupported interrupt event {event}")),
+                };
+                let index = self
+                    .interrupt_targets
+                    .iter()
+                    .position(|(name, _)| name == handler)
+                    .ok_or_else(|| {
+                        format!("Interrupt handler {handler} must be a zero-argument routine")
+                    })?
+                    + 1;
+                self.emit(format!("  LDA #{index}"));
+                self.emit(format!("  STA ${selector:04X}"));
             }
             StatementKind::WaitVBlank => {
                 let lbl = self.new_label();

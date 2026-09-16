@@ -84,6 +84,19 @@ fn exponent_image_and_trainer_execute_via_production_loader() {
     emulator.step().unwrap();
     assert_eq!(emulator.peek_cpu(0), 0x5a);
     assert_eq!(emulator.peek_cpu(0x71ff), 0x5a);
+    // Reset is a fresh boot of the loaded cartridge, including its trainer.
+    // A failed replacement must retain both the game and its boot data.
+    assert!(emulator.load_rom(b"invalid").is_err());
+    emulator.reset();
+    for address in 0x7000..=0x71ff {
+        assert_eq!(
+            emulator.peek_cpu(address),
+            0x5a,
+            "trainer byte {address:04X}"
+        );
+    }
+    emulator.step().unwrap();
+    assert_eq!(emulator.peek_cpu(0), 0x5a);
 }
 
 #[test]
@@ -101,4 +114,69 @@ fn loaded_region_controls_exported_frame_cadence() {
             emulator.frame_rate()
         );
     }
+}
+
+#[test]
+fn nes2_nrom_ram_absence_sizes_and_nvram_execute_as_declared() {
+    for (declaration, size, read_address) in [
+        (0, 0, 0x6000u16),
+        (1, 128, 0x6080),
+        (5, 2048, 0x6800),
+        (0x70, 8192, 0x6000),
+        (0x66, 8192, 0x6000),
+    ] {
+        let mut h = header();
+        h[7] = 8;
+        h[10] = declaration;
+        if declaration & 0xf0 != 0 {
+            h[6] |= 2;
+        }
+        let mut rom = image(h, 16384 + 8192);
+        // Store to RAM base, read through its declared mirror, and record in CPU RAM.
+        let [low, high] = read_address.to_le_bytes();
+        rom[16..28].copy_from_slice(&[
+            0xa9, 0x5a, 0x8d, 0, 0x60, 0xad, low, high, 0x85, 0, 0xea, 0xea,
+        ]);
+        rom[16 + 0x3ffc..16 + 0x3ffe].copy_from_slice(&0x8000u16.to_le_bytes());
+        let mut emulator = swiss_emulator::Emulator::new();
+        emulator.load_rom(&rom).unwrap();
+        assert_eq!(
+            emulator.prg_ram_len(),
+            size,
+            "declaration {declaration:02X}"
+        );
+        for _ in 0..4 {
+            emulator.trace_instruction().unwrap();
+        }
+        // On an absent RAM read, the last bus value is the address operand's high byte.
+        assert_eq!(emulator.peek_cpu(0), if size == 0 { high } else { 0x5a });
+    }
+}
+
+#[test]
+fn nes2_nrom_rejects_unmappable_ram_and_missing_chr_storage() {
+    let mut h = header();
+    h[7] = 8;
+    h[10] = 8; // 16 KiB cannot be addressed by NROM's unbanked 8 KiB window.
+    let mut emulator = swiss_emulator::Emulator::new();
+    h[6] = 4;
+    h[10] = 0;
+    let mut absent_trainer = image(h, 512 + 16384 + 8192);
+    absent_trainer[16..528].fill(0x5a);
+    assert!(emulator
+        .load_rom(&absent_trainer)
+        .unwrap_err()
+        .contains("trainer requires"));
+    h[6] = 0;
+    h[10] = 8;
+    assert!(emulator
+        .load_rom(&image(h, 16384 + 8192))
+        .unwrap_err()
+        .contains("at most 8 KiB"));
+    h[10] = 0;
+    h[5] = 0;
+    assert!(emulator
+        .load_rom(&image(h, 16384))
+        .unwrap_err()
+        .contains("explicit 8 KiB CHR RAM"));
 }

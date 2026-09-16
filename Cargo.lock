@@ -741,8 +741,6 @@ checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
 [[package]]
 name = "tetanes-core"
 version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ab83febf2a67da4ec29d509e9848c18109a7a564f0472a98cdc5cea7c701f47"
 dependencies = [
  "bincode",
  "bitflags",

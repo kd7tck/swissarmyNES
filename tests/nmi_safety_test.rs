@@ -53,9 +53,23 @@ mod tests {
             .unwrap();
         let trampoline_code = &asm[trampoline_idx..];
 
-        // Check for saving $00-$0F
-        assert!(trampoline_code.iter().any(|line| line.contains("LDA $00")));
-        assert!(trampoline_code.iter().any(|line| line.contains("LDA $0F")));
+        // Sparse indexed loops cover temporary ranges without rolling back
+        // persistent controller, text, sprite, scroll or RNG state.
+        for instruction in [
+            "LDX #0",
+            "LDY InterruptScratchAddresses,X",
+            "LDA $0000,Y",
+            "CPX #28",
+            "BNE Save_NMI_Scratch",
+            "LDX #27",
+            "STA $0000,Y",
+            "BPL Restore_NMI_Scratch",
+            "STA $07F1",
+        ] {
+            assert!(trampoline_code
+                .iter()
+                .any(|line| line.trim() == instruction));
+        }
 
         // Check for JSR CallUserNMI
         assert!(trampoline_code

@@ -25,6 +25,7 @@ pub struct Emulator {
     breakpoints: Vec<(u8, u16)>,
     stopped_at: Option<(u8, u16)>,
     sample_rate: Option<f32>,
+    trainer: Option<Vec<u8>>,
     // Visualization buffers
     pattern_table_buffer: Vec<u8>,
     nametable_buffer: Vec<u8>,
@@ -41,6 +42,7 @@ impl Emulator {
             breakpoints: Vec::new(),
             stopped_at: None,
             sample_rate: None,
+            trainer: None,
             // 256x128 * 4 bytes (RGBA)
             pattern_table_buffer: vec![0; 256 * 128 * 4],
             // 512x480 * 4 bytes (RGBA) - showing full 2x2 nametable space
@@ -53,6 +55,20 @@ impl Emulator {
 
     pub fn load_rom(&mut self, rom_data: &[u8]) -> Result<(), String> {
         let metadata = cartridge::CartridgeInfo::parse(rom_data)?;
+        if metadata.nes2 && metadata.mapper == 0 {
+            if metadata.trainer && metadata.prg_ram_bytes + metadata.prg_nvram_bytes == 0 {
+                return Err("NROM trainer requires explicitly declared PRG RAM".into());
+            }
+            if metadata.prg_ram_bytes + metadata.prg_nvram_bytes > 8192 {
+                return Err("NROM supports at most 8 KiB of PRG RAM".into());
+            }
+            if metadata.chr_bytes == 0 && metadata.chr_ram_bytes + metadata.chr_nvram_bytes != 8192
+            {
+                return Err(
+                    "NROM without CHR ROM requires an explicit 8 KiB CHR RAM declaration".into(),
+                );
+            }
+        }
         if metadata.console != 0 || metadata.misc_roms != 0 {
             return Err("Unsupported cartridge console or miscellaneous ROM layout".into());
         }
@@ -97,6 +113,8 @@ impl Emulator {
             }
         }
         *self.deck.borrow_mut() = replacement;
+        // Commit boot data only after the replacement passed all validation.
+        self.trainer = metadata.trainer.then(|| rom_data[16..528].to_vec());
         self.stopped_at = None;
         Ok(())
     }
@@ -151,6 +169,11 @@ impl Emulator {
         self.deck.borrow().cpu().bus.peek(address)
     }
 
+    /// Actual cartridge PRG RAM capacity allocated by the production bus.
+    pub fn prg_ram_len(&self) -> usize {
+        self.deck.borrow().cpu().bus.prg_ram.len()
+    }
+
     /// Physical PRG offset, excluding the iNES header; -1 denotes non-ROM memory.
     pub fn prg_offset(&self, address: u16) -> i32 {
         match self.deck.borrow().ppu().bus.mapper.map_peek(address) {
@@ -161,6 +184,13 @@ impl Emulator {
     pub fn reset(&mut self) {
         let mut deck = self.deck.borrow_mut();
         deck.reset(ResetKind::Hard);
+        // Hard reset reinitializes cartridge RAM. Restore the same boot image
+        // used at load so Reset reproduces a fresh launch of trainer cartridges.
+        if let Some(trainer) = &self.trainer {
+            for (offset, value) in trainer.iter().enumerate() {
+                deck.cpu_mut().bus.write(0x7000 + offset as u16, *value);
+            }
+        }
         self.stopped_at = None;
     }
 

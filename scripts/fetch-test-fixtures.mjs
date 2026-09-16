@@ -17,6 +17,9 @@ for (const [upstream, local, checksum] of fixtures) {
     try { bytes = await readFile(destination); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     if (bytes) {
+        if (upstream.endsWith('.log') || upstream.endsWith('.txt')) {
+            bytes = Buffer.from(bytes.toString('utf8').replace(/\r?\n/g, '\r\n'));
+        }
         if (digest(bytes) !== checksum) throw new Error(`${local}: existing file checksum mismatch`);
         console.log(`${local}: verified`);
         continue;
@@ -24,6 +27,9 @@ for (const [upstream, local, checksum] of fixtures) {
     const response = await fetch(`https://raw.githubusercontent.com/christopherpow/nes-test-roms/${revision}/other/${upstream}`);
     if (!response.ok) throw new Error(`${local}: download failed (${response.status})`);
     bytes = Buffer.from(await response.arrayBuffer());
+    if (upstream.endsWith('.log') || upstream.endsWith('.txt')) {
+        bytes = Buffer.from(bytes.toString('utf8').replace(/\r?\n/g, '\r\n'));
+    }
     if (digest(bytes) !== checksum) throw new Error(`${local}: downloaded checksum mismatch`);
     // Exclusive creation preserves any file another process created during download.
     await writeFile(destination, bytes, {flag: 'wx'});

@@ -4808,121 +4808,309 @@ impl CodeGenerator {
                                 return Ok(DataType::Byte);
                             }
                         }
-                        if base_name.eq_ignore_ascii_case("Math")
-                            && (member.eq_ignore_ascii_case("Min")
-                                || member.eq_ignore_ascii_case("Max"))
-                        {
-                            let is_max = member.eq_ignore_ascii_case("Max");
-                            let t1 = self.generate_expression(&args[0])?;
-                            let is_16_1 = t1 == DataType::Word || t1 == DataType::Int;
-                            if is_16_1 {
-                                self.emit("  PHA".to_string());
-                                self.emit("  TXA".to_string());
-                                self.emit("  PHA".to_string());
-                            } else {
-                                self.emit("  PHA".to_string());
-                            }
-                            let t2 = self.generate_expression(&args[1])?;
-                            let is_16_2 = t2 == DataType::Word || t2 == DataType::Int;
-                            let is_16 = is_16_1 || is_16_2;
-
-                            if is_16 {
-                                if !is_16_2 {
-                                    self.emit("  STA $00".to_string());
-                                    self.emit("  LDA #0".to_string());
-                                    self.emit("  STA $01".to_string());
+                        if base_name.eq_ignore_ascii_case("Math") {
+                            if member.eq_ignore_ascii_case("Min")
+                                || member.eq_ignore_ascii_case("Max")
+                            {
+                                let is_max = member.eq_ignore_ascii_case("Max");
+                                let t1 = self.generate_expression(&args[0])?;
+                                let is_16_1 = t1 == DataType::Word || t1 == DataType::Int;
+                                if is_16_1 {
+                                    self.emit("  PHA".to_string());
+                                    self.emit("  TXA".to_string());
+                                    self.emit("  PHA".to_string());
                                 } else {
-                                    self.emit("  STA $00".to_string());
-                                    self.emit("  STX $01".to_string());
+                                    self.emit("  PHA".to_string());
                                 }
+                                let t2 = self.generate_expression(&args[1])?;
+                                let is_16_2 = t2 == DataType::Word || t2 == DataType::Int;
+                                let is_16 = is_16_1 || is_16_2;
 
-                                if !is_16_1 {
-                                    self.emit("  PLA".to_string());
-                                    self.emit("  STA $02".to_string());
-                                    self.emit("  LDA #0".to_string());
-                                    self.emit("  STA $03".to_string());
+                                if is_16 {
+                                    if !is_16_2 {
+                                        self.emit("  STA $00".to_string());
+                                        self.emit("  LDA #0".to_string());
+                                        self.emit("  STA $01".to_string());
+                                    } else {
+                                        self.emit("  STA $00".to_string());
+                                        self.emit("  STX $01".to_string());
+                                    }
+
+                                    if !is_16_1 {
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $02".to_string());
+                                        self.emit("  LDA #0".to_string());
+                                        self.emit("  STA $03".to_string());
+                                    } else {
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $03".to_string());
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $02".to_string());
+                                    }
+
+                                    // Arg1 in $02/$03, Arg2 in $00/$01
+                                    self.emit("  SEC".to_string());
+                                    self.emit("  LDA $02".to_string());
+                                    self.emit("  SBC $00".to_string());
+                                    self.emit("  LDA $03".to_string());
+                                    self.emit("  SBC $01".to_string());
+
+                                    let take_arg2_lbl = self.new_label();
+                                    let done_lbl = self.new_label();
+                                    if is_max {
+                                        self.emit(format!("  BCC {}", take_arg2_lbl));
+                                    // Arg1 < Arg2 -> take Arg2
+                                    } else {
+                                        self.emit(format!("  BCS {}", take_arg2_lbl));
+                                        // Arg1 >= Arg2 -> take Arg2
+                                    }
+                                    // Ret Arg1
+                                    self.emit("  LDA $02".to_string());
+                                    self.emit("  LDX $03".to_string());
+                                    self.emit(format!("  JMP {}", done_lbl));
+
+                                    self.emit(format!("{}:", take_arg2_lbl));
+                                    self.emit("  LDA $00".to_string());
+                                    self.emit("  LDX $01".to_string());
+
+                                    self.emit(format!("{}:", done_lbl));
+                                    return Ok(if is_16_1 { t1 } else { t2 });
                                 } else {
-                                    self.emit("  PLA".to_string());
-                                    self.emit("  STA $03".to_string());
-                                    self.emit("  PLA".to_string());
-                                    self.emit("  STA $02".to_string());
+                                    // 8-bit
+                                    self.emit("  STA $00".to_string()); // Arg2
+                                    self.emit("  PLA".to_string()); // Arg1
+                                    self.emit("  CMP $00".to_string());
+
+                                    let take_arg2_lbl = self.new_label();
+                                    let done_lbl = self.new_label();
+                                    if is_max {
+                                        self.emit(format!("  BCC {}", take_arg2_lbl));
+                                    // Arg1 < Arg2 -> take Arg2
+                                    } else {
+                                        self.emit(format!("  BCS {}", take_arg2_lbl));
+                                        // Arg1 >= Arg2 -> take Arg2
+                                    }
+                                    // Ret Arg1 in A (already in A? No, CMP preserved A!)
+                                    self.emit(format!("  JMP {}", done_lbl));
+
+                                    self.emit(format!("{}:", take_arg2_lbl));
+                                    self.emit("  LDA $00".to_string());
+
+                                    self.emit(format!("{}:", done_lbl));
+                                    self.emit("  LDX #0".to_string());
+                                    return Ok(DataType::Byte);
                                 }
-
-                                // Arg1 in $02/$03, Arg2 in $00/$01
-                                self.emit("  SEC".to_string());
-                                self.emit("  LDA $02".to_string());
-                                self.emit("  SBC $00".to_string());
-                                self.emit("  LDA $03".to_string());
-                                self.emit("  SBC $01".to_string());
-
-                                let take_arg2_lbl = self.new_label();
+                            } else if member.eq_ignore_ascii_case("Sign") {
+                                let dtype = self.generate_expression(&args[0])?;
+                                let pos_lbl = self.new_label();
                                 let done_lbl = self.new_label();
-                                if is_max {
-                                    self.emit(format!("  BCC {}", take_arg2_lbl));
-                                // Arg1 < Arg2 -> take Arg2
+                                let neg_lbl = self.new_label();
+
+                                if dtype == DataType::Word || dtype == DataType::Int {
+                                    self.emit("  CPX #$80".to_string());
+                                    self.emit(format!("  BCS {}", neg_lbl));
+                                    self.emit("  CPX #0".to_string());
+                                    self.emit(format!("  BNE {}", pos_lbl));
+                                    self.emit("  CMP #0".to_string());
+                                    self.emit(format!("  BNE {}", pos_lbl));
+                                    self.emit("  LDA #0".to_string());
+                                    self.emit("  LDX #0".to_string());
+                                    self.emit(format!("  JMP {}", done_lbl));
+
+                                    self.emit(format!("{}:", neg_lbl));
+                                    self.emit("  LDA #$FF".to_string());
+                                    self.emit("  LDX #$FF".to_string());
+                                    self.emit(format!("  JMP {}", done_lbl));
+
+                                    self.emit(format!("{}:", pos_lbl));
+                                    self.emit("  LDA #1".to_string());
+                                    self.emit("  LDX #0".to_string());
+
+                                    self.emit(format!("{}:", done_lbl));
+                                    return Ok(DataType::Int);
                                 } else {
-                                    self.emit(format!("  BCS {}", take_arg2_lbl));
-                                    // Arg1 >= Arg2 -> take Arg2
+                                    self.emit("  CMP #$80".to_string());
+                                    self.emit(format!("  BCS {}", neg_lbl));
+                                    self.emit("  CMP #0".to_string());
+                                    self.emit(format!("  BNE {}", pos_lbl));
+                                    self.emit("  LDA #0".to_string());
+                                    self.emit(format!("  JMP {}", done_lbl));
+
+                                    self.emit(format!("{}:", neg_lbl));
+                                    self.emit("  LDA #$FF".to_string());
+                                    self.emit(format!("  JMP {}", done_lbl));
+
+                                    self.emit(format!("{}:", pos_lbl));
+                                    self.emit("  LDA #1".to_string());
+
+                                    self.emit(format!("{}:", done_lbl));
+                                    self.emit("  CMP #$80".to_string());
+                                    let sign_ext_lbl = self.new_label();
+                                    let sign_ext_done = self.new_label();
+                                    self.emit(format!("  BCS {}", sign_ext_lbl));
+                                    self.emit("  LDX #0".to_string());
+                                    self.emit(format!("  JMP {}", sign_ext_done));
+                                    self.emit(format!("{}:", sign_ext_lbl));
+                                    self.emit("  LDX #$FF".to_string());
+                                    self.emit(format!("{}:", sign_ext_done));
+
+                                    return Ok(DataType::Int);
                                 }
-                                // Ret Arg1
-                                self.emit("  LDA $02".to_string());
-                                self.emit("  LDX $03".to_string());
-                                self.emit(format!("  JMP {}", done_lbl));
-
-                                self.emit(format!("{}:", take_arg2_lbl));
-                                self.emit("  LDA $00".to_string());
-                                self.emit("  LDX $01".to_string());
-
-                                self.emit(format!("{}:", done_lbl));
-                                return Ok(if is_16_1 { t1 } else { t2 });
-                            } else {
-                                // 8-bit
-                                self.emit("  STA $00".to_string()); // Arg2
-                                self.emit("  PLA".to_string()); // Arg1
-                                self.emit("  CMP $00".to_string());
-
-                                let take_arg2_lbl = self.new_label();
-                                let done_lbl = self.new_label();
-                                if is_max {
-                                    self.emit(format!("  BCC {}", take_arg2_lbl));
-                                // Arg1 < Arg2 -> take Arg2
+                            } else if member.eq_ignore_ascii_case("Clamp") {
+                                // Math.Clamp(val, min, max) -> Max(min, Min(val, max))
+                                // Evaluate max -> stack, min -> stack, val -> A/X
+                                let t_val = self.generate_expression(&args[0])?;
+                                let is_16_val = t_val == DataType::Word || t_val == DataType::Int;
+                                if is_16_val {
+                                    self.emit("  PHA".to_string());
+                                    self.emit("  TXA".to_string());
+                                    self.emit("  PHA".to_string());
                                 } else {
-                                    self.emit(format!("  BCS {}", take_arg2_lbl));
-                                    // Arg1 >= Arg2 -> take Arg2
+                                    self.emit("  PHA".to_string());
                                 }
-                                // Ret Arg1 in A (already in A? No, CMP preserved A!)
-                                self.emit(format!("  JMP {}", done_lbl));
+                                let t_min = self.generate_expression(&args[1])?;
+                                let is_16_min = t_min == DataType::Word || t_min == DataType::Int;
+                                if is_16_min {
+                                    self.emit("  PHA".to_string());
+                                    self.emit("  TXA".to_string());
+                                    self.emit("  PHA".to_string());
+                                } else {
+                                    self.emit("  PHA".to_string());
+                                }
+                                let t_max = self.generate_expression(&args[2])?;
+                                let is_16_max = t_max == DataType::Word || t_max == DataType::Int;
+                                let is_16 = is_16_val || is_16_min || is_16_max;
 
-                                self.emit(format!("{}:", take_arg2_lbl));
-                                self.emit("  LDA $00".to_string());
+                                if is_16 {
+                                    // Pop Max -> $04/$05
+                                    if !is_16_max {
+                                        self.emit("  STA $04".to_string());
+                                        self.emit("  LDA #0".to_string());
+                                        self.emit("  STA $05".to_string());
+                                    } else {
+                                        self.emit("  STA $04".to_string());
+                                        self.emit("  STX $05".to_string());
+                                    }
+                                    // Pop Min -> $06/$07
+                                    if !is_16_min {
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $06".to_string());
+                                        self.emit("  LDA #0".to_string());
+                                        self.emit("  STA $07".to_string());
+                                    } else {
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $07".to_string());
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $06".to_string());
+                                    }
+                                    // Pop Val -> $02/$03
+                                    if !is_16_val {
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $02".to_string());
+                                        self.emit("  LDA #0".to_string());
+                                        self.emit("  STA $03".to_string());
+                                    } else {
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $03".to_string());
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $02".to_string());
+                                    }
 
-                                self.emit(format!("{}:", done_lbl));
-                                self.emit("  LDX #0".to_string());
-                                return Ok(DataType::Byte);
+                                    // First: if Val > Max => Val = Max
+                                    self.emit("  SEC".to_string());
+                                    self.emit("  LDA $02".to_string());
+                                    self.emit("  SBC $04".to_string());
+                                    self.emit("  LDA $03".to_string());
+                                    self.emit("  SBC $05".to_string());
+                                    let no_max_clamp = self.new_label();
+                                    self.emit(format!("  BCC {}", no_max_clamp));
+                                    self.emit("  LDA $04".to_string());
+                                    self.emit("  STA $02".to_string());
+                                    self.emit("  LDA $05".to_string());
+                                    self.emit("  STA $03".to_string());
+                                    self.emit(format!("{}:", no_max_clamp));
+
+                                    // Second: if Val < Min => Val = Min
+                                    self.emit("  SEC".to_string());
+                                    self.emit("  LDA $02".to_string());
+                                    self.emit("  SBC $06".to_string());
+                                    self.emit("  LDA $03".to_string());
+                                    self.emit("  SBC $07".to_string());
+                                    let no_min_clamp = self.new_label();
+                                    self.emit(format!("  BCS {}", no_min_clamp));
+                                    self.emit("  LDA $06".to_string());
+                                    self.emit("  STA $02".to_string());
+                                    self.emit("  LDA $07".to_string());
+                                    self.emit("  STA $03".to_string());
+                                    self.emit(format!("{}:", no_min_clamp));
+
+                                    self.emit("  LDA $02".to_string());
+                                    self.emit("  LDX $03".to_string());
+                                    return Ok(if is_16_val { t_val } else { DataType::Word });
+                                } else {
+                                    // 8-bit
+                                    self.emit("  STA $01".to_string()); // Max
+                                    self.emit("  PLA".to_string());
+                                    self.emit("  STA $00".to_string()); // Min
+                                    self.emit("  PLA".to_string()); // Val
+
+                                    // If Val > Max => Val = Max
+                                    self.emit("  CMP $01".to_string());
+                                    let no_max_clamp = self.new_label();
+                                    self.emit(format!("  BCC {}", no_max_clamp));
+                                    self.emit("  BEQ {}".to_string() + &no_max_clamp);
+                                    self.emit("  LDA $01".to_string());
+                                    self.emit(format!("{}:", no_max_clamp));
+
+                                    // If Val < Min => Val = Min
+                                    self.emit("  CMP $00".to_string());
+                                    let no_min_clamp = self.new_label();
+                                    self.emit(format!("  BCS {}", no_min_clamp));
+                                    self.emit("  LDA $00".to_string());
+                                    self.emit(format!("{}:", no_min_clamp));
+
+                                    self.emit("  LDX #0".to_string());
+                                    return Ok(DataType::Byte);
+                                }
                             }
                         }
                         if base_name.eq_ignore_ascii_case("Controller") {
-                            self.generate_expression(&args[0])?;
-                            self.emit("  STA $00".to_string());
-                            if member.eq_ignore_ascii_case("IsPressed") {
-                                self.emit("  LDA $12".to_string());
-                            } else if member.eq_ignore_ascii_case("IsHeld") {
-                                self.emit("  LDA $10".to_string());
-                            } else if member.eq_ignore_ascii_case("IsReleased") {
-                                self.emit("  LDA $13".to_string());
+                            if member.eq_ignore_ascii_case("AnyPressed") {
+                                self.emit("  LDA $12".to_string()); // Newly pressed
+                                self.emit("  CMP #0".to_string());
+                                let true_lbl = self.new_label();
+                                let end_lbl = self.new_label();
+                                self.emit(format!("  BNE {}", true_lbl));
+                                self.emit("  LDA #0".to_string());
+                                self.emit(format!("  JMP {}", end_lbl));
+                                self.emit(format!("{}:", true_lbl));
+                                self.emit("  LDA #$FF".to_string());
+                                self.emit(format!("{}:", end_lbl));
+                                self.emit("  LDX #0".to_string());
+                                return Ok(DataType::Bool);
+                            } else {
+                                self.generate_expression(&args[0])?;
+                                self.emit("  STA $00".to_string());
+                                if member.eq_ignore_ascii_case("IsPressed") {
+                                    self.emit("  LDA $12".to_string());
+                                } else if member.eq_ignore_ascii_case("IsHeld") {
+                                    self.emit("  LDA $10".to_string());
+                                } else if member.eq_ignore_ascii_case("IsReleased") {
+                                    self.emit("  LDA $13".to_string());
+                                }
+                                self.emit("  AND $00".to_string());
+                                self.emit("  CMP #0".to_string());
+                                let true_lbl = self.new_label();
+                                let end_lbl = self.new_label();
+                                self.emit(format!("  BNE {}", true_lbl));
+                                self.emit("  LDA #0".to_string());
+                                self.emit(format!("  JMP {}", end_lbl));
+                                self.emit(format!("{}:", true_lbl));
+                                self.emit("  LDA #$FF".to_string());
+                                self.emit(format!("{}:", end_lbl));
+                                self.emit("  LDX #0".to_string());
+                                return Ok(DataType::Bool);
                             }
-                            self.emit("  AND $00".to_string());
-                            self.emit("  CMP #0".to_string());
-                            let true_lbl = self.new_label();
-                            let end_lbl = self.new_label();
-                            self.emit(format!("  BNE {}", true_lbl));
-                            self.emit("  LDA #0".to_string());
-                            self.emit(format!("  JMP {}", end_lbl));
-                            self.emit(format!("{}:", true_lbl));
-                            self.emit("  LDA #$FF".to_string());
-                            self.emit(format!("{}:", end_lbl));
-                            self.emit("  LDX #0".to_string());
-                            return Ok(DataType::Bool);
                         }
                     }
                 }

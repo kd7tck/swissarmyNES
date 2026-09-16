@@ -246,9 +246,11 @@ Historical implementation summary: phases 31-38 were marked complete.
     - **CodeGenerator Stack**: When evaluating arguments for subroutines or built-ins, complex expressions can clobber temporary registers (like `$02/$03` or `$06`). Use the Stack (`PHA`/`PLA`) to protect intermediate values.
 
 - **Dev Loops (Math Intrinsics, Bitwise Ops, Constant Folding, Lexer Diagnostics, JS Editor Tests)**:
-    - Added `Math.Min` and `Math.Max` intrinsic support across analysis and 6502 code generation (supporting 8-bit & 16-bit operands).
-    - Added `BITAND`, `BITOR`, `BITXOR`, and `BITNOT` bitwise functions in analysis and codegen.
-    - Implemented `fold_constants_expr` in `SemanticAnalyzer` for compile-time constant expression optimization.
+    - Added `Math.Min`, `Math.Max`, `Math.Clamp`, and `Math.Sign` intrinsic support across analysis and 6502 code generation (supporting 8-bit & 16-bit operands).
+    - Added `BITAND`, `BITOR`, `BITXOR`, and `BITNOT` bitwise functions in analysis and codegen, including compile-time constant folding.
+    - Implemented `fold_constants_expr` in `SemanticAnalyzer` for compile-time constant expression optimization (including binary ops, unary ops, and bitwise calls).
+    - Added compile-time array out-of-bounds constant index validation in `SemanticAnalyzer`.
+    - Added `Controller.AnyPressed()` intrinsic helper in `SemanticAnalyzer` and `CodeGenerator`.
     - Enhanced `Lexer` with column position tracking (`column: usize`) and line:column error formatting.
     - Expanded JS unit tests in `tests/js/editor.test.cjs` covering pause/unpause state transitions and emulator reset.
 

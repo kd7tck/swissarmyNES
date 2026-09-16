@@ -213,6 +213,43 @@ fn test_constant_folding() {
 
     let folded = SemanticAnalyzer::fold_constants_expr(&expr);
     assert_eq!(folded, Expression::Integer(60));
+
+    // Test bitwise function constant folding
+    let bitand_expr = Expression::Call(
+        Box::new(Expression::Identifier("BITAND".to_string())),
+        vec![Expression::Integer(0b1100), Expression::Integer(0b1010)],
+    );
+    assert_eq!(
+        SemanticAnalyzer::fold_constants_expr(&bitand_expr),
+        Expression::Integer(0b1000)
+    );
+
+    let bitor_expr = Expression::Call(
+        Box::new(Expression::Identifier("BITOR".to_string())),
+        vec![Expression::Integer(0b1100), Expression::Integer(0b1010)],
+    );
+    assert_eq!(
+        SemanticAnalyzer::fold_constants_expr(&bitor_expr),
+        Expression::Integer(0b1110)
+    );
+
+    let bitxor_expr = Expression::Call(
+        Box::new(Expression::Identifier("BITXOR".to_string())),
+        vec![Expression::Integer(0b1100), Expression::Integer(0b1010)],
+    );
+    assert_eq!(
+        SemanticAnalyzer::fold_constants_expr(&bitxor_expr),
+        Expression::Integer(0b0110)
+    );
+
+    let bitnot_expr = Expression::Call(
+        Box::new(Expression::Identifier("BITNOT".to_string())),
+        vec![Expression::Integer(0)],
+    );
+    assert_eq!(
+        SemanticAnalyzer::fold_constants_expr(&bitnot_expr),
+        Expression::Integer(!0)
+    );
 }
 
 #[test]

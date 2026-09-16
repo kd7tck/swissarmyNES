@@ -1,3 +1,28 @@
+# Dev Loop 5 — Add Controller.AnyPressed Intrinsic, September 16, 2026
+
+- Added `Controller.AnyPressed()` intrinsic support in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Added integration test `test_controller_any_pressed` in `tests/controller_test.rs`.
+
+# Dev Loop 4 — Array Out-Of-Bounds Constant Index Error Diagnostics, September 16, 2026
+
+- Added semantic validation in `src/compiler/analysis.rs` reporting errors for array indexing with out-of-bounds constant indices.
+- Added integration test `test_array_out_of_bounds_constant` in `tests/array_test.rs`.
+
+# Dev Loop 3 — Constant Folding for Bitwise Operations, September 16, 2026
+
+- Extended `fold_constants_expr` in `src/compiler/analysis.rs` to fold `BITAND`, `BITOR`, `BITXOR`, and `BITNOT` expressions at compile time.
+- Verified with unit tests in `tests/foundation_test.rs`.
+
+# Dev Loop 2 — Add Math.Sign Intrinsic Alias, September 16, 2026
+
+- Added `Math.Sign(val)` intrinsic validation in `src/compiler/analysis.rs` and 6502 assembly generation in `src/compiler/codegen.rs`.
+- Added integration test `test_math_sign_generation` in `tests/math_advanced_test.rs`.
+
+# Dev Loop 1 — Add Math.Clamp Intrinsic, September 16, 2026
+
+- Added `Math.Clamp(val, min, max)` intrinsic validation in `src/compiler/analysis.rs` and 8-bit/16-bit 6502 assembly generation in `src/compiler/codegen.rs`.
+- Added integration test `test_math_clamp_generation` in `tests/math_advanced_test.rs`.
+
 # Latest checkpoint — Mapper Trait Abstraction and Cartridge Header Testing, September 16, 2026
 
 - Implemented the `Mapper` trait in `emulator/src/cartridge.rs` (`read_prg`, `write_prg`, `read_chr`, `write_chr`, `step_irq`) and implemented it for `Emulator` in `emulator/src/lib.rs`.

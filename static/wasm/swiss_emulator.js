@@ -353,6 +353,14 @@ export class Emulator {
         wasm.emulator_set_button(this.__wbg_ptr, player, button, pressed);
     }
     /**
+     * Actual cartridge PRG RAM capacity allocated by the production bus.
+     * @returns {number}
+     */
+    prg_ram_len() {
+        const ret = wasm.emulator_prg_ram_len(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
      * @returns {number}
      */
     get_oam_data() {

@@ -5,6 +5,10 @@ edition = "2021"
 
 [workspace]
 members = ["emulator"]
+exclude = [".tools/tetanes-core"]
+
+[patch.crates-io]
+tetanes-core = { path = ".tools/tetanes-core" }
 
 [dependencies]
 axum = "0.7"

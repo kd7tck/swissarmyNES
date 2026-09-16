@@ -50,6 +50,41 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
+### Trainer reset checkpoint — September 15, 2026
+
+- Concrete final low-credit fix: hard reset reapplies retained trainer bytes; failed replacement preserves boot data. Regression reproduced randomization before fix and now checks all 512 bytes plus ROM execution. Native emulator suite, Clippy, rebuilt WASM and five Node tests pass. See latest resume checkpoint; no commit, source-only policy unchanged. Stop until user resumes.
+
+### Low-credit pause after core patch — September 15, 2026
+
+- User requested pause. First resume section has current build prerequisites/results. Prepare-core source script and patch reconstruct ignored dependency; source-only commit policy unchanged. Native emulator suite, strict Clippy, regenerated WASM trace and NROM capacity tests pass. Check checkpoint for final full-workspace result; no commit.
+
+### Patched core prerequisite — September 15, 2026
+
+- Run node scripts/prepare-core.mjs before Cargo on fresh checkout. Cargo now resolves tetanes-core from ignored .tools/tetanes-core, reconstructed from verified upstream archive plus source patch. README/CI updated; source-only commit policy unchanged.
+- NROM NES2 PRG RAM absence/mirroring and independent RAM nibble decoding fixed. Native emulator suite/Clippy pass; see latest resume checkpoint for WASM/full-workspace verification. Separate NVRAM persistence and other mapper defaults remain open. No commit.
+
+### Low-credit pause — September 15, 2026
+
+- User requested pause. Resume from the first section of docs/IMPLEMENTATION_RESUME.md. No commit; source-only delivery policy remains.
+- Sparse interrupt scratch preservation and inactive audio-channel skipping implemented. Twelve bank/interrupt tests plus nmi_safety and strict Clippy pass. Idle NMI measures 1774 cycles including DMA; active workloads and tight fixed-bank headroom remain open. Check appended full-suite result in the checkpoint.
+
+### Dynamic interrupt binding — September 15, 2026
+
+- ON NMI/IRQ DO is implemented with validated zero-argument targets and atomic selectors at 07F8/07F9 into fixed ROM tables. Banked targets use trampolines; handlers can rebind. Nine bank/interrupt execution tests and strict Clippy pass; see latest resume checkpoint for full-suite result. No commit, source-only final policy unchanged.
+
+### MMC1 interrupt recovery — September 15, 2026
+
+- PRG bank setter now resets/retries interrupted serial writes using reserved 07F2. NMI/IRQ boundary-injection regression reproduced corruption before the fix and passes at every setter boundary after it. All six bank execution tests pass. Check newest resume section for full-suite evidence and remaining constraints. Source-only final commit policy remains; no commit yet.
+
+### Interrupt scratch fix — September 14, 2026
+
+- NMI/IRQ now preserve cross-bank return scratch 07F1. Reproduced failure before fix; four bank execution tests pass after. Compact indexed scratch loops avoid D000 runtime/data overlap but require vblank cycle budgeting. Partial MMC1 write reentrancy is still open. See latest resume checkpoint for full-suite result.
+
+### Source-only delivery policy — September 14, 2026
+
+- Final commit: source and build/test requirements only. No compiled/generated outputs, downloaded ROMs, archives, logs or local checkpoints. Explicit path selection required. No commit until full implementation/checks complete.
+- Five generated static/wasm deletions are staged via git rm --cached; local files remain ignored. Fetch external fixtures using scripts/fetch-test-fixtures.mjs; README and CI updated. Six CPU interrupt integration tests now pass, including held APU IRQ and CLI delay. Read the newest resume section.
+
 ### CPU integration continuation — September 14, 2026
 
 - Latest resume checkpoint records five new CPU integration regressions, backend-region frame pacing, and full canonical trace equivalence in the generated WASM. Five Node tests and strict Clippy pass. No phase signoff or commit yet; final delivery is commit when complete.

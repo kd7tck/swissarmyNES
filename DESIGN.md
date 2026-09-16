@@ -413,3 +413,9 @@ Implementation evidence (September 14, 2026): canonical nestest now matches all 
 
 
 Additional phase-40 evidence: production-ROM BRK/RTI, stack/JMP wrapping, PPU NMI and OAM DMA alignment regressions pass; native and generated WASM match the same canonical trace. IRQ/DMC/reset edge cases and broader acceptance remain pending. Frontend pacing now consumes active backend region timing.
+
+Dynamic interrupt binding implementation evidence: ON NMI/IRQ DO now validates targets and atomically publishes a one-byte index into fixed ROM dispatch tables. Native NMI/IRQ banked rebinding and instruction-boundary publication tests pass; broader interrupt timing acceptance remains pending.
+
+September 15 checkpoint: sparse interrupt scratch preservation and inactive audio-channel skipping pass execution tests. Idle NMI measures 1774 cycles including DMA; full active-workload timing and fixed-bank headroom remain acceptance work.
+
+Phase-39 continuation: source patch now corrects NROM explicit NES2 PRG RAM absence/capacity and independent volatile/nonvolatile capacity decoding. Build preparation is checksum-pinned and source-only. Separate persistence/reset semantics and other mapper allocation policies remain pending.

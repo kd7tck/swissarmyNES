@@ -27,6 +27,10 @@ export class Emulator {
    */
   prg_offset(address: number): number;
   set_button(player: number, button: number, pressed: boolean): void;
+  /**
+   * Actual cartridge PRG RAM capacity allocated by the production bus.
+   */
+  prg_ram_len(): number;
   get_oam_data(): number;
   get_palettes(): number;
   get_wram_len(): number;
@@ -114,6 +118,7 @@ export interface InitOutput {
   readonly emulator_new: () => number;
   readonly emulator_peek_cpu: (a: number, b: number) => number;
   readonly emulator_prg_offset: (a: number, b: number) => number;
+  readonly emulator_prg_ram_len: (a: number) => number;
   readonly emulator_ram_snapshot: (a: number) => [number, number];
   readonly emulator_remove_breakpoint: (a: number, b: number, c: number) => void;
   readonly emulator_reset: (a: number) => void;

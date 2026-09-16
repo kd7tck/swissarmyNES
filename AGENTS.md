@@ -245,7 +245,12 @@ Historical implementation summary: phases 31-38 were marked complete.
     - **Assembler Overlap**: The Assembler now strictly enforces non-overlapping segments. If you encounter "overlaps with existing data", check your `.ORG` directives and injection sizes to ensure they don't collide.
     - **CodeGenerator Stack**: When evaluating arguments for subroutines or built-ins, complex expressions can clobber temporary registers (like `$02/$03` or `$06`). Use the Stack (`PHA`/`PLA`) to protect intermediate values.
 
+- **Dev Loops (Math Intrinsics, Bitwise Ops, Constant Folding, Lexer Diagnostics, JS Editor Tests)**:
+    - Added `Math.Min` and `Math.Max` intrinsic support across analysis and 6502 code generation (supporting 8-bit & 16-bit operands).
+    - Added `BITAND`, `BITOR`, `BITXOR`, and `BITNOT` bitwise functions in analysis and codegen.
+    - Implemented `fold_constants_expr` in `SemanticAnalyzer` for compile-time constant expression optimization.
+    - Enhanced `Lexer` with column position tracking (`column: usize`) and line:column error formatting.
+    - Expanded JS unit tests in `tests/js/editor.test.cjs` covering pause/unpause state transitions and emulator reset.
+
 - **Next Steps**:
-    - Start Phase 39: Mappers - MMC1.
-    - Implement Assembler/Linker support for bank switching.
-    - Add compiler directives for `BANK`.
+    - Continue PPU and APU accuracy enhancements as detailed in DESIGN.md.

@@ -236,3 +236,97 @@ fn test_mixed_comparison_promotion() {
     // Check for Signed logic (BVS) because Int is present
     assert!(code.iter().any(|line| line.contains("BVS")));
 }
+
+#[test]
+fn test_math_min_max_generation() {
+    let mut st = SymbolTable::new();
+    st.define(
+        "w".to_string(),
+        DataType::Word,
+        swissarmynes::compiler::symbol_table::SymbolKind::Variable,
+    )
+    .unwrap();
+
+    let program = Program {
+        declarations: vec![
+            TopLevel::Dim("w".to_string(), DataType::Word, None),
+            TopLevel::Sub(
+                "Main".to_string(),
+                vec![],
+                vec![
+                    Statement::Let(
+                        Expression::Identifier("w".to_string()),
+                        Expression::Call(
+                            Box::new(Expression::MemberAccess(
+                                Box::new(Expression::Identifier("Math".to_string())),
+                                "Min".to_string(),
+                            )),
+                            vec![Expression::Integer(100), Expression::Integer(500)],
+                        ),
+                    ),
+                    Statement::Let(
+                        Expression::Identifier("w".to_string()),
+                        Expression::Call(
+                            Box::new(Expression::MemberAccess(
+                                Box::new(Expression::Identifier("Math".to_string())),
+                                "Max".to_string(),
+                            )),
+                            vec![Expression::Integer(100), Expression::Integer(500)],
+                        ),
+                    ),
+                ],
+            ),
+        ],
+    };
+
+    let mut cg = CodeGenerator::new(st);
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
+
+    // Check that comparisons are generated for Min and Max
+    assert!(code
+        .iter()
+        .any(|line| line.contains("SBC $00") || line.contains("SBC $01")));
+}
+
+#[test]
+fn test_bitwise_builtins_generation() {
+    let mut st = SymbolTable::new();
+    st.define(
+        "w".to_string(),
+        DataType::Word,
+        swissarmynes::compiler::symbol_table::SymbolKind::Variable,
+    )
+    .unwrap();
+
+    let program = Program {
+        declarations: vec![
+            TopLevel::Dim("w".to_string(), DataType::Word, None),
+            TopLevel::Sub(
+                "Main".to_string(),
+                vec![],
+                vec![
+                    Statement::Let(
+                        Expression::Identifier("w".to_string()),
+                        Expression::Call(
+                            Box::new(Expression::Identifier("BITAND".to_string())),
+                            vec![Expression::Integer(0x00FF), Expression::Integer(0x0F0F)],
+                        ),
+                    ),
+                    Statement::Let(
+                        Expression::Identifier("w".to_string()),
+                        Expression::Call(
+                            Box::new(Expression::Identifier("BITNOT".to_string())),
+                            vec![Expression::Integer(0x1234)],
+                        ),
+                    ),
+                ],
+            ),
+        ],
+    };
+
+    let mut cg = CodeGenerator::new(st);
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
+
+    assert!(code.iter().any(|line| line.contains("AND $00")));
+    assert!(code.iter().any(|line| line.contains("EOR #$FF")));
+}

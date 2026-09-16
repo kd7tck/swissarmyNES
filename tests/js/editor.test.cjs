@@ -6,17 +6,24 @@ const vm = require('node:vm');
 function fixture() {
     const callbacks = new Map();
     let next = 0;
-    const context = vm.createContext({console, document: {addEventListener() {}},
+    const context = vm.createContext({
+        console,
+        document: { addEventListener() {}, getElementById() { return { textContent: '' }; } },
         requestAnimationFrame(callback) { callbacks.set(++next, callback); return next; },
-        cancelAnimationFrame(id) { callbacks.delete(id); }});
+        cancelAnimationFrame(id) { callbacks.delete(id); }
+    });
     vm.runInContext(fs.readFileSync('static/js/editor.js', 'utf8') + '\nthis.Editor = SwissEditor;', context);
     const editor = Object.create(context.Editor.prototype);
     let steps = 0;
-    Object.assign(editor, {emulatorRunning: true, frameRequest: null, lastFrameTime: null, frameDebt: 0,
+    Object.assign(editor, {
+        emulatorRunning: true, frameRequest: null, lastFrameTime: null, frameDebt: 0,
         frameCount: 0, memoryViewerOpen: false, ppuViewer: {isVisible: false}, wasmMemory: null,
-        emulator: {frame_rate() {return 60.0988;}, step() {steps++; return false;}, get_pixels() {return 0;}, get_pixels_len() {return 0;},
-            get_audio_samples() {return 0;}, get_audio_samples_len() {return 0;}},
-        pollGamepads() {}, getDebugState() {return null;} });
+        emulator: {
+            frame_rate() {return 60.0988;}, step() {steps++; return false;}, get_pixels() {return 0;}, get_pixels_len() {return 0;},
+            get_audio_samples() {return 0;}, get_audio_samples_len() {return 0;}, reset() {}
+        },
+        pollGamepads() {}, getDebugState() {return null;}
+    });
     return {editor, callbacks, steps: () => steps};
 }
 
@@ -60,4 +67,26 @@ test('PAL and Dendy cadence follows the emulator instead of NTSC', () => {
         }
         assert.equal(f.steps(), 50, `${hz} Hz display`);
     }
+});
+
+test('togglePause correctly flips state and manages frame scheduling', () => {
+    const f = fixture();
+    assert.equal(f.editor.emulatorRunning, true);
+
+    // Toggle pause off
+    f.editor.togglePause();
+    assert.equal(f.editor.emulatorRunning, false);
+
+    // Toggle pause on
+    f.editor.togglePause();
+    assert.equal(f.editor.emulatorRunning, true);
+});
+
+test('reset emulator directly invokes reset on emulator instance', () => {
+    const f = fixture();
+    let resetCalled = false;
+    f.editor.emulator.reset = () => { resetCalled = true; };
+
+    f.editor.emulator.reset();
+    assert.equal(resetCalled, true);
 });

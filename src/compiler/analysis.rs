@@ -53,6 +53,53 @@ impl SemanticAnalyzer {
             .define_struct("AnimState".to_string(), anim_state_members, 5);
     }
 
+    pub fn fold_constants_expr(expr: &Expression) -> Expression {
+        match expr {
+            Expression::BinaryOp(left, op, right) => {
+                let l_folded = Self::fold_constants_expr(left);
+                let r_folded = Self::fold_constants_expr(right);
+                if let (Expression::Integer(lv), Expression::Integer(rv)) = (&l_folded, &r_folded) {
+                    match op {
+                        crate::compiler::ast::BinaryOperator::Add => {
+                            Expression::Integer(lv.wrapping_add(*rv))
+                        }
+                        crate::compiler::ast::BinaryOperator::Subtract => {
+                            Expression::Integer(lv.wrapping_sub(*rv))
+                        }
+                        crate::compiler::ast::BinaryOperator::Multiply => {
+                            Expression::Integer(lv.wrapping_mul(*rv))
+                        }
+                        crate::compiler::ast::BinaryOperator::Divide if *rv != 0 => {
+                            Expression::Integer(lv.wrapping_div(*rv))
+                        }
+                        crate::compiler::ast::BinaryOperator::And => Expression::Integer(lv & rv),
+                        crate::compiler::ast::BinaryOperator::Or => Expression::Integer(lv | rv),
+                        crate::compiler::ast::BinaryOperator::Xor => Expression::Integer(lv ^ rv),
+                        _ => {
+                            Expression::BinaryOp(Box::new(l_folded), op.clone(), Box::new(r_folded))
+                        }
+                    }
+                } else {
+                    Expression::BinaryOp(Box::new(l_folded), op.clone(), Box::new(r_folded))
+                }
+            }
+            Expression::UnaryOp(op, operand) => {
+                let o_folded = Self::fold_constants_expr(operand);
+                if let Expression::Integer(val) = o_folded {
+                    match op {
+                        crate::compiler::ast::UnaryOperator::Negate => {
+                            Expression::Integer(val.wrapping_neg())
+                        }
+                        crate::compiler::ast::UnaryOperator::Not => Expression::Integer(!val),
+                    }
+                } else {
+                    Expression::UnaryOp(op.clone(), Box::new(o_folded))
+                }
+            }
+            _ => expr.clone(),
+        }
+    }
+
     pub fn analyze(&mut self, program: &Program) -> Result<(), Vec<String>> {
         // First pass: register all top-level symbols
         self.current_bank = 0;
@@ -809,6 +856,9 @@ impl SemanticAnalyzer {
                     if base_name.eq_ignore_ascii_case("PPU") {
                         return;
                     }
+                    if base_name.eq_ignore_ascii_case("Math") {
+                        return;
+                    }
                 }
 
                 self.analyze_expression(base);
@@ -978,12 +1028,44 @@ impl SemanticAnalyzer {
                             self.analyze_expression(&args[0]);
                         }
                         return;
+                    } else if name.eq_ignore_ascii_case("BITAND")
+                        || name.eq_ignore_ascii_case("BITOR")
+                        || name.eq_ignore_ascii_case("BITXOR")
+                    {
+                        if args.len() != 2 {
+                            self.errors
+                                .push(format!("{} expects 2 arguments", name.to_uppercase()));
+                        } else {
+                            self.analyze_expression(&args[0]);
+                            self.analyze_expression(&args[1]);
+                        }
+                        return;
+                    } else if name.eq_ignore_ascii_case("BITNOT") {
+                        if args.len() != 1 {
+                            self.errors.push("BITNOT expects 1 argument".to_string());
+                        } else {
+                            self.analyze_expression(&args[0]);
+                        }
+                        return;
                     }
                 }
 
                 // Controller Methods
                 if let Expression::MemberAccess(base, member) = &**callee {
                     if let Expression::Identifier(base_name) = &**base {
+                        if base_name.eq_ignore_ascii_case("Math")
+                            && (member.eq_ignore_ascii_case("Min")
+                                || member.eq_ignore_ascii_case("Max"))
+                        {
+                            if args.len() != 2 {
+                                self.errors
+                                    .push(format!("Math.{} expects 2 arguments", member));
+                            } else {
+                                self.analyze_expression(&args[0]);
+                                self.analyze_expression(&args[1]);
+                            }
+                            return;
+                        }
                         if base_name.eq_ignore_ascii_case("Controller")
                             && (member.eq_ignore_ascii_case("IsPressed")
                                 || member.eq_ignore_ascii_case("IsHeld")
@@ -1138,7 +1220,12 @@ impl SemanticAnalyzer {
                         || name.eq_ignore_ascii_case("MID")
                     {
                         return Some(DataType::String);
-                    } else if name.eq_ignore_ascii_case("RND") {
+                    } else if name.eq_ignore_ascii_case("RND")
+                        || name.eq_ignore_ascii_case("BITAND")
+                        || name.eq_ignore_ascii_case("BITOR")
+                        || name.eq_ignore_ascii_case("BITXOR")
+                        || name.eq_ignore_ascii_case("BITNOT")
+                    {
                         return Some(DataType::Word);
                     }
                 }
@@ -1203,6 +1290,9 @@ impl SemanticAnalyzer {
                         return None;
                     }
                     if base_name.eq_ignore_ascii_case("PPU") {
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("Math") {
                         return None;
                     }
                 }

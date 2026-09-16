@@ -196,3 +196,36 @@ fn test_math_builtins() {
     assert!(code.iter().any(|line| line.contains("LDA #$FF")));
     assert!(code.iter().any(|line| line.contains("LDA #1")));
 }
+
+#[test]
+fn test_constant_folding() {
+    use swissarmynes::compiler::analysis::SemanticAnalyzer;
+
+    let expr = Expression::BinaryOp(
+        Box::new(Expression::BinaryOp(
+            Box::new(Expression::Integer(10)),
+            BinaryOperator::Add,
+            Box::new(Expression::Integer(20)),
+        )),
+        BinaryOperator::Multiply,
+        Box::new(Expression::Integer(2)),
+    );
+
+    let folded = SemanticAnalyzer::fold_constants_expr(&expr);
+    assert_eq!(folded, Expression::Integer(60));
+}
+
+#[test]
+fn test_lexer_column_and_error_reporting() {
+    use swissarmynes::compiler::lexer::Lexer;
+
+    let mut lexer = Lexer::new("a @ b");
+    let res = lexer.tokenize();
+    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert!(
+        err.contains("Illegal token at line 1:"),
+        "Expected error containing 'Illegal token at line 1:', got: {}",
+        err
+    );
+}

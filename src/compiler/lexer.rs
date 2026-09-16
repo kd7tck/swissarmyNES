@@ -95,6 +95,7 @@ pub enum Token {
 pub struct Lexer<'a> {
     input: std::iter::Peekable<std::str::Chars<'a>>,
     line: usize,
+    column: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -102,7 +103,25 @@ impl<'a> Lexer<'a> {
         Self {
             input: input.chars().peekable(),
             line: 1,
+            column: 1,
         }
+    }
+
+    fn advance(&mut self) -> Option<char> {
+        let ch = self.input.next();
+        if let Some(c) = ch {
+            if c == '\n' {
+                self.line += 1;
+                self.column = 1;
+            } else {
+                self.column += 1;
+            }
+        }
+        ch
+    }
+
+    pub fn column(&self) -> usize {
+        self.column
     }
 
     pub fn next_token(&mut self) -> (Token, usize) {
@@ -110,119 +129,111 @@ impl<'a> Lexer<'a> {
         let current_line = self.line;
 
         match self.input.peek() {
-            Some(&ch) => {
-                match ch {
-                    '\n' => {
-                        self.input.next();
-                        self.line += 1;
-                        (Token::Newline, current_line)
-                    }
-                    '+' => {
-                        self.input.next();
-                        (Token::Plus, current_line)
-                    }
-                    '-' => {
-                        self.input.next();
-                        (Token::Minus, current_line)
-                    }
-                    '*' => {
-                        self.input.next();
-                        (Token::Star, current_line)
-                    }
-                    '/' => {
-                        self.input.next();
-                        (Token::Slash, current_line)
-                    }
-                    '=' => {
-                        self.input.next();
-                        (Token::Equal, current_line)
-                    }
-                    '<' => {
-                        self.input.next();
-                        if let Some(&'=') = self.input.peek() {
-                            self.input.next();
-                            (Token::LessEqual, current_line)
-                        } else if let Some(&'>') = self.input.peek() {
-                            self.input.next();
-                            (Token::NotEqual, current_line)
-                        } else {
-                            (Token::Less, current_line)
-                        }
-                    }
-                    '>' => {
-                        self.input.next();
-                        if let Some(&'=') = self.input.peek() {
-                            self.input.next();
-                            (Token::GreaterEqual, current_line)
-                        } else {
-                            (Token::Greater, current_line)
-                        }
-                    }
-                    '(' => {
-                        self.input.next();
-                        (Token::LParen, current_line)
-                    }
-                    ')' => {
-                        self.input.next();
-                        (Token::RParen, current_line)
-                    }
-                    ',' => {
-                        self.input.next();
-                        (Token::Comma, current_line)
-                    }
-                    ':' => {
-                        self.input.next();
-                        (Token::Colon, current_line)
-                    }
-                    ';' => {
-                        self.input.next();
-                        (Token::SemiColon, current_line)
-                    }
-                    '.' => {
-                        self.input.next();
-                        (Token::Dot, current_line)
-                    }
-                    '#' => {
-                        self.input.next();
-                        (Token::Hash, current_line)
-                    }
-                    '\'' => {
-                        // Comment
-                        self.read_comment();
-                        self.next_token() // Skip comment and return next token (likely Newline)
-                    }
-                    '$' => {
-                        // Hex literal
-                        self.input.next();
-                        let token = self.read_hex_number();
-                        (token, current_line)
-                    }
-                    '%' => {
-                        // Binary literal
-                        self.input.next();
-                        let token = self.read_binary_number();
-                        (token, current_line)
-                    }
-                    '"' => {
-                        // String literal
-                        let token = self.read_string();
-                        // Lines might change inside string if handled, but currently treated as single line
-                        (token, current_line)
-                    }
-                    _ => {
-                        if ch.is_ascii_digit() {
-                            let token = self.read_number();
-                            (token, current_line)
-                        } else if is_letter(ch) {
-                            let token = self.read_identifier();
-                            (token, current_line)
-                        } else {
-                            self.input.next();
-                            (Token::Illegal(ch.to_string()), current_line)
-                        }
+            Some(&ch) => match ch {
+                '\n' => {
+                    self.advance();
+                    (Token::Newline, current_line)
+                }
+                '+' => {
+                    self.advance();
+                    (Token::Plus, current_line)
+                }
+                '-' => {
+                    self.advance();
+                    (Token::Minus, current_line)
+                }
+                '*' => {
+                    self.advance();
+                    (Token::Star, current_line)
+                }
+                '/' => {
+                    self.advance();
+                    (Token::Slash, current_line)
+                }
+                '=' => {
+                    self.advance();
+                    (Token::Equal, current_line)
+                }
+                '<' => {
+                    self.advance();
+                    if let Some(&'=') = self.input.peek() {
+                        self.advance();
+                        (Token::LessEqual, current_line)
+                    } else if let Some(&'>') = self.input.peek() {
+                        self.advance();
+                        (Token::NotEqual, current_line)
+                    } else {
+                        (Token::Less, current_line)
                     }
                 }
-            }
+                '>' => {
+                    self.advance();
+                    if let Some(&'=') = self.input.peek() {
+                        self.advance();
+                        (Token::GreaterEqual, current_line)
+                    } else {
+                        (Token::Greater, current_line)
+                    }
+                }
+                '(' => {
+                    self.advance();
+                    (Token::LParen, current_line)
+                }
+                ')' => {
+                    self.advance();
+                    (Token::RParen, current_line)
+                }
+                ',' => {
+                    self.advance();
+                    (Token::Comma, current_line)
+                }
+                ':' => {
+                    self.advance();
+                    (Token::Colon, current_line)
+                }
+                ';' => {
+                    self.advance();
+                    (Token::SemiColon, current_line)
+                }
+                '.' => {
+                    self.advance();
+                    (Token::Dot, current_line)
+                }
+                '#' => {
+                    self.advance();
+                    (Token::Hash, current_line)
+                }
+                '\'' => {
+                    self.read_comment();
+                    self.next_token()
+                }
+                '$' => {
+                    self.advance();
+                    let token = self.read_hex_number();
+                    (token, current_line)
+                }
+                '%' => {
+                    self.advance();
+                    let token = self.read_binary_number();
+                    (token, current_line)
+                }
+                '"' => {
+                    let token = self.read_string();
+                    (token, current_line)
+                }
+                _ => {
+                    if ch.is_ascii_digit() {
+                        let token = self.read_number();
+                        (token, current_line)
+                    } else if is_letter(ch) {
+                        let token = self.read_identifier();
+                        (token, current_line)
+                    } else {
+                        self.advance();
+                        (Token::Illegal(ch.to_string()), current_line)
+                    }
+                }
+            },
             None => (Token::EOF, current_line),
         }
     }
@@ -230,7 +241,7 @@ impl<'a> Lexer<'a> {
     fn skip_whitespace(&mut self) {
         while let Some(&ch) = self.input.peek() {
             if ch.is_whitespace() && ch != '\n' {
-                self.input.next();
+                self.advance();
             } else {
                 break;
             }
@@ -238,12 +249,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_comment(&mut self) {
-        // Consumes until newline or EOF
         while let Some(&ch) = self.input.peek() {
             if ch == '\n' {
                 break;
             }
-            self.input.next();
+            self.advance();
         }
     }
 
@@ -252,13 +262,12 @@ impl<'a> Lexer<'a> {
         while let Some(&ch) = self.input.peek() {
             if is_letter(ch) || ch.is_ascii_digit() || ch == '_' {
                 ident.push(ch);
-                self.input.next();
+                self.advance();
             } else {
                 break;
             }
         }
 
-        // Check for keywords (case-insensitive)
         match ident.to_uppercase().as_str() {
             "REM" => {
                 self.read_comment();
@@ -327,7 +336,7 @@ impl<'a> Lexer<'a> {
         while let Some(&ch) = self.input.peek() {
             if ch.is_ascii_digit() {
                 num_str.push(ch);
-                self.input.next();
+                self.advance();
             } else {
                 break;
             }
@@ -344,7 +353,7 @@ impl<'a> Lexer<'a> {
         while let Some(&ch) = self.input.peek() {
             if ch.is_ascii_hexdigit() {
                 num_str.push(ch);
-                self.input.next();
+                self.advance();
             } else {
                 break;
             }
@@ -365,7 +374,7 @@ impl<'a> Lexer<'a> {
         while let Some(&ch) = self.input.peek() {
             if ch == '0' || ch == '1' {
                 num_str.push(ch);
-                self.input.next();
+                self.advance();
             } else {
                 break;
             }
@@ -382,31 +391,31 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_string(&mut self) -> Token {
-        self.input.next(); // Skip opening quote
+        self.advance(); // Skip opening quote
         let mut str_val = String::new();
 
         while let Some(&ch) = self.input.peek() {
             if ch == '"' {
-                self.input.next();
+                self.advance();
                 return Token::StringLiteral(str_val);
             }
             if ch == '\n' || ch == '\r' {
-                // String shouldn't span lines in simple BASIC usually, or at least handle it gracefully
                 break;
             }
             str_val.push(ch);
-            self.input.next();
+            self.advance();
         }
 
-        Token::Illegal(format!("\"{}", str_val)) // Unterminated string
+        Token::Illegal(format!("\"{}", str_val))
     }
 
     pub fn tokenize(&mut self) -> Result<Vec<(Token, usize)>, String> {
         let mut tokens = Vec::new();
         loop {
+            let col = self.column();
             let (token, line) = self.next_token();
             if let Token::Illegal(s) = &token {
-                return Err(format!("Illegal token at line {}: {}", line, s));
+                return Err(format!("Illegal token at line {}:{}: {}", line, col, s));
             }
             if token == Token::EOF {
                 tokens.push((token, line));
@@ -569,7 +578,6 @@ mod tests {
             Token::EOF,
         ];
 
-        // Lines: x=1 (1), Newline (1->2), y=2 (2), EOF
         let expected_lines = [1, 1, 1, 1, 2, 2, 2, 2];
 
         assert_eq!(tokens.len(), expected_tokens.len());
@@ -595,8 +603,7 @@ END SUB
 "#;
         let tokens = tokenize(input);
 
-        // Basic structure check
-        assert_eq!(tokens[0].0, Token::Newline); // Start with newline
+        assert_eq!(tokens[0].0, Token::Newline);
         assert_eq!(tokens[0].1, 1);
 
         assert_eq!(tokens[1].0, Token::Const);

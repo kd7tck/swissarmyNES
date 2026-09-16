@@ -4808,6 +4808,99 @@ impl CodeGenerator {
                                 return Ok(DataType::Byte);
                             }
                         }
+                        if base_name.eq_ignore_ascii_case("Math")
+                            && (member.eq_ignore_ascii_case("Min")
+                                || member.eq_ignore_ascii_case("Max"))
+                        {
+                            let is_max = member.eq_ignore_ascii_case("Max");
+                            let t1 = self.generate_expression(&args[0])?;
+                            let is_16_1 = t1 == DataType::Word || t1 == DataType::Int;
+                            if is_16_1 {
+                                self.emit("  PHA".to_string());
+                                self.emit("  TXA".to_string());
+                                self.emit("  PHA".to_string());
+                            } else {
+                                self.emit("  PHA".to_string());
+                            }
+                            let t2 = self.generate_expression(&args[1])?;
+                            let is_16_2 = t2 == DataType::Word || t2 == DataType::Int;
+                            let is_16 = is_16_1 || is_16_2;
+
+                            if is_16 {
+                                if !is_16_2 {
+                                    self.emit("  STA $00".to_string());
+                                    self.emit("  LDA #0".to_string());
+                                    self.emit("  STA $01".to_string());
+                                } else {
+                                    self.emit("  STA $00".to_string());
+                                    self.emit("  STX $01".to_string());
+                                }
+
+                                if !is_16_1 {
+                                    self.emit("  PLA".to_string());
+                                    self.emit("  STA $02".to_string());
+                                    self.emit("  LDA #0".to_string());
+                                    self.emit("  STA $03".to_string());
+                                } else {
+                                    self.emit("  PLA".to_string());
+                                    self.emit("  STA $03".to_string());
+                                    self.emit("  PLA".to_string());
+                                    self.emit("  STA $02".to_string());
+                                }
+
+                                // Arg1 in $02/$03, Arg2 in $00/$01
+                                self.emit("  SEC".to_string());
+                                self.emit("  LDA $02".to_string());
+                                self.emit("  SBC $00".to_string());
+                                self.emit("  LDA $03".to_string());
+                                self.emit("  SBC $01".to_string());
+
+                                let take_arg2_lbl = self.new_label();
+                                let done_lbl = self.new_label();
+                                if is_max {
+                                    self.emit(format!("  BCC {}", take_arg2_lbl));
+                                // Arg1 < Arg2 -> take Arg2
+                                } else {
+                                    self.emit(format!("  BCS {}", take_arg2_lbl));
+                                    // Arg1 >= Arg2 -> take Arg2
+                                }
+                                // Ret Arg1
+                                self.emit("  LDA $02".to_string());
+                                self.emit("  LDX $03".to_string());
+                                self.emit(format!("  JMP {}", done_lbl));
+
+                                self.emit(format!("{}:", take_arg2_lbl));
+                                self.emit("  LDA $00".to_string());
+                                self.emit("  LDX $01".to_string());
+
+                                self.emit(format!("{}:", done_lbl));
+                                return Ok(if is_16_1 { t1 } else { t2 });
+                            } else {
+                                // 8-bit
+                                self.emit("  STA $00".to_string()); // Arg2
+                                self.emit("  PLA".to_string()); // Arg1
+                                self.emit("  CMP $00".to_string());
+
+                                let take_arg2_lbl = self.new_label();
+                                let done_lbl = self.new_label();
+                                if is_max {
+                                    self.emit(format!("  BCC {}", take_arg2_lbl));
+                                // Arg1 < Arg2 -> take Arg2
+                                } else {
+                                    self.emit(format!("  BCS {}", take_arg2_lbl));
+                                    // Arg1 >= Arg2 -> take Arg2
+                                }
+                                // Ret Arg1 in A (already in A? No, CMP preserved A!)
+                                self.emit(format!("  JMP {}", done_lbl));
+
+                                self.emit(format!("{}:", take_arg2_lbl));
+                                self.emit("  LDA $00".to_string());
+
+                                self.emit(format!("{}:", done_lbl));
+                                self.emit("  LDX #0".to_string());
+                                return Ok(DataType::Byte);
+                            }
+                        }
                         if base_name.eq_ignore_ascii_case("Controller") {
                             self.generate_expression(&args[0])?;
                             self.emit("  STA $00".to_string());
@@ -5011,6 +5104,93 @@ impl CodeGenerator {
                         self.emit("  LDA $08".to_string());
                         self.emit("  LDX $09".to_string());
                         return Ok(DataType::Word);
+                    } else if name.eq_ignore_ascii_case("BITAND")
+                        || name.eq_ignore_ascii_case("BITOR")
+                        || name.eq_ignore_ascii_case("BITXOR")
+                    {
+                        let t1 = self.generate_expression(&args[0])?;
+                        let is_16_1 = t1 == DataType::Word || t1 == DataType::Int;
+                        if is_16_1 {
+                            self.emit("  PHA".to_string());
+                            self.emit("  TXA".to_string());
+                            self.emit("  PHA".to_string());
+                        } else {
+                            self.emit("  PHA".to_string());
+                        }
+                        let t2 = self.generate_expression(&args[1])?;
+                        let is_16_2 = t2 == DataType::Word || t2 == DataType::Int;
+                        let is_16 = is_16_1 || is_16_2;
+
+                        if is_16 {
+                            if !is_16_2 {
+                                self.emit("  STA $00".to_string());
+                                self.emit("  LDA #0".to_string());
+                                self.emit("  STA $01".to_string());
+                            } else {
+                                self.emit("  STA $00".to_string());
+                                self.emit("  STX $01".to_string());
+                            }
+
+                            if !is_16_1 {
+                                self.emit("  PLA".to_string());
+                                self.emit("  LDX #0".to_string());
+                            } else {
+                                self.emit("  PLA".to_string());
+                                self.emit("  TAX".to_string());
+                                self.emit("  PLA".to_string());
+                            }
+
+                            if name.eq_ignore_ascii_case("BITAND") {
+                                self.emit("  AND $00".to_string());
+                                self.emit("  PHA".to_string());
+                                self.emit("  TXA".to_string());
+                                self.emit("  AND $01".to_string());
+                                self.emit("  TAX".to_string());
+                                self.emit("  PLA".to_string());
+                            } else if name.eq_ignore_ascii_case("BITOR") {
+                                self.emit("  ORA $00".to_string());
+                                self.emit("  PHA".to_string());
+                                self.emit("  TXA".to_string());
+                                self.emit("  ORA $01".to_string());
+                                self.emit("  TAX".to_string());
+                                self.emit("  PLA".to_string());
+                            } else {
+                                self.emit("  EOR $00".to_string());
+                                self.emit("  PHA".to_string());
+                                self.emit("  TXA".to_string());
+                                self.emit("  EOR $01".to_string());
+                                self.emit("  TAX".to_string());
+                                self.emit("  PLA".to_string());
+                            }
+                            return Ok(DataType::Word);
+                        } else {
+                            self.emit("  STA $00".to_string());
+                            self.emit("  PLA".to_string());
+                            if name.eq_ignore_ascii_case("BITAND") {
+                                self.emit("  AND $00".to_string());
+                            } else if name.eq_ignore_ascii_case("BITOR") {
+                                self.emit("  ORA $00".to_string());
+                            } else {
+                                self.emit("  EOR $00".to_string());
+                            }
+                            self.emit("  LDX #0".to_string());
+                            return Ok(DataType::Byte);
+                        }
+                    } else if name.eq_ignore_ascii_case("BITNOT") {
+                        let t = self.generate_expression(&args[0])?;
+                        if t == DataType::Word || t == DataType::Int {
+                            self.emit("  EOR #$FF".to_string());
+                            self.emit("  PHA".to_string());
+                            self.emit("  TXA".to_string());
+                            self.emit("  EOR #$FF".to_string());
+                            self.emit("  TAX".to_string());
+                            self.emit("  PLA".to_string());
+                            return Ok(DataType::Word);
+                        } else {
+                            self.emit("  EOR #$FF".to_string());
+                            self.emit("  LDX #0".to_string());
+                            return Ok(DataType::Byte);
+                        }
                     }
                 }
 

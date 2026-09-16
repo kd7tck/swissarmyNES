@@ -1,3 +1,10 @@
+# Latest checkpoint — Mapper Trait Abstraction and Cartridge Header Testing, September 16, 2026
+
+- Implemented the `Mapper` trait in `emulator/src/cartridge.rs` (`read_prg`, `write_prg`, `read_chr`, `write_chr`, `step_irq`) and implemented it for `Emulator` in `emulator/src/lib.rs`.
+- Added `emulator/tests/mapper_test.rs` integration tests to exercise `read_prg`, `write_prg`, `read_chr`, `write_chr`, and `step_irq` via the `Mapper` trait.
+- Expanded `emulator/tests/cartridge.rs` unit tests to cover 12-bit mapper IDs and submapper extraction under NES 2.0, four-screen and battery flags, and RAM/NVRAM size shift decoding.
+- All native emulator tests, strict workspace Clippy, formatting checks, and frontend JS Node tests pass.
+
 # Latest checkpoint — trainer reset fix, September 15, 2026
 
 User requested a concrete short implementation before stopping at low credits (last reported 6%). No commit. Source/build/test-only final commit policy remains unchanged.

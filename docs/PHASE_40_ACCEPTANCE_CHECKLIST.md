@@ -68,7 +68,7 @@ All items start pending. Historical roadmap completion labels do not check these
 - [ ] P39-03: iNES sizes, trainer, CHR RAM, mirroring, malformed/truncated input.
 - [ ] P39-04: NES 2.0 linear/exponent sizes, extended mapper/submapper, RAM/NVRAM.
 - [ ] P39-05: named Mapper operations connected to actual CPU/PPU dispatch, proven by integrated routing tests.
-- [ ] P39-06: complete 16-bit bus boundary/mirror/side-effect/peek tests.
+- [x] P39-06: complete 16-bit bus boundary/mirror/side-effect/peek tests.
 - [ ] P39-07: NROM fixtures, existing mapper-1 games, transactional load/reset, native/WASM acceptance.
 
 ## Phase 40 detailed gate

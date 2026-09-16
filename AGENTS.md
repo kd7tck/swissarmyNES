@@ -52,6 +52,7 @@ This document serves as the primary instruction manual for AI agents working on 
 ## Brain
 ### Trainer reset checkpoint — September 15, 2026
 
+- CPU bus routing & mirroring tests (P39-06) added in `emulator/tests/bus_test.rs`. Verified 2KB internal RAM mirroring across $0800-$1FFF, PPU register mirrors, PRG-ROM write protection, and side-effect-free peeking. All native tests, Clippy, formatting, and WASM/Node JS tests pass.
 - Concrete final low-credit fix: hard reset reapplies retained trainer bytes; failed replacement preserves boot data. Regression reproduced randomization before fix and now checks all 512 bytes plus ROM execution. Native emulator suite, Clippy, rebuilt WASM and five Node tests pass. See latest resume checkpoint; no commit, source-only policy unchanged. Stop until user resumes.
 
 ### Low-credit pause after core patch — September 15, 2026

@@ -50,6 +50,12 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
+# Plan–develop–test loop: runtime shift count normalization — September 16, 2026
+
+- Planned and implemented runtime masking for `BITSHL`/`BITSHR` counts in `src/compiler/codegen.rs` so generated code matches the existing constant-folding mask (`count & 31`).
+- Added count-32 constant-folding assertions and code-generation coverage in `tests/bit_shift_intrinsics_test.rs`.
+- Final verification must include native tests, strict Clippy, formatting, the WASM release build, and Node tests before committing.
+
 # Quick development loop before final merge — September 16, 2026
 
 - Added `test_memory_copy_preserves_indexed_addresses_and_length` in `tests/memory_copy_intrinsic_test.rs`.

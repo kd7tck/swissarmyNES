@@ -1,3 +1,9 @@
+# Dev Loop 7 — Runtime Shift Count Normalization, September 16, 2026
+
+- Normalized `BITSHL` and `BITSHR` runtime counts with `AND #$1F` before dispatching to the 6502 shift helpers.
+- This keeps generated code consistent with the compiler’s existing constant-folding rule for counts beyond 31, including a count of 32 becoming a no-op.
+- Added code-generation and constant-folding regression coverage in `tests/bit_shift_intrinsics_test.rs`.
+
 # Dev Loop 6 — Indexed Memory.Copy Preservation Regression, September 16, 2026
 
 - Added `test_memory_copy_preserves_indexed_addresses_and_length` to exercise `Memory.Copy` with indexed source and destination expressions.

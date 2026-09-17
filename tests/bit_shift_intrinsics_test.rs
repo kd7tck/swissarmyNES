@@ -50,6 +50,7 @@ fn test_bit_shift_intrinsics_codegen() {
 
     assert!(code.iter().any(|line| line.contains("JSR Math_Shl16")));
     assert!(code.iter().any(|line| line.contains("JSR Math_Shr16")));
+    assert!(code.iter().filter(|line| line.contains("AND #$1F")).count() >= 2);
 }
 
 #[test]
@@ -67,4 +68,22 @@ fn test_bit_shift_constant_folding() {
     );
     let folded_shr = SemanticAnalyzer::fold_constants_expr(&expr_shr);
     assert_eq!(folded_shr, Expression::Integer(0b00000100));
+
+    let wrapped_shl = Expression::Call(
+        Box::new(Expression::Identifier("BITSHL".to_string())),
+        vec![Expression::Integer(1), Expression::Integer(32)],
+    );
+    assert_eq!(
+        SemanticAnalyzer::fold_constants_expr(&wrapped_shl),
+        Expression::Integer(1)
+    );
+
+    let wrapped_shr = Expression::Call(
+        Box::new(Expression::Identifier("BITSHR".to_string())),
+        vec![Expression::Integer(0b00010000), Expression::Integer(32)],
+    );
+    assert_eq!(
+        SemanticAnalyzer::fold_constants_expr(&wrapped_shr),
+        Expression::Integer(0b00010000)
+    );
 }

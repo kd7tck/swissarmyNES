@@ -5730,6 +5730,10 @@ impl CodeGenerator {
                             self.emit("  PHA".to_string());
                         }
                         let _ = self.generate_expression(&args[1])?;
+                        // Keep runtime shifts consistent with constant folding:
+                        // counts wrap at 32 instead of executing an unnecessary
+                        // full byte-count loop when the low five bits are zero.
+                        self.emit("  AND #$1F".to_string());
                         self.emit("  STA $00".to_string());
                         if is_16 {
                             self.emit("  PLA".to_string());

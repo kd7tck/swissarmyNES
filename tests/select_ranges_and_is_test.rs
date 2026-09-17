@@ -1,9 +1,11 @@
-use std::process::Command;
-use swissarmynes::compiler::analysis::SemanticAnalyzer;
-use swissarmynes::compiler::assembler::Assembler;
-use swissarmynes::compiler::codegen::CodeGenerator;
-use swissarmynes::compiler::lexer::Lexer;
-use swissarmynes::compiler::parser::Parser;
+use swiss_emulator::Emulator;
+use swissarmynes::server::api::compile_source;
+
+fn run_emulator_for_frames(emu: &mut Emulator, frames: usize) {
+    for _ in 0..frames {
+        emu.step().expect("Emulator execution failed");
+    }
+}
 
 #[test]
 fn test_select_case_ranges_and_is_and_multiple_conditions() {
@@ -40,68 +42,13 @@ fn test_select_case_ranges_and_is_and_multiple_conditions() {
         END SUB
     ";
 
-    let mut lexer = Lexer::new(source);
-    let tokens = lexer.tokenize().expect("Lexing failed");
+    let (rom_bytes, _) = compile_source(Some(source.to_string()), None, None).unwrap();
+    let mut emu = Emulator::new();
+    emu.load_rom(&rom_bytes).unwrap();
+    run_emulator_for_frames(&mut emu, 30);
 
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse().expect("Parsing failed");
-
-    let mut analyzer = SemanticAnalyzer::new();
-    analyzer.analyze(&program).expect("Analysis failed");
-
-    let mut cg = CodeGenerator::new(analyzer.symbol_table);
-    let (asm_lines, _) = cg.generate(&program).expect("Codegen failed");
-
-    let assembler = Assembler::new();
-    let rom = assembler
-        .assemble(&asm_lines, None, vec![])
-        .expect("Assembly failed");
-
-    std::fs::write("/tmp/test_select_ranges.nes", &rom).unwrap();
-
-    // val = $05C0, res1 = $05C1, res2 = $05C2, res3 = $05C3
-    let output = Command::new("python3")
-        .args(&[
-            "/tmp/file_attachments/out/rom_harness.py",
-            "/tmp/test_select_ranges.nes",
-            "--at",
-            "0x05C1",
-            "--expect",
-            "100",
-        ])
-        .output()
-        .expect("Failed to execute rom_harness.py");
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "res1 failed: {}", stdout);
-
-    let output2 = Command::new("python3")
-        .args(&[
-            "/tmp/file_attachments/out/rom_harness.py",
-            "/tmp/test_select_ranges.nes",
-            "--at",
-            "0x05C2",
-            "--expect",
-            "200",
-        ])
-        .output()
-        .expect("Failed to execute rom_harness.py");
-
-    let stdout2 = String::from_utf8_lossy(&output2.stdout);
-    assert!(output2.status.success(), "res2 failed: {}", stdout2);
-
-    let output3 = Command::new("python3")
-        .args(&[
-            "/tmp/file_attachments/out/rom_harness.py",
-            "/tmp/test_select_ranges.nes",
-            "--at",
-            "0x05C3",
-            "--expect",
-            "99",
-        ])
-        .output()
-        .expect("Failed to execute rom_harness.py");
-
-    let stdout3 = String::from_utf8_lossy(&output3.stdout);
-    assert!(output3.status.success(), "res3 failed: {}", stdout3);
+    let wram = emu.ram_snapshot();
+    assert_eq!(wram[0x05C1], 100, "res1 should be 100 for CASE 1 TO 10");
+    assert_eq!(wram[0x05C2], 200, "res2 should be 200 for CASE IS > 20");
+    assert_eq!(wram[0x05C3], 99, "res3 should be 99 for CASE 1, 2, 3");
 }

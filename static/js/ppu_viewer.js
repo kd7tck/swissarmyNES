@@ -202,8 +202,10 @@ class PpuViewer {
     }
 
     static formatOamEntries(memory) {
+        if (!memory || memory.length === 0) return 'No OAM data available';
         let html = '';
         for (let i = 0; i < 64; i++) {
+            if (i * 4 + 3 >= memory.length) break;
             const y = memory[i * 4];
             const tile = memory[i * 4 + 1];
             const attr = memory[i * 4 + 2];
@@ -216,5 +218,27 @@ class PpuViewer {
             html += `<div style="color:${color}">Sprite ${i}: X=${x} Y=${y} Tile=$${hexTile} Attr=${binAttr}</div>`;
         }
         return html;
+    }
+
+    static formatAttributeGrid(paletteData) {
+        if (!paletteData || paletteData.length < 32) return '';
+        let result = '';
+        for (let bg = 0; bg < 4; bg++) {
+            const sub = [];
+            for (let c = 0; c < 4; c++) {
+                const idx = bg * 4 + c;
+                sub.push('$' + paletteData[idx].toString(16).toUpperCase().padStart(2, '0'));
+            }
+            result += `BG ${bg}: ${sub.join(' ')}\n`;
+        }
+        for (let sp = 0; sp < 4; sp++) {
+            const sub = [];
+            for (let c = 0; c < 4; c++) {
+                const idx = 16 + sp * 4 + c;
+                sub.push('$' + paletteData[idx].toString(16).toUpperCase().padStart(2, '0'));
+            }
+            result += `SP ${sp}: ${sub.join(' ')}\n`;
+        }
+        return result.trim();
     }
 }

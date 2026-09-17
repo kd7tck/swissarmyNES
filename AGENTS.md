@@ -50,6 +50,18 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
+# Plan–develop–test loop: runtime shift count normalization — September 16, 2026
+
+- Planned and implemented runtime masking for `BITSHL`/`BITSHR` counts in `src/compiler/codegen.rs` so generated code matches the existing constant-folding mask (`count & 31`).
+- Added count-32 constant-folding assertions and code-generation coverage in `tests/bit_shift_intrinsics_test.rs`.
+- Final verification must include native tests, strict Clippy, formatting, the WASM release build, and Node tests before committing.
+
+# Quick development loop before final merge — September 16, 2026
+
+- Added `test_memory_copy_preserves_indexed_addresses_and_length` in `tests/memory_copy_intrinsic_test.rs`.
+- The test compiles indexed source and destination expressions and checks the generated instruction ordering: length saved first, destination preserved while the source is evaluated, then length restored before the copy loop.
+- This protects the merged `Memory.Copy` scratch-register contract and documents the final development-loop verification. Re-run native tests, strict Clippy, formatting, the WASM release build, and Node tests before committing.
+
 # Remote branch merge and Memory.Fill fix — September 16, 2026
 
 - Merged the two additional GitHub branches `dev-loops-intrinsics-diagnostics-13998583794852208848` and `jules-11030633264594705231-c27375b8` into `main` after refreshing remote refs. Their overlapping Math intrinsic implementations were reconciled so Abs, Min, Max, Sign, and Clamp coexist.
@@ -272,8 +284,32 @@ Historical implementation summary: phases 31-38 were marked complete.
 - **Dev Loop 4: UxROM (Mapper 2) Support in Emulator Engine**:
     - Verified and tested UxROM (Mapper 2) PRG bank switching support in `emulator/tests/mapper_test.rs`.
 
+- **Dev Loop 1 (New Loop 1): Bitwise Shift Intrinsics (`BITSHL`, `BITSHR`)**:
+    - Added `BITSHL(val, count)` and `BITSHR(val, count)` bitwise shift intrinsics with constant folding, semantic analysis, and 6502 assembly code generation in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+    - Added test coverage in `tests/bitwise_shift_test.rs`.
+
+- **Dev Loop 2 (New Loop 2): Memory Copy Intrinsic (`Memory.Copy`)**:
+    - Added `Memory.Copy(src_address, dst_address, length)` intrinsic in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+    - Added test coverage in `tests/memory_intrinsics_test.rs`.
+
+- **Dev Loop 3 (New Loop 3): Math Intrinsics (`Math.Wrap`, `Math.Lerp`)**:
+    - Added `Math.Wrap(val, min, max)` and `Math.Lerp(a, b, t)` intrinsics in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+    - Added test coverage in `tests/math_intrinsics_test.rs`.
+
+- **Dev Loop 4 (New Loop 4): Cartridge Header Helper Methods & Battery Flag Verification**:
+    - Added `total_prg_ram()` and `has_battery_backup()` helper methods to `CartridgeInfo` in `emulator/src/cartridge.rs`.
+    - Added test coverage in `emulator/tests/cartridge.rs`.
+
 - **Dev Loop 5: Frontend Debugger Enhancements & JS Unit Tests**:
-    - Enhanced `PpuViewer.formatOamEntries` in `static/js/ppu_viewer.js` and added JS unit test in `tests/js/ppu_viewer.test.cjs`.
+    - Enhanced `PpuViewer.formatOamEntries` and added `PpuViewer.formatAttributeGrid` in `static/js/ppu_viewer.js`.
+    - Added JS unit tests in `tests/js/ppu_viewer.test.cjs` and `tests/js/ppu_attribute.test.cjs`.
+
+- **Dev Loops (BITSHL/BITSHR, Memory.Copy, Sound.Stop, PPU.SetScroll, PpuViewer format OAM test)**:
+    - Added `BITSHL` and `BITSHR` bitwise shift intrinsic functions with 8-bit & 16-bit shift loops and compile-time constant folding (`tests/bit_shift_intrinsics_test.rs`).
+    - Added `Memory.Copy(src_addr, dst_addr, length)` intrinsic for fast RAM block copying (`tests/memory_copy_intrinsic_test.rs`).
+    - Added `Sound.Stop()` intrinsic invoking `Sound_Init` to stop active audio channels (`tests/sound_stop_test.rs`).
+    - Added `PPU.SetScroll(x, y)` intrinsic updating `$E0`/`$E1` shadow scroll registers (`tests/ppu_scroll_test.rs`).
+    - Enhanced `PpuViewer.formatOamEntries` in `static/js/ppu_viewer.js` to handle empty/null OAM buffer inputs and expanded JS unit tests in `tests/js/ppu_viewer.test.cjs`.
 
 - **Next Steps**:
-    - Run pre-commit checks and submit completed work.
+    - Continue expanding language built-ins and emulator features according to `DESIGN.md`.

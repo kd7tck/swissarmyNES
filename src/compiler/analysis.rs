@@ -122,6 +122,18 @@ impl SemanticAnalyzer {
                         if let Expression::Integer(v) = &args_folded[0] {
                             return Expression::Integer(!v);
                         }
+                    } else if name.eq_ignore_ascii_case("BITSHL") && args_folded.len() == 2 {
+                        if let (Expression::Integer(v1), Expression::Integer(v2)) =
+                            (&args_folded[0], &args_folded[1])
+                        {
+                            return Expression::Integer(v1.wrapping_shl((*v2 & 31) as u32));
+                        }
+                    } else if name.eq_ignore_ascii_case("BITSHR") && args_folded.len() == 2 {
+                        if let (Expression::Integer(v1), Expression::Integer(v2)) =
+                            (&args_folded[0], &args_folded[1])
+                        {
+                            return Expression::Integer(v1.wrapping_shr((*v2 & 31) as u32));
+                        }
                     }
                 }
                 Expression::Call(callee.clone(), args_folded)
@@ -702,6 +714,16 @@ impl SemanticAnalyzer {
                                     self.analyze_expression(&args[0]);
                                 }
                                 return;
+                            } else if member.eq_ignore_ascii_case("SetScroll") {
+                                if args.len() != 2 {
+                                    self.errors.push(
+                                        "PPU.SetScroll expects 2 arguments (x, y)".to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                }
+                                return;
                             } else {
                                 self.errors
                                     .push(format!("Unknown PPU command '{}'", member));
@@ -720,9 +742,35 @@ impl SemanticAnalyzer {
                                     self.analyze_expression(&args[2]);
                                 }
                                 return;
+                            } else if member.eq_ignore_ascii_case("Copy") {
+                                if args.len() != 3 {
+                                    self.errors.push(
+                                        "Memory.Copy expects 3 arguments (src_address, dst_address, length)"
+                                            .to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                    self.analyze_expression(&args[2]);
+                                }
+                                return;
+                            } else {
+                                self.errors.push(format!(
+                                    "Unknown Memory command '{}' (Fill, Copy)",
+                                    member
+                                ));
+                                return;
+                            }
+                        } else if base_name.eq_ignore_ascii_case("Sound") {
+                            if member.eq_ignore_ascii_case("Stop") {
+                                if !args.is_empty() {
+                                    self.errors
+                                        .push("Sound.Stop expects 0 arguments".to_string());
+                                }
+                                return;
                             } else {
                                 self.errors
-                                    .push(format!("Unknown Memory command '{}' (Fill)", member));
+                                    .push(format!("Unknown Sound command '{}' (Stop)", member));
                                 return;
                             }
                         }
@@ -910,6 +958,9 @@ impl SemanticAnalyzer {
                     if base_name.eq_ignore_ascii_case("Memory") {
                         return;
                     }
+                    if base_name.eq_ignore_ascii_case("Sound") {
+                        return;
+                    }
                 }
 
                 self.analyze_expression(base);
@@ -1082,6 +1133,8 @@ impl SemanticAnalyzer {
                     } else if name.eq_ignore_ascii_case("BITAND")
                         || name.eq_ignore_ascii_case("BITOR")
                         || name.eq_ignore_ascii_case("BITXOR")
+                        || name.eq_ignore_ascii_case("BITSHL")
+                        || name.eq_ignore_ascii_case("BITSHR")
                     {
                         if args.len() != 2 {
                             self.errors
@@ -1116,11 +1169,22 @@ impl SemanticAnalyzer {
                                     self.analyze_expression(&args[1]);
                                 }
                                 return;
-                            } else if member.eq_ignore_ascii_case("Clamp") {
+                            } else if member.eq_ignore_ascii_case("Clamp")
+                                || member.eq_ignore_ascii_case("Wrap")
+                            {
+                                if args.len() != 3 {
+                                    self.errors
+                                        .push(format!("Math.{} expects 3 arguments", member));
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                    self.analyze_expression(&args[2]);
+                                }
+                                return;
+                            } else if member.eq_ignore_ascii_case("Lerp") {
                                 if args.len() != 3 {
                                     self.errors.push(
-                                        "Math.Clamp expects 3 arguments (val, min, max)"
-                                            .to_string(),
+                                        "Math.Lerp expects 3 arguments (a, b, t)".to_string(),
                                     );
                                 } else {
                                     self.analyze_expression(&args[0]);
@@ -1321,6 +1385,8 @@ impl SemanticAnalyzer {
                         || name.eq_ignore_ascii_case("BITOR")
                         || name.eq_ignore_ascii_case("BITXOR")
                         || name.eq_ignore_ascii_case("BITNOT")
+                        || name.eq_ignore_ascii_case("BITSHL")
+                        || name.eq_ignore_ascii_case("BITSHR")
                     {
                         return Some(DataType::Word);
                     }
@@ -1334,6 +1400,8 @@ impl SemanticAnalyzer {
                                 || member.eq_ignore_ascii_case("Min")
                                 || member.eq_ignore_ascii_case("Max")
                                 || member.eq_ignore_ascii_case("Clamp")
+                                || member.eq_ignore_ascii_case("Wrap")
+                                || member.eq_ignore_ascii_case("Lerp")
                             {
                                 if let Some(arg_type) =
                                     args.first().and_then(|a| self.resolve_type(a))
@@ -1409,6 +1477,9 @@ impl SemanticAnalyzer {
                         return None;
                     }
                     if base_name.eq_ignore_ascii_case("Memory") {
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("Sound") {
                         return None;
                     }
                 }

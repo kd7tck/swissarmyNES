@@ -1,3 +1,70 @@
+# Dev Loop 7 — Runtime Shift Count Normalization, September 16, 2026
+
+- Normalized `BITSHL` and `BITSHR` runtime counts with `AND #$1F` before dispatching to the 6502 shift helpers.
+- This keeps generated code consistent with the compiler’s existing constant-folding rule for counts beyond 31, including a count of 32 becoming a no-op.
+- Added code-generation and constant-folding regression coverage in `tests/bit_shift_intrinsics_test.rs`.
+
+# Dev Loop 6 — Indexed Memory.Copy Preservation Regression, September 16, 2026
+
+- Added `test_memory_copy_preserves_indexed_addresses_and_length` to exercise `Memory.Copy` with indexed source and destination expressions.
+- The regression test verifies that address scratch registers (`$00/$01`) cannot overwrite the saved length or destination pointer before the copy loop begins.
+- This closes the quick development loop after merging the PPU verification and sound/intrinsic branches; generated WASM and ROM fixtures remain excluded from source-only delivery.
+
+# Dev Loop 5 — PPU Viewer Attribute Grid Formatting Helper & JS Unit Tests, September 16, 2026
+
+- Added `PpuViewer.formatAttributeGrid(paletteData)` static helper function to `static/js/ppu_viewer.js`.
+- Added unit tests in `tests/js/ppu_attribute.test.cjs`.
+- All Node JS unit tests pass.
+
+# Dev Loop 4 — Cartridge Header Helper Methods & Battery Flag Verification, September 16, 2026
+
+- Added `total_prg_ram()` and `has_battery_backup()` helper methods to `CartridgeInfo` in `emulator/src/cartridge.rs`.
+- Added test coverage in `emulator/tests/cartridge.rs`.
+- All `swiss-emulator` tests pass.
+
+# Dev Loop 3 — Add Math.Wrap and Math.Lerp Intrinsics, September 16, 2026
+
+- Added `Math.Wrap(val, min, max)` and `Math.Lerp(a, b, t)` intrinsics in `src/compiler/analysis.rs` and 6502 assembly codegen in `src/compiler/codegen.rs`.
+- Added test coverage in `tests/math_intrinsics_test.rs`.
+
+# Dev Loop 2 — Add Memory Copy Intrinsic (Memory.Copy), September 16, 2026
+
+- Added `Memory.Copy(src_address, dst_address, length)` intrinsic support in `src/compiler/analysis.rs` and 6502 pointer block copy loop codegen in `src/compiler/codegen.rs`.
+- Added integration test `test_memory_copy_codegen` in `tests/memory_intrinsics_test.rs`.
+
+# Dev Loop 1 — Add Bitwise Shift Intrinsics (BITSHL, BITSHR), September 16, 2026
+
+- Added `BITSHL(val, count)` and `BITSHR(val, count)` bitwise shift intrinsics with constant folding, semantic analysis, and 6502 assembly code generation in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Added test coverage in `tests/bitwise_shift_test.rs`.
+# Dev Loop 5 — Frontend JS Debugger Unit Test Expansion, September 16, 2026
+
+- Updated `static/js/ppu_viewer.js` `PpuViewer.formatOamEntries` to handle empty and null memory buffers gracefully.
+- Expanded JS unit test suite in `tests/js/ppu_viewer.test.cjs` to test null and empty OAM input formatting.
+
+# Dev Loop 4 — Add PPU.SetScroll Intrinsic, September 16, 2026
+
+- Added `PPU.SetScroll(x, y)` intrinsic function in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Sets zero-page shadow scroll registers `$E0` (Scroll X) and `$E1` (Scroll Y) for PPU frame rendering.
+- Added test coverage in `tests/ppu_scroll_test.rs`.
+
+# Dev Loop 3 — Add Sound.Stop Intrinsic, September 16, 2026
+
+- Added `Sound.Stop()` intrinsic function in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Invokes APU sound state reset helper `Sound_Init` to silence active channels and reset audio parameters.
+- Added unit and integration test coverage in `tests/sound_stop_test.rs`.
+
+# Dev Loop 2 — Add Memory.Copy Intrinsic, September 16, 2026
+
+- Added `Memory.Copy(src_addr, dst_addr, length)` intrinsic function support in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Emits fast 6502 RAM block copy loop transferring bytes from source address ($02/$03) to destination address ($04/$05).
+- Added unit and integration tests in `tests/memory_copy_intrinsic_test.rs`.
+
+# Dev Loop 1 — Add BITSHL & BITSHR Intrinsics with Constant Folding, September 16, 2026
+
+- Added `BITSHL` and `BITSHR` bitwise shift intrinsic functions in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Supported 8-bit and 16-bit shift loops (`Math_Shl8`, `Math_Shr8`, `Math_Shl16`, `Math_Shr16`) and compile-time constant folding.
+- Added unit and integration tests in `tests/bit_shift_intrinsics_test.rs`.
+
 # Remote branch merge and Memory.Fill fix — September 16, 2026
 
 - Refreshed GitHub refs and merged both additional remote branches (`dev-loops-intrinsics-diagnostics-13998583794852208848` and `jules-11030633264594705231-c27375b8`) into the updated `main` at `6134fa4`.

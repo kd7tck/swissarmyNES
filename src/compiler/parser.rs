@@ -1055,16 +1055,30 @@ impl Parser {
                                 Token::LessEqual => BinaryOperator::LessThanOrEqual,
                                 Token::Greater => BinaryOperator::GreaterThan,
                                 Token::GreaterEqual => BinaryOperator::GreaterThanOrEqual,
-                                t => return Err(format!("Line {}: Expected comparison operator after IS, found {:?}", self.current_line(), t)),
+                                t => {
+                                    return Err(format!(
+                                        "Line {}: Expected comparison operator after IS, found {:?}",
+                                        self.current_line(),
+                                        t
+                                    ));
+                                }
                             };
                             self.advance(); // consume operator
                             let val = self.parse_expression()?;
-                            Expression::BinaryOp(Box::new(Expression::Identifier("__IS__".to_string())), op, Box::new(val))
+                            Expression::BinaryOp(
+                                Box::new(Expression::Identifier("__IS__".to_string())),
+                                op,
+                                Box::new(val),
+                            )
                         } else {
                             let val1 = self.parse_expression()?;
                             if self.match_token(Token::To) {
                                 let val2 = self.parse_expression()?;
-                                Expression::BinaryOp(Box::new(val1), BinaryOperator::To, Box::new(val2))
+                                Expression::BinaryOp(
+                                    Box::new(val1),
+                                    BinaryOperator::To,
+                                    Box::new(val2),
+                                )
                             } else {
                                 val1
                             }

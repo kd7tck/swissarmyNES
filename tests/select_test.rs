@@ -120,7 +120,7 @@ fn test_codegen_select_word() {
     // Check Stack Peek (Word)
     assert!(code_str.contains("TSX"));
     assert!(code_str.contains("LDA $0102, X")); // Fetch Low
-    assert!(code_str.contains("LDX $0101, X")); // Fetch High
+    assert!(code_str.contains("TAX")); // Transfer High to X
 
     // Check Case Value (1000 = $03E8)
     assert!(code_str.contains("LDA #$E8"));

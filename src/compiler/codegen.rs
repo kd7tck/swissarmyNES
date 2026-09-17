@@ -36,6 +36,7 @@ pub struct CodeGenerator {
     interrupt_targets: Vec<(String, String)>,
     string_literals: HashMap<String, String>,
     select_stack_depth: usize,
+    select_base_depth_stack: Vec<usize>,
     select_expr_type: Option<DataType>,
     recursion_depth: usize,
 }
@@ -264,6 +265,7 @@ impl CodeGenerator {
             interrupt_targets: Vec::new(),
             string_literals: HashMap::new(),
             select_stack_depth: 0,
+            select_base_depth_stack: Vec::new(),
             select_expr_type: None,
             recursion_depth: 0,
         }
@@ -3747,7 +3749,11 @@ impl CodeGenerator {
                     for (i, (param_name, _)) in params.iter().enumerate() {
                         if i < sig_params.len() {
                             let (addr, dtype) = &sig_params[i];
-                            let _ = self.symbol_table.define(param_name.clone(), dtype.clone(), SymbolKind::Param);
+                            let _ = self.symbol_table.define(
+                                param_name.clone(),
+                                dtype.clone(),
+                                SymbolKind::Param,
+                            );
                             let _ = self.symbol_table.assign_address(param_name, *addr);
                         }
                     }
@@ -4298,29 +4304,19 @@ impl CodeGenerator {
                 self.emit(format!("{}:", loop_label));
 
                 // Condition:
-                // If step < 0: Check (var >= end) AND (var <= start) to detect underflow/wrap
+                // If step < 0: Check var >= end
                 // If step >= 0: Check var <= end
-                let condition = if is_negative_step {
-                    Expression::BinaryOp(
-                        Box::new(Expression::BinaryOp(
-                            Box::new(Expression::Identifier(var_name.clone())),
-                            BinaryOperator::GreaterThanOrEqual,
-                            Box::new(end_expr.clone()),
-                        )),
-                        BinaryOperator::And,
-                        Box::new(Expression::BinaryOp(
-                            Box::new(Expression::Identifier(var_name.clone())),
-                            BinaryOperator::LessThanOrEqual,
-                            Box::new(start_expr.clone()),
-                        )),
-                    )
+                let operator = if is_negative_step {
+                    BinaryOperator::GreaterThanOrEqual
                 } else {
-                    Expression::BinaryOp(
-                        Box::new(Expression::Identifier(var_name.clone())),
-                        BinaryOperator::LessThanOrEqual,
-                        Box::new(end_expr.clone()),
-                    )
+                    BinaryOperator::LessThanOrEqual
                 };
+
+                let condition = Expression::BinaryOp(
+                    Box::new(Expression::Identifier(var_name.clone())),
+                    operator,
+                    Box::new(end_expr.clone()),
+                );
 
                 self.generate_expression(&condition)?;
 
@@ -4330,6 +4326,18 @@ impl CodeGenerator {
 
                 // Body
                 self.generate_block(body)?;
+
+                // For negative step, if var == end, exit before underflowing/stepping
+                if is_negative_step {
+                    let end_check = Expression::BinaryOp(
+                        Box::new(Expression::Identifier(var_name.clone())),
+                        BinaryOperator::Equal,
+                        Box::new(end_expr.clone()),
+                    );
+                    self.generate_expression(&end_check)?;
+                    self.emit("  CMP #0".to_string());
+                    self.emit(format!("  BNE {}", exit_label));
+                }
 
                 // Increment: var = var + step
                 let increment = Statement {
@@ -4481,6 +4489,7 @@ impl CodeGenerator {
                     }
                 };
                 self.select_stack_depth += pushed_bytes;
+                self.select_base_depth_stack.push(self.select_stack_depth);
 
                 // 3. Generate Checks
                 for (case_val, case_body) in cases {
@@ -4507,13 +4516,17 @@ impl CodeGenerator {
                             if let Expression::Identifier(ref name) = **is_ident {
                                 if name == "__IS__" {
                                     Expression::BinaryOp(
-                                        Box::new(Expression::Identifier("__SELECT_VAL__".to_string())),
+                                        Box::new(Expression::Identifier(
+                                            "__SELECT_VAL__".to_string(),
+                                        )),
                                         op.clone(),
                                         val.clone(),
                                     )
                                 } else {
                                     Expression::BinaryOp(
-                                        Box::new(Expression::Identifier("__SELECT_VAL__".to_string())),
+                                        Box::new(Expression::Identifier(
+                                            "__SELECT_VAL__".to_string(),
+                                        )),
                                         BinaryOperator::Equal,
                                         Box::new(case_val.clone()),
                                     )
@@ -4556,6 +4569,7 @@ impl CodeGenerator {
                     self.emit("  PLA".to_string());
                 }
                 self.select_stack_depth -= pushed_bytes;
+                self.select_base_depth_stack.pop();
                 self.select_expr_type = prev_select_type;
             }
             _ => {}
@@ -5917,16 +5931,29 @@ impl CodeGenerator {
             Expression::Identifier(name) => {
                 if name == "__SELECT_VAL__" {
                     let dtype = self.select_expr_type.clone().unwrap_or(DataType::Byte);
+                    let base_depth = self
+                        .select_base_depth_stack
+                        .last()
+                        .cloned()
+                        .unwrap_or(self.select_stack_depth);
+                    let bytes_pushed_since_select =
+                        self.select_stack_depth.saturating_sub(base_depth);
                     self.emit("  TSX".to_string());
                     match dtype {
                         DataType::Byte | DataType::Bool | DataType::Int | DataType::Enum(_) => {
-                            self.emit(format!("  LDA $01{:02X}, X", self.select_stack_depth));
+                            let offset = 1 + bytes_pushed_since_select;
+                            self.emit(format!("  LDA $01{:02X}, X", offset));
                             self.emit("  LDX #0".to_string());
                             return Ok(dtype);
                         }
                         _ => {
-                            self.emit(format!("  LDA $01{:02X}, X", self.select_stack_depth));
-                            self.emit(format!("  LDX $01{:02X}, X", self.select_stack_depth - 1));
+                            let low_offset = 2 + bytes_pushed_since_select;
+                            let high_offset = 1 + bytes_pushed_since_select;
+                            self.emit(format!("  LDA $01{:02X}, X", low_offset));
+                            self.emit("  PHA".to_string());
+                            self.emit(format!("  LDA $01{:02X}, X", high_offset));
+                            self.emit("  TAX".to_string());
+                            self.emit("  PLA".to_string());
                             return Ok(dtype);
                         }
                     }

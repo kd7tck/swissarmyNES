@@ -337,7 +337,8 @@ impl SemanticAnalyzer {
 
     fn enter_depth(&mut self) -> Result<(), ()> {
         if self.recursion_depth >= 256 {
-            self.errors.push("Maximum recursion depth exceeded".to_string());
+            self.errors
+                .push("Maximum recursion depth exceeded".to_string());
             return Err(());
         }
         self.recursion_depth += 1;
@@ -1383,7 +1384,11 @@ impl SemanticAnalyzer {
                 }
             }
             Expression::BinaryOp(l, op, r) => {
-                if matches!(op, crate::compiler::ast::BinaryOperator::Divide | crate::compiler::ast::BinaryOperator::Modulo) {
+                if matches!(
+                    op,
+                    crate::compiler::ast::BinaryOperator::Divide
+                        | crate::compiler::ast::BinaryOperator::Modulo
+                ) {
                     let r_folded = Self::fold_constants_expr(r);
                     if let Expression::Integer(0) = r_folded {
                         self.errors.push("Division by zero".to_string());

@@ -98,3 +98,50 @@ END SUB
     assert_eq!(deck.wram()[0x5c2], 200);
     assert_eq!(deck.wram()[0x5c3], 50);
 }
+
+#[test]
+fn test_nested_select_case_and_word_select_execution() {
+    let source = r#"
+DIM outer_val AS BYTE
+DIM inner_val AS BYTE
+DIM word_val AS WORD
+DIM res_outer AS BYTE
+DIM res_word AS WORD
+
+SUB Main()
+    outer_val = 2
+    inner_val = 5
+    word_val = 1000
+
+    SELECT CASE outer_val
+        CASE 1
+            res_outer = 10
+        CASE 2
+            SELECT CASE inner_val
+                CASE 1 TO 3
+                    res_outer = 21
+                CASE 4 TO 6
+                    res_outer = 22
+                CASE ELSE
+                    res_outer = 29
+            END SELECT
+        CASE ELSE
+            res_outer = 99
+    END SELECT
+
+    SELECT CASE word_val
+        CASE 500 TO 1500
+            res_word = 1234
+        CASE ELSE
+            res_word = 0
+    END SELECT
+END SUB
+"#;
+    let deck = run_rom(source);
+    // outer_val @ $05C0, inner_val @ $05C1, word_val @ $05C2-$05C3
+    // res_outer @ $05C4 = 22
+    // res_word  @ $05C5-$05C6 = 1234
+    assert_eq!(deck.wram()[0x5c4], 22);
+    let word_res = (deck.wram()[0x5c5] as u16) | ((deck.wram()[0x5c6] as u16) << 8);
+    assert_eq!(word_res, 1234);
+}

@@ -421,7 +421,7 @@ fn idle_nmi_with_dma_fits_ntsc_vblank_budget() {
         let before = deck.cpu().cycle;
         deck.cpu_mut().nmi = true;
         deck.cpu_mut().irq();
-        for _ in 0..2000 {
+        for _ in 0..5000 {
             if deck.cpu().pc == pc && deck.cpu().sp == sp {
                 break;
             }

@@ -272,8 +272,25 @@ Historical implementation summary: phases 31-38 were marked complete.
 - **Dev Loop 4: UxROM (Mapper 2) Support in Emulator Engine**:
     - Verified and tested UxROM (Mapper 2) PRG bank switching support in `emulator/tests/mapper_test.rs`.
 
+- **Dev Loop 1 (New Loop 1): Bitwise Shift Intrinsics (`BITSHL`, `BITSHR`)**:
+    - Added `BITSHL(val, count)` and `BITSHR(val, count)` bitwise shift intrinsics with constant folding, semantic analysis, and 6502 assembly code generation in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+    - Added test coverage in `tests/bitwise_shift_test.rs`.
+
+- **Dev Loop 2 (New Loop 2): Memory Copy Intrinsic (`Memory.Copy`)**:
+    - Added `Memory.Copy(src_address, dst_address, length)` intrinsic in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+    - Added test coverage in `tests/memory_intrinsics_test.rs`.
+
+- **Dev Loop 3 (New Loop 3): Math Intrinsics (`Math.Wrap`, `Math.Lerp`)**:
+    - Added `Math.Wrap(val, min, max)` and `Math.Lerp(a, b, t)` intrinsics in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+    - Added test coverage in `tests/math_intrinsics_test.rs`.
+
+- **Dev Loop 4 (New Loop 4): Cartridge Header Helper Methods & Battery Flag Verification**:
+    - Added `total_prg_ram()` and `has_battery_backup()` helper methods to `CartridgeInfo` in `emulator/src/cartridge.rs`.
+    - Added test coverage in `emulator/tests/cartridge.rs`.
+
 - **Dev Loop 5: Frontend Debugger Enhancements & JS Unit Tests**:
-    - Enhanced `PpuViewer.formatOamEntries` in `static/js/ppu_viewer.js` and added JS unit test in `tests/js/ppu_viewer.test.cjs`.
+    - Enhanced `PpuViewer.formatOamEntries` and added `PpuViewer.formatAttributeGrid` in `static/js/ppu_viewer.js`.
+    - Added JS unit tests in `tests/js/ppu_viewer.test.cjs` and `tests/js/ppu_attribute.test.cjs`.
 
 - **Next Steps**:
     - Run pre-commit checks and submit completed work.

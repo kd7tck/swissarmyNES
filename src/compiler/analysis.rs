@@ -126,13 +126,13 @@ impl SemanticAnalyzer {
                         if let (Expression::Integer(v1), Expression::Integer(v2)) =
                             (&args_folded[0], &args_folded[1])
                         {
-                            return Expression::Integer(v1.wrapping_shl(*v2 as u32));
+                            return Expression::Integer(v1.wrapping_shl((*v2 & 31) as u32));
                         }
                     } else if name.eq_ignore_ascii_case("BITSHR") && args_folded.len() == 2 {
                         if let (Expression::Integer(v1), Expression::Integer(v2)) =
                             (&args_folded[0], &args_folded[1])
                         {
-                            return Expression::Integer(v1.wrapping_shr(*v2 as u32));
+                            return Expression::Integer(v1.wrapping_shr((*v2 & 31) as u32));
                         }
                     }
                 }
@@ -714,6 +714,16 @@ impl SemanticAnalyzer {
                                     self.analyze_expression(&args[0]);
                                 }
                                 return;
+                            } else if member.eq_ignore_ascii_case("SetScroll") {
+                                if args.len() != 2 {
+                                    self.errors.push(
+                                        "PPU.SetScroll expects 2 arguments (x, y)".to_string(),
+                                    );
+                                } else {
+                                    self.analyze_expression(&args[0]);
+                                    self.analyze_expression(&args[1]);
+                                }
+                                return;
                             } else {
                                 self.errors
                                     .push(format!("Unknown PPU command '{}'", member));
@@ -749,6 +759,18 @@ impl SemanticAnalyzer {
                                     "Unknown Memory command '{}' (Fill, Copy)",
                                     member
                                 ));
+                                return;
+                            }
+                        } else if base_name.eq_ignore_ascii_case("Sound") {
+                            if member.eq_ignore_ascii_case("Stop") {
+                                if !args.is_empty() {
+                                    self.errors
+                                        .push("Sound.Stop expects 0 arguments".to_string());
+                                }
+                                return;
+                            } else {
+                                self.errors
+                                    .push(format!("Unknown Sound command '{}' (Stop)", member));
                                 return;
                             }
                         }
@@ -934,6 +956,9 @@ impl SemanticAnalyzer {
                         return;
                     }
                     if base_name.eq_ignore_ascii_case("Memory") {
+                        return;
+                    }
+                    if base_name.eq_ignore_ascii_case("Sound") {
                         return;
                     }
                 }
@@ -1452,6 +1477,9 @@ impl SemanticAnalyzer {
                         return None;
                     }
                     if base_name.eq_ignore_ascii_case("Memory") {
+                        return None;
+                    }
+                    if base_name.eq_ignore_ascii_case("Sound") {
                         return None;
                     }
                 }

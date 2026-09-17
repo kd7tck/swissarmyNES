@@ -4080,6 +4080,14 @@ impl CodeGenerator {
                                 self.generate_expression(&args[0])?;
                                 self.emit("  STA $2001".to_string());
                                 return Ok(());
+                            } else if member.eq_ignore_ascii_case("SetScroll") {
+                                // Arg 0: X -> $E0
+                                self.generate_expression(&args[0])?;
+                                self.emit("  STA $E0".to_string());
+                                // Arg 1: Y -> $E1
+                                self.generate_expression(&args[1])?;
+                                self.emit("  STA $E1".to_string());
+                                return Ok(());
                             }
                         } else if base_name.eq_ignore_ascii_case("Memory") {
                             if member.eq_ignore_ascii_case("Fill") {
@@ -4154,6 +4162,11 @@ impl CodeGenerator {
                                 self.emit(format!("{}:", copy_end));
                                 return Ok(());
                             }
+                        } else if base_name.eq_ignore_ascii_case("Sound")
+                            && member.eq_ignore_ascii_case("Stop")
+                        {
+                            self.emit("  JSR Sound_Init".to_string());
+                            return Ok(());
                         }
                     }
                 }
@@ -5376,14 +5389,20 @@ impl CodeGenerator {
 
                                 self.emit("  JSR Math_Mul16".to_string());
 
-                                self.emit("  TXA".to_string());
+                                // Add the base value to the 16-bit product.
+                                // Preserve each product byte while adding low first
+                                // so the carry reaches the high-byte addition.
+                                self.emit("  PHA".to_string()); // Product low
+                                self.emit("  TXA".to_string()); // Product high
+                                self.emit("  STA $09".to_string());
+                                self.emit("  PLA".to_string());
                                 self.emit("  CLC".to_string());
                                 self.emit("  ADC $02".to_string());
-                                self.emit("  PHA".to_string());
-                                self.emit("  LDA #0".to_string());
+                                self.emit("  STA $08".to_string());
+                                self.emit("  LDA $09".to_string());
                                 self.emit("  ADC $03".to_string());
                                 self.emit("  TAX".to_string());
-                                self.emit("  PLA".to_string());
+                                self.emit("  LDA $08".to_string());
 
                                 return Ok(if is_16_a || is_16_b {
                                     t_a

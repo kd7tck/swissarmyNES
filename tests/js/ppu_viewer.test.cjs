@@ -44,3 +44,11 @@ test('OAM entry formatting pads tile hex and attr binary correctly', () => {
     assert.match(formatted, /Sprite 0: X=20 Y=10 Tile=\$0A Attr=00000011/);
     assert.match(formatted, /color:#555/); // Offscreen sprite highlighted dim
 });
+
+test('OAM entry formatting handles empty or null input gracefully', () => {
+    const context = vm.createContext({window: {}});
+    vm.runInContext(fs.readFileSync('static/js/ppu_viewer.js', 'utf8') + '\nthis.Viewer = PpuViewer;', context);
+
+    assert.equal(context.Viewer.formatOamEntries(null), 'No OAM data available');
+    assert.equal(context.Viewer.formatOamEntries(new Uint8Array(0)), 'No OAM data available');
+});

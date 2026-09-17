@@ -7,15 +7,31 @@ use swissarmynes::compiler::symbol_table::{SymbolKind, SymbolTable};
 #[test]
 fn test_memory_copy_codegen() {
     let mut st = SymbolTable::new();
-    st.define("buf1".to_string(), DataType::Array(Box::new(DataType::Byte), 16), SymbolKind::Variable)
-        .unwrap();
-    st.define("buf2".to_string(), DataType::Array(Box::new(DataType::Byte), 16), SymbolKind::Variable)
-        .unwrap();
+    st.define(
+        "buf1".to_string(),
+        DataType::Array(Box::new(DataType::Byte), 16),
+        SymbolKind::Variable,
+    )
+    .unwrap();
+    st.define(
+        "buf2".to_string(),
+        DataType::Array(Box::new(DataType::Byte), 16),
+        SymbolKind::Variable,
+    )
+    .unwrap();
 
     let program = Program {
         declarations: vec![
-            TopLevel::Dim("buf1".to_string(), DataType::Array(Box::new(DataType::Byte), 16), None),
-            TopLevel::Dim("buf2".to_string(), DataType::Array(Box::new(DataType::Byte), 16), None),
+            TopLevel::Dim(
+                "buf1".to_string(),
+                DataType::Array(Box::new(DataType::Byte), 16),
+                None,
+            ),
+            TopLevel::Dim(
+                "buf2".to_string(),
+                DataType::Array(Box::new(DataType::Byte), 16),
+                None,
+            ),
             TopLevel::Sub(
                 "Main".to_string(),
                 vec![],

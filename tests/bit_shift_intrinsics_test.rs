@@ -1,8 +1,8 @@
 // KEEP
+use swissarmynes::compiler::analysis::SemanticAnalyzer;
 use swissarmynes::compiler::ast::{DataType, Expression, Program, Statement, TopLevel};
 use swissarmynes::compiler::codegen::CodeGenerator;
 use swissarmynes::compiler::symbol_table::{SymbolKind, SymbolTable};
-use swissarmynes::compiler::analysis::SemanticAnalyzer;
 
 #[test]
 fn test_bit_shift_intrinsics_codegen() {
@@ -21,14 +21,20 @@ fn test_bit_shift_intrinsics_codegen() {
                         Expression::Identifier("val".to_string()),
                         Expression::Call(
                             Box::new(Expression::Identifier("BITSHL".to_string())),
-                            vec![Expression::Identifier("val".to_string()), Expression::Integer(2)],
+                            vec![
+                                Expression::Identifier("val".to_string()),
+                                Expression::Integer(2),
+                            ],
                         ),
                     ),
                     Statement::Let(
                         Expression::Identifier("val".to_string()),
                         Expression::Call(
                             Box::new(Expression::Identifier("BITSHR".to_string())),
-                            vec![Expression::Identifier("val".to_string()), Expression::Integer(3)],
+                            vec![
+                                Expression::Identifier("val".to_string()),
+                                Expression::Integer(3),
+                            ],
                         ),
                     ),
                 ],

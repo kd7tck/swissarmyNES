@@ -755,8 +755,10 @@ impl SemanticAnalyzer {
                                 }
                                 return;
                             } else {
-                                self.errors
-                                    .push(format!("Unknown Memory command '{}' (Fill, Copy)", member));
+                                self.errors.push(format!(
+                                    "Unknown Memory command '{}' (Fill, Copy)",
+                                    member
+                                ));
                                 return;
                             }
                         } else if base_name.eq_ignore_ascii_case("Sound") {

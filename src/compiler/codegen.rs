@@ -5486,7 +5486,9 @@ impl CodeGenerator {
                             self.emit("  LDX #0".to_string());
                             return Ok(DataType::Byte);
                         }
-                    } else if name.eq_ignore_ascii_case("BITSHL") || name.eq_ignore_ascii_case("BITSHR") {
+                    } else if name.eq_ignore_ascii_case("BITSHL")
+                        || name.eq_ignore_ascii_case("BITSHR")
+                    {
                         let t1 = self.generate_expression(&args[0])?;
                         let is_16 = t1 == DataType::Word || t1 == DataType::Int;
                         if is_16 {

@@ -1335,7 +1335,8 @@ impl SemanticAnalyzer {
                                 || member.eq_ignore_ascii_case("Max")
                                 || member.eq_ignore_ascii_case("Clamp")
                             {
-                                if let Some(arg_type) = args.first().and_then(|a| self.resolve_type(a))
+                                if let Some(arg_type) =
+                                    args.first().and_then(|a| self.resolve_type(a))
                                 {
                                     return Some(arg_type);
                                 }

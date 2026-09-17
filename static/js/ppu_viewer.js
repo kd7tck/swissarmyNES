@@ -202,8 +202,10 @@ class PpuViewer {
     }
 
     static formatOamEntries(memory) {
+        if (!memory || memory.length === 0) return 'No OAM data available';
         let html = '';
         for (let i = 0; i < 64; i++) {
+            if (i * 4 + 3 >= memory.length) break;
             const y = memory[i * 4];
             const tile = memory[i * 4 + 1];
             const attr = memory[i * 4 + 2];

@@ -1,3 +1,32 @@
+# Dev Loop 5 — Frontend JS Debugger Unit Test Expansion, September 16, 2026
+
+- Updated `static/js/ppu_viewer.js` `PpuViewer.formatOamEntries` to handle empty and null memory buffers gracefully.
+- Expanded JS unit test suite in `tests/js/ppu_viewer.test.cjs` to test null and empty OAM input formatting.
+
+# Dev Loop 4 — Add PPU.SetScroll Intrinsic, September 16, 2026
+
+- Added `PPU.SetScroll(x, y)` intrinsic function in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Sets zero-page shadow scroll registers `$E0` (Scroll X) and `$E1` (Scroll Y) for PPU frame rendering.
+- Added test coverage in `tests/ppu_scroll_test.rs`.
+
+# Dev Loop 3 — Add Sound.Stop Intrinsic, September 16, 2026
+
+- Added `Sound.Stop()` intrinsic function in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Invokes APU sound state reset helper `Sound_Init` to silence active channels and reset audio parameters.
+- Added unit and integration test coverage in `tests/sound_stop_test.rs`.
+
+# Dev Loop 2 — Add Memory.Copy Intrinsic, September 16, 2026
+
+- Added `Memory.Copy(src_addr, dst_addr, length)` intrinsic function support in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Emits fast 6502 RAM block copy loop transferring bytes from source address ($02/$03) to destination address ($04/$05).
+- Added unit and integration tests in `tests/memory_copy_intrinsic_test.rs`.
+
+# Dev Loop 1 — Add BITSHL & BITSHR Intrinsics with Constant Folding, September 16, 2026
+
+- Added `BITSHL` and `BITSHR` bitwise shift intrinsic functions in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Supported 8-bit and 16-bit shift loops (`Math_Shl8`, `Math_Shr8`, `Math_Shl16`, `Math_Shr16`) and compile-time constant folding.
+- Added unit and integration tests in `tests/bit_shift_intrinsics_test.rs`.
+
 # Remote branch merge and Memory.Fill fix — September 16, 2026
 
 - Refreshed GitHub refs and merged both additional remote branches (`dev-loops-intrinsics-diagnostics-13998583794852208848` and `jules-11030633264594705231-c27375b8`) into the updated `main` at `6134fa4`.

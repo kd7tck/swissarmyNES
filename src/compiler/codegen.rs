@@ -4080,6 +4080,14 @@ impl CodeGenerator {
                                 self.generate_expression(&args[0])?;
                                 self.emit("  STA $2001".to_string());
                                 return Ok(());
+                            } else if member.eq_ignore_ascii_case("SetScroll") {
+                                // Arg 0: X -> $E0
+                                self.generate_expression(&args[0])?;
+                                self.emit("  STA $E0".to_string());
+                                // Arg 1: Y -> $E1
+                                self.generate_expression(&args[1])?;
+                                self.emit("  STA $E1".to_string());
+                                return Ok(());
                             }
                         } else if base_name.eq_ignore_ascii_case("Memory")
                             && member.eq_ignore_ascii_case("Fill")
@@ -4111,6 +4119,44 @@ impl CodeGenerator {
                             self.emit("  INY".to_string());
                             self.emit(format!("  JMP {}", fill_loop));
                             self.emit(format!("{}:", fill_end));
+                            return Ok(());
+                        } else if base_name.eq_ignore_ascii_case("Memory")
+                            && member.eq_ignore_ascii_case("Copy")
+                        {
+                            // Memory.Copy(src_addr, dst_addr, length)
+                            // 1. Length -> stack
+                            self.generate_expression(&args[2])?;
+                            self.emit("  PHA".to_string()); // Save Length
+
+                            // 2. Destination address -> $04/$05
+                            self.generate_address_expression(&args[1])?;
+                            self.emit("  LDA $02".to_string());
+                            self.emit("  STA $04".to_string());
+                            self.emit("  LDA $03".to_string());
+                            self.emit("  STA $05".to_string());
+
+                            // 3. Source address -> $02/$03
+                            self.generate_address_expression(&args[0])?;
+
+                            // Loop: Copy from ($02),Y to ($04),Y
+                            let copy_loop = self.new_label();
+                            let copy_end = self.new_label();
+                            self.emit("  PLA".to_string()); // Restore Length
+                            self.emit("  STA $06".to_string()); // Save Length in $06
+                            self.emit("  LDY #0".to_string());
+                            self.emit(format!("{}:", copy_loop));
+                            self.emit("  CPY $06".to_string());
+                            self.emit(format!("  BEQ {}", copy_end));
+                            self.emit("  LDA ($02),Y".to_string());
+                            self.emit("  STA ($04),Y".to_string());
+                            self.emit("  INY".to_string());
+                            self.emit(format!("  JMP {}", copy_loop));
+                            self.emit(format!("{}:", copy_end));
+                            return Ok(());
+                        } else if base_name.eq_ignore_ascii_case("Sound")
+                            && member.eq_ignore_ascii_case("Stop")
+                        {
+                            self.emit("  JSR Sound_Init".to_string());
                             return Ok(());
                         }
                     }
@@ -5437,6 +5483,38 @@ impl CodeGenerator {
                             return Ok(DataType::Word);
                         } else {
                             self.emit("  EOR #$FF".to_string());
+                            self.emit("  LDX #0".to_string());
+                            return Ok(DataType::Byte);
+                        }
+                    } else if name.eq_ignore_ascii_case("BITSHL") || name.eq_ignore_ascii_case("BITSHR") {
+                        let t1 = self.generate_expression(&args[0])?;
+                        let is_16 = t1 == DataType::Word || t1 == DataType::Int;
+                        if is_16 {
+                            self.emit("  PHA".to_string());
+                            self.emit("  TXA".to_string());
+                            self.emit("  PHA".to_string());
+                        } else {
+                            self.emit("  PHA".to_string());
+                        }
+                        self.generate_expression(&args[1])?;
+                        self.emit("  STA $00".to_string());
+                        if is_16 {
+                            self.emit("  PLA".to_string());
+                            self.emit("  TAX".to_string());
+                            self.emit("  PLA".to_string());
+                            if name.eq_ignore_ascii_case("BITSHL") {
+                                self.emit("  JSR Math_Shl16".to_string());
+                            } else {
+                                self.emit("  JSR Math_Shr16".to_string());
+                            }
+                            return Ok(DataType::Word);
+                        } else {
+                            self.emit("  PLA".to_string());
+                            if name.eq_ignore_ascii_case("BITSHL") {
+                                self.emit("  JSR Math_Shl8".to_string());
+                            } else {
+                                self.emit("  JSR Math_Shr8".to_string());
+                            }
                             self.emit("  LDX #0".to_string());
                             return Ok(DataType::Byte);
                         }

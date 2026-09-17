@@ -275,5 +275,12 @@ Historical implementation summary: phases 31-38 were marked complete.
 - **Dev Loop 5: Frontend Debugger Enhancements & JS Unit Tests**:
     - Enhanced `PpuViewer.formatOamEntries` in `static/js/ppu_viewer.js` and added JS unit test in `tests/js/ppu_viewer.test.cjs`.
 
+- **Dev Loops (BITSHL/BITSHR, Memory.Copy, Sound.Stop, PPU.SetScroll, PpuViewer format OAM test)**:
+    - Added `BITSHL` and `BITSHR` bitwise shift intrinsic functions with 8-bit & 16-bit shift loops and compile-time constant folding (`tests/bit_shift_intrinsics_test.rs`).
+    - Added `Memory.Copy(src_addr, dst_addr, length)` intrinsic for fast RAM block copying (`tests/memory_copy_intrinsic_test.rs`).
+    - Added `Sound.Stop()` intrinsic invoking `Sound_Init` to stop active audio channels (`tests/sound_stop_test.rs`).
+    - Added `PPU.SetScroll(x, y)` intrinsic updating `$E0`/`$E1` shadow scroll registers (`tests/ppu_scroll_test.rs`).
+    - Enhanced `PpuViewer.formatOamEntries` in `static/js/ppu_viewer.js` to handle empty/null OAM buffer inputs and expanded JS unit tests in `tests/js/ppu_viewer.test.cjs`.
+
 - **Next Steps**:
-    - Run pre-commit checks and submit completed work.
+    - Continue expanding language built-ins and emulator features according to `DESIGN.md`.

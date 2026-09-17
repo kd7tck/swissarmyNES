@@ -198,17 +198,23 @@ class PpuViewer {
         const len = this.emulator.get_oam_data_len();
         const memory = new Uint8Array(window.wasmMemory.buffer, ptr, len);
 
+        this.oamList.innerHTML = PpuViewer.formatOamEntries(memory);
+    }
+
+    static formatOamEntries(memory) {
         let html = '';
         for (let i = 0; i < 64; i++) {
-            const y = memory[i*4];
-            const tile = memory[i*4 + 1];
-            const attr = memory[i*4 + 2];
-            const x = memory[i*4 + 3];
+            const y = memory[i * 4];
+            const tile = memory[i * 4 + 1];
+            const attr = memory[i * 4 + 2];
+            const x = memory[i * 4 + 3];
 
             // Highlight used sprites (Y < 240 usually)
             const color = y >= 240 ? '#555' : '#fff';
-            html += `<div style="color:${color}">Sprite ${i}: X=${x} Y=${y} Tile=$${tile.toString(16).toUpperCase()} Attr=${attr.toString(2)}</div>`;
+            const hexTile = tile.toString(16).toUpperCase().padStart(2, '0');
+            const binAttr = attr.toString(2).padStart(8, '0');
+            html += `<div style="color:${color}">Sprite ${i}: X=${x} Y=${y} Tile=$${hexTile} Attr=${binAttr}</div>`;
         }
-        this.oamList.innerHTML = html;
+        return html;
     }
 }

@@ -90,6 +90,22 @@ fn malformed_and_oversized_headers_fail_before_allocation() {
     for len in 0..16 {
         assert!(CartridgeInfo::parse(&vec![0; len]).is_err());
     }
+    // Invalid magic signature
+    let mut bad_magic = header();
+    bad_magic[0] = b'B';
+    assert_eq!(
+        CartridgeInfo::parse(&image(bad_magic, 16384)).unwrap_err(),
+        "Invalid iNES signature"
+    );
+
+    // Corrupted / unsupported iNES header variants (header[7] & 12 in {4, 12})
+    let mut bad_variant = header();
+    bad_variant[7] = 4;
+    assert_eq!(
+        CartridgeInfo::parse(&image(bad_variant, 16384)).unwrap_err(),
+        "Unsupported or corrupted iNES header variant"
+    );
+
     let mut h = header();
     h[7] = 8;
     h[9] = 15;

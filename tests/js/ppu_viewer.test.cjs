@@ -25,3 +25,22 @@ test('palette viewer consumes all 32 colors in two rows', () => {
     viewer.emulator.get_palettes_len = () => 124;
     assert.throws(() => viewer.drawPalettes(), /Invalid palette buffer/);
 });
+
+test('OAM entry formatting pads tile hex and attr binary correctly', () => {
+    const memory = new Uint8Array(256);
+    // Sprite 0: Y=10, Tile=0x0A, Attr=3, X=20
+    memory[0] = 10;
+    memory[1] = 0x0A;
+    memory[2] = 3;
+    memory[3] = 20;
+
+    // Sprite 1: Offscreen Y=240
+    memory[4] = 240;
+
+    const context = vm.createContext({window: {}});
+    vm.runInContext(fs.readFileSync('static/js/ppu_viewer.js', 'utf8') + '\nthis.Viewer = PpuViewer;', context);
+
+    const formatted = context.Viewer.formatOamEntries(memory);
+    assert.match(formatted, /Sprite 0: X=20 Y=10 Tile=\$0A Attr=00000011/);
+    assert.match(formatted, /color:#555/); // Offscreen sprite highlighted dim
+});

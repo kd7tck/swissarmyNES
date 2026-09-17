@@ -38,6 +38,13 @@ pub enum UnaryOperator {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum CaseCondition {
+    Value(Expression),
+    Range(Expression, Expression),
+    Is(BinaryOperator, Expression),
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum StatementKind {
     Let(Expression, Expression), // target, value (target must be lvalue)
     If(Expression, Vec<Statement>, Option<Vec<Statement>>), // condition, then_block, else_block
@@ -62,7 +69,7 @@ pub enum StatementKind {
     Restore(Option<String>), // RESTORE [Label]
     Select(
         Expression,
-        Vec<(Expression, Vec<Statement>)>,
+        Vec<(Vec<CaseCondition>, Vec<Statement>)>,
         Option<Vec<Statement>>,
     ), // SELECT CASE expr, cases, case_else
     WaitVBlank,
@@ -267,7 +274,7 @@ impl Statement {
     #[allow(non_snake_case)]
     pub fn Select(
         expr: Expression,
-        cases: Vec<(Expression, Vec<Statement>)>,
+        cases: Vec<(Vec<CaseCondition>, Vec<Statement>)>,
         else_block: Option<Vec<Statement>>,
     ) -> Self {
         Self {

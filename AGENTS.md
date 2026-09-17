@@ -311,5 +311,12 @@ Historical implementation summary: phases 31-38 were marked complete.
     - Added `PPU.SetScroll(x, y)` intrinsic updating `$E0`/`$E1` shadow scroll registers (`tests/ppu_scroll_test.rs`).
     - Enhanced `PpuViewer.formatOamEntries` in `static/js/ppu_viewer.js` to handle empty/null OAM buffer inputs and expanded JS unit tests in `tests/js/ppu_viewer.test.cjs`.
 
+- **Bug Fixes (SUB parameters, FOR loop step -1, SELECT CASE ranges/IS, Diagnostics, Nametable Injection)**:
+    - Fixed SUB parameter scope discarding in `CodeGenerator::generate_top_level` so parameter symbols remain registered in `symbol_table` with allocated RAM addresses during body codegen. Verified with `tests/sub_param_test.rs` and `rom_harness.py`.
+    - Fixed `FOR ... STEP -1` down-to-zero infinite loop bug on `BYTE` types by adding underflow/borrow checks (`BCC exit_label`) to decrement logic. Verified with `tests/for_loop_down_to_zero_test.rs` and `rom_harness.py`.
+    - Implemented `SELECT CASE` ranges (`CASE val1 TO val2`), comparisons (`CASE IS <op> val`), and comma-separated condition lists via the `CaseCondition` AST enum in `ast.rs`, `lexer.rs`, `parser.rs`, `analysis.rs`, `preprocessor.rs`, and `codegen.rs`. Verified with `tests/select_ranges_and_is_test.rs`.
+    - Fixed diagnostics cluster: added `BYTE` (0..255) and `INT` (-128..127) range validation for constant assignments in `SemanticAnalyzer`, division/modulo by zero compile-time checks, string literal max length (255 chars) enforcement, `NEXT <var>` mismatch error reporting in `Parser`, and fixed empty string `""` assembly emission (`db $00`) in `CodeGenerator`. Verified with `tests/diagnostics_and_string_test.rs`.
+    - Fixed nametable injection (A11) in `src/server/api.rs` to sequentially inject all provided nametables into RAM starting at `$D500` up to `$D900`. Verified with `tests/nametable_injection_test.rs`.
+
 - **Next Steps**:
     - Continue expanding language built-ins and emulator features according to `DESIGN.md`.

@@ -256,11 +256,10 @@ pub fn compile_source(
     injections.push((audio::SFX_TABLE_ADDR, sfx_data));
 
     // 4. Nametable Data at $D500 (NAMETABLE_ADDR)
-    // We only support one nametable for now (Nametable 0)
     if let Some(a) = &resolved_assets {
-        if let Some(nt) = a.nametables.first() {
+        let mut addr = NAMETABLE_ADDR;
+        for nt in &a.nametables {
             // Nametable data is 960 bytes + 64 bytes attr = 1024 bytes
-            // Check if data is valid length
             let mut nt_data = nt.data.clone();
             if nt_data.len() < 960 {
                 nt_data.resize(960, 0);
@@ -274,7 +273,11 @@ pub fn compile_source(
             full_nt.extend_from_slice(&nt_data[..960]);
             full_nt.extend_from_slice(&attr_data[..64]);
 
-            injections.push((NAMETABLE_ADDR, full_nt));
+            injections.push((addr, full_nt));
+            addr += 1024;
+            if addr >= audio::SFX_TABLE_ADDR {
+                break;
+            }
         }
     }
 

@@ -43,11 +43,15 @@ fn four_screen_mirroring_and_battery_flags() {
     let parsed = CartridgeInfo::parse(&image(h, 16384 + 8192)).unwrap();
     assert!(parsed.battery);
     assert!(parsed.four_screen);
+    assert!(parsed.has_battery_backup());
+    assert_eq!(parsed.total_prg_ram(), 8192);
 
     h[6] = 0x00;
     let parsed = CartridgeInfo::parse(&image(h, 16384 + 8192)).unwrap();
     assert!(!parsed.battery);
     assert!(!parsed.four_screen);
+    assert!(!parsed.has_battery_backup());
+    assert_eq!(parsed.total_prg_ram(), 8192);
 }
 
 #[test]

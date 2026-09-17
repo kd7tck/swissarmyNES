@@ -56,6 +56,14 @@ pub trait Mapper {
 }
 
 impl CartridgeInfo {
+    pub fn total_prg_ram(&self) -> usize {
+        self.prg_ram_bytes.saturating_add(self.prg_nvram_bytes)
+    }
+
+    pub fn has_battery_backup(&self) -> bool {
+        self.battery || self.prg_nvram_bytes > 0 || self.chr_nvram_bytes > 0
+    }
+
     pub fn parse(rom: &[u8]) -> Result<Self, String> {
         let header = rom.get(..16).ok_or("Truncated iNES header")?;
         if &header[..4] != b"NES\x1a" {

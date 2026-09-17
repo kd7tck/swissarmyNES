@@ -4080,37 +4080,92 @@ impl CodeGenerator {
                                 self.generate_expression(&args[0])?;
                                 self.emit("  STA $2001".to_string());
                                 return Ok(());
+                            } else if member.eq_ignore_ascii_case("SetScroll") {
+                                // Arg 0: X -> $E0
+                                self.generate_expression(&args[0])?;
+                                self.emit("  STA $E0".to_string());
+                                // Arg 1: Y -> $E1
+                                self.generate_expression(&args[1])?;
+                                self.emit("  STA $E1".to_string());
+                                return Ok(());
                             }
-                        } else if base_name.eq_ignore_ascii_case("Memory")
-                            && member.eq_ignore_ascii_case("Fill")
+                        } else if base_name.eq_ignore_ascii_case("Memory") {
+                            if member.eq_ignore_ascii_case("Fill") {
+                                // Memory.Fill(address, length, value)
+                                // 1. Value -> A
+                                self.generate_expression(&args[2])?;
+                                self.emit("  PHA".to_string()); // Save Value
+
+                                // 2. Length -> A (Byte or Low Byte of Word). Keep it
+                                // on the stack because address generation uses $00/$01.
+                                self.generate_expression(&args[1])?;
+                                self.emit("  PHA".to_string()); // Save Length
+
+                                // 3. Address -> $02/$03
+                                self.generate_address_expression(&args[0])?;
+
+                                // Loop: Fill memory from $02/$03 using Y index
+                                let fill_loop = self.new_label();
+                                let fill_end = self.new_label();
+                                self.emit("  PLA".to_string()); // Restore Length
+                                self.emit("  STA $04".to_string());
+                                self.emit("  PLA".to_string()); // Restore Value in A
+                                self.emit("  LDY #0".to_string());
+                                self.emit(format!("{}:", fill_loop));
+                                self.emit("  CPY $04".to_string());
+                                self.emit(format!("  BEQ {}", fill_end));
+                                self.emit("  STA ($02),Y".to_string());
+                                self.emit("  INY".to_string());
+                                self.emit(format!("  JMP {}", fill_loop));
+                                self.emit(format!("{}:", fill_end));
+                                return Ok(());
+                            } else if member.eq_ignore_ascii_case("Copy") {
+                                // Memory.Copy(src_address, dst_address, length)
+                                // Arg 2: length -> preserve on stack
+                                self.generate_expression(&args[2])?;
+                                self.emit("  PHA".to_string()); // Length on stack
+
+                                // Arg 1: dst_address -> $02/$03
+                                self.generate_address_expression(&args[1])?;
+                                self.emit("  LDA $02".to_string());
+                                self.emit("  PHA".to_string()); // Dst Low on stack
+                                self.emit("  LDA $03".to_string());
+                                self.emit("  PHA".to_string()); // Dst High on stack
+
+                                // Arg 0: src_address -> $00/$01
+                                self.generate_address_expression(&args[0])?;
+                                self.emit("  LDA $02".to_string());
+                                self.emit("  STA $00".to_string());
+                                self.emit("  LDA $03".to_string());
+                                self.emit("  STA $01".to_string());
+
+                                // Restore Dst to $02/$03
+                                self.emit("  PLA".to_string());
+                                self.emit("  STA $03".to_string());
+                                self.emit("  PLA".to_string());
+                                self.emit("  STA $02".to_string());
+
+                                // Restore Length
+                                self.emit("  PLA".to_string());
+                                self.emit("  STA $04".to_string());
+
+                                let copy_loop = self.new_label();
+                                let copy_end = self.new_label();
+                                self.emit("  LDY #0".to_string());
+                                self.emit(format!("{}:", copy_loop));
+                                self.emit("  CPY $04".to_string());
+                                self.emit(format!("  BEQ {}", copy_end));
+                                self.emit("  LDA ($00),Y".to_string());
+                                self.emit("  STA ($02),Y".to_string());
+                                self.emit("  INY".to_string());
+                                self.emit(format!("  JMP {}", copy_loop));
+                                self.emit(format!("{}:", copy_end));
+                                return Ok(());
+                            }
+                        } else if base_name.eq_ignore_ascii_case("Sound")
+                            && member.eq_ignore_ascii_case("Stop")
                         {
-                            // Memory.Fill(address, length, value)
-                            // 1. Value -> A
-                            self.generate_expression(&args[2])?;
-                            self.emit("  PHA".to_string()); // Save Value
-
-                            // 2. Length -> A (Byte or Low Byte of Word). Keep it
-                            // on the stack because address generation uses $00/$01.
-                            self.generate_expression(&args[1])?;
-                            self.emit("  PHA".to_string()); // Save Length
-
-                            // 3. Address -> $02/$03
-                            self.generate_address_expression(&args[0])?;
-
-                            // Loop: Fill memory from $02/$03 using Y index
-                            let fill_loop = self.new_label();
-                            let fill_end = self.new_label();
-                            self.emit("  PLA".to_string()); // Restore Length
-                            self.emit("  STA $04".to_string());
-                            self.emit("  PLA".to_string()); // Restore Value in A
-                            self.emit("  LDY #0".to_string());
-                            self.emit(format!("{}:", fill_loop));
-                            self.emit("  CPY $04".to_string());
-                            self.emit(format!("  BEQ {}", fill_end));
-                            self.emit("  STA ($02),Y".to_string());
-                            self.emit("  INY".to_string());
-                            self.emit(format!("  JMP {}", fill_loop));
-                            self.emit(format!("{}:", fill_end));
+                            self.emit("  JSR Sound_Init".to_string());
                             return Ok(());
                         }
                     }
@@ -5133,6 +5188,227 @@ impl CodeGenerator {
                                     self.emit("  LDX #0".to_string());
                                     return Ok(DataType::Byte);
                                 }
+                            } else if member.eq_ignore_ascii_case("Wrap") {
+                                let t_val = self.generate_expression(&args[0])?;
+                                let is_16_val = t_val == DataType::Word || t_val == DataType::Int;
+                                if is_16_val {
+                                    self.emit("  PHA".to_string());
+                                    self.emit("  TXA".to_string());
+                                    self.emit("  PHA".to_string());
+                                } else {
+                                    self.emit("  PHA".to_string());
+                                }
+                                let t_min = self.generate_expression(&args[1])?;
+                                let is_16_min = t_min == DataType::Word || t_min == DataType::Int;
+                                if is_16_min {
+                                    self.emit("  PHA".to_string());
+                                    self.emit("  TXA".to_string());
+                                    self.emit("  PHA".to_string());
+                                } else {
+                                    self.emit("  PHA".to_string());
+                                }
+                                let t_max = self.generate_expression(&args[2])?;
+                                let is_16_max = t_max == DataType::Word || t_max == DataType::Int;
+                                let is_16 = is_16_val || is_16_min || is_16_max;
+
+                                let wrap_done = self.new_label();
+                                let wrap_check_max = self.new_label();
+
+                                if is_16 {
+                                    if !is_16_max {
+                                        self.emit("  STA $04".to_string());
+                                        self.emit("  LDA #0".to_string());
+                                        self.emit("  STA $05".to_string());
+                                    } else {
+                                        self.emit("  STA $04".to_string());
+                                        self.emit("  STX $05".to_string());
+                                    }
+                                    if !is_16_min {
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $06".to_string());
+                                        self.emit("  LDA #0".to_string());
+                                        self.emit("  STA $07".to_string());
+                                    } else {
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $07".to_string());
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $06".to_string());
+                                    }
+                                    if !is_16_val {
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $02".to_string());
+                                        self.emit("  LDA #0".to_string());
+                                        self.emit("  STA $03".to_string());
+                                    } else {
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $03".to_string());
+                                        self.emit("  PLA".to_string());
+                                        self.emit("  STA $02".to_string());
+                                    }
+
+                                    self.emit("  SEC".to_string());
+                                    self.emit("  LDA $04".to_string());
+                                    self.emit("  SBC $06".to_string());
+                                    self.emit("  STA $08".to_string());
+                                    self.emit("  LDA $05".to_string());
+                                    self.emit("  SBC $07".to_string());
+                                    self.emit("  STA $09".to_string());
+
+                                    self.emit("  LDA $08".to_string());
+                                    self.emit("  ORA $09".to_string());
+                                    self.emit(format!("  BEQ {}", wrap_done));
+
+                                    self.emit("  SEC".to_string());
+                                    self.emit("  LDA $02".to_string());
+                                    self.emit("  SBC $06".to_string());
+                                    self.emit("  LDA $03".to_string());
+                                    self.emit("  SBC $07".to_string());
+                                    self.emit(format!("  BCS {}", wrap_check_max));
+
+                                    self.emit("  CLC".to_string());
+                                    self.emit("  LDA $02".to_string());
+                                    self.emit("  ADC $08".to_string());
+                                    self.emit("  STA $02".to_string());
+                                    self.emit("  LDA $03".to_string());
+                                    self.emit("  ADC $09".to_string());
+                                    self.emit("  STA $03".to_string());
+                                    self.emit(format!("  JMP {}", wrap_done));
+
+                                    self.emit(format!("{}:", wrap_check_max));
+                                    self.emit("  SEC".to_string());
+                                    self.emit("  LDA $02".to_string());
+                                    self.emit("  SBC $04".to_string());
+                                    self.emit("  LDA $03".to_string());
+                                    self.emit("  SBC $05".to_string());
+                                    self.emit(format!("  BCC {}", wrap_done));
+                                    self.emit(format!("  BEQ {}", wrap_done));
+
+                                    self.emit("  SEC".to_string());
+                                    self.emit("  LDA $02".to_string());
+                                    self.emit("  SBC $08".to_string());
+                                    self.emit("  STA $02".to_string());
+                                    self.emit("  LDA $03".to_string());
+                                    self.emit("  SBC $09".to_string());
+                                    self.emit("  STA $03".to_string());
+
+                                    self.emit(format!("{}:", wrap_done));
+                                    self.emit("  LDA $02".to_string());
+                                    self.emit("  LDX $03".to_string());
+                                    return Ok(if is_16_val { t_val } else { DataType::Word });
+                                } else {
+                                    self.emit("  STA $01".to_string()); // Max
+                                    self.emit("  PLA".to_string());
+                                    self.emit("  STA $00".to_string()); // Min
+                                    self.emit("  PLA".to_string()); // Val ($02)
+                                    self.emit("  STA $02".to_string());
+
+                                    self.emit("  SEC".to_string());
+                                    self.emit("  LDA $01".to_string());
+                                    self.emit("  SBC $00".to_string());
+                                    self.emit("  STA $03".to_string());
+                                    self.emit(format!("  BEQ {}", wrap_done));
+
+                                    self.emit("  LDA $02".to_string());
+                                    self.emit("  CMP $00".to_string());
+                                    self.emit(format!("  BCS {}", wrap_check_max));
+                                    self.emit("  CLC".to_string());
+                                    self.emit("  ADC $03".to_string());
+                                    self.emit("  STA $02".to_string());
+                                    self.emit(format!("  JMP {}", wrap_done));
+
+                                    self.emit(format!("{}:", wrap_check_max));
+                                    self.emit("  CMP $01".to_string());
+                                    self.emit(format!("  BCC {}", wrap_done));
+                                    self.emit(format!("  BEQ {}", wrap_done));
+                                    self.emit("  SEC".to_string());
+                                    self.emit("  SBC $03".to_string());
+                                    self.emit("  STA $02".to_string());
+
+                                    self.emit(format!("{}:", wrap_done));
+                                    self.emit("  LDA $02".to_string());
+                                    self.emit("  LDX #0".to_string());
+                                    return Ok(DataType::Byte);
+                                }
+                            } else if member.eq_ignore_ascii_case("Lerp") {
+                                let t_a = self.generate_expression(&args[0])?;
+                                let is_16_a = t_a == DataType::Word || t_a == DataType::Int;
+                                if is_16_a {
+                                    self.emit("  PHA".to_string());
+                                    self.emit("  TXA".to_string());
+                                    self.emit("  PHA".to_string());
+                                } else {
+                                    self.emit("  PHA".to_string());
+                                }
+                                let t_b = self.generate_expression(&args[1])?;
+                                let is_16_b = t_b == DataType::Word || t_b == DataType::Int;
+                                if is_16_b {
+                                    self.emit("  PHA".to_string());
+                                    self.emit("  TXA".to_string());
+                                    self.emit("  PHA".to_string());
+                                } else {
+                                    self.emit("  PHA".to_string());
+                                }
+                                let _ = self.generate_expression(&args[2])?;
+
+                                self.emit("  STA $00".to_string());
+                                self.emit("  LDA #0".to_string());
+                                self.emit("  STA $01".to_string());
+
+                                if !is_16_b {
+                                    self.emit("  PLA".to_string());
+                                    self.emit("  STA $04".to_string());
+                                    self.emit("  LDA #0".to_string());
+                                    self.emit("  STA $05".to_string());
+                                } else {
+                                    self.emit("  PLA".to_string());
+                                    self.emit("  STA $05".to_string());
+                                    self.emit("  PLA".to_string());
+                                    self.emit("  STA $04".to_string());
+                                }
+
+                                if !is_16_a {
+                                    self.emit("  PLA".to_string());
+                                    self.emit("  STA $02".to_string());
+                                    self.emit("  LDA #0".to_string());
+                                    self.emit("  STA $03".to_string());
+                                } else {
+                                    self.emit("  PLA".to_string());
+                                    self.emit("  STA $03".to_string());
+                                    self.emit("  PLA".to_string());
+                                    self.emit("  STA $02".to_string());
+                                }
+
+                                self.emit("  SEC".to_string());
+                                self.emit("  LDA $04".to_string());
+                                self.emit("  SBC $02".to_string());
+                                self.emit("  PHA".to_string());
+                                self.emit("  LDA $05".to_string());
+                                self.emit("  SBC $03".to_string());
+                                self.emit("  TAX".to_string());
+                                self.emit("  PLA".to_string());
+
+                                self.emit("  JSR Math_Mul16".to_string());
+
+                                // Add the base value to the 16-bit product.
+                                // Preserve each product byte while adding low first
+                                // so the carry reaches the high-byte addition.
+                                self.emit("  PHA".to_string()); // Product low
+                                self.emit("  TXA".to_string()); // Product high
+                                self.emit("  STA $09".to_string());
+                                self.emit("  PLA".to_string());
+                                self.emit("  CLC".to_string());
+                                self.emit("  ADC $02".to_string());
+                                self.emit("  STA $08".to_string());
+                                self.emit("  LDA $09".to_string());
+                                self.emit("  ADC $03".to_string());
+                                self.emit("  TAX".to_string());
+                                self.emit("  LDA $08".to_string());
+
+                                return Ok(if is_16_a || is_16_b {
+                                    t_a
+                                } else {
+                                    DataType::Byte
+                                });
                             }
                         }
                         if base_name.eq_ignore_ascii_case("Controller") {
@@ -5437,6 +5713,45 @@ impl CodeGenerator {
                             return Ok(DataType::Word);
                         } else {
                             self.emit("  EOR #$FF".to_string());
+                            self.emit("  LDX #0".to_string());
+                            return Ok(DataType::Byte);
+                        }
+                    } else if name.eq_ignore_ascii_case("BITSHL")
+                        || name.eq_ignore_ascii_case("BITSHR")
+                    {
+                        let is_shl = name.eq_ignore_ascii_case("BITSHL");
+                        let t1 = self.generate_expression(&args[0])?;
+                        let is_16 = t1 == DataType::Word || t1 == DataType::Int;
+                        if is_16 {
+                            self.emit("  PHA".to_string());
+                            self.emit("  TXA".to_string());
+                            self.emit("  PHA".to_string());
+                        } else {
+                            self.emit("  PHA".to_string());
+                        }
+                        let _ = self.generate_expression(&args[1])?;
+                        // Keep runtime shifts consistent with constant folding:
+                        // counts wrap at 32 instead of executing an unnecessary
+                        // full byte-count loop when the low five bits are zero.
+                        self.emit("  AND #$1F".to_string());
+                        self.emit("  STA $00".to_string());
+                        if is_16 {
+                            self.emit("  PLA".to_string());
+                            self.emit("  TAX".to_string());
+                            self.emit("  PLA".to_string());
+                            if is_shl {
+                                self.emit("  JSR Math_Shl16".to_string());
+                            } else {
+                                self.emit("  JSR Math_Shr16".to_string());
+                            }
+                            return Ok(DataType::Word);
+                        } else {
+                            self.emit("  PLA".to_string());
+                            if is_shl {
+                                self.emit("  JSR Math_Shl8".to_string());
+                            } else {
+                                self.emit("  JSR Math_Shr8".to_string());
+                            }
                             self.emit("  LDX #0".to_string());
                             return Ok(DataType::Byte);
                         }

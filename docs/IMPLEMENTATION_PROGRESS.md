@@ -1,3 +1,30 @@
+# Dev Loop 5 — PPU Viewer Attribute Grid Formatting Helper & JS Unit Tests, September 16, 2026
+
+- Added `PpuViewer.formatAttributeGrid(paletteData)` static helper function to `static/js/ppu_viewer.js`.
+- Added unit tests in `tests/js/ppu_attribute.test.cjs`.
+- All Node JS unit tests pass.
+
+# Dev Loop 4 — Cartridge Header Helper Methods & Battery Flag Verification, September 16, 2026
+
+- Added `total_prg_ram()` and `has_battery_backup()` helper methods to `CartridgeInfo` in `emulator/src/cartridge.rs`.
+- Added test coverage in `emulator/tests/cartridge.rs`.
+- All `swiss-emulator` tests pass.
+
+# Dev Loop 3 — Add Math.Wrap and Math.Lerp Intrinsics, September 16, 2026
+
+- Added `Math.Wrap(val, min, max)` and `Math.Lerp(a, b, t)` intrinsics in `src/compiler/analysis.rs` and 6502 assembly codegen in `src/compiler/codegen.rs`.
+- Added test coverage in `tests/math_intrinsics_test.rs`.
+
+# Dev Loop 2 — Add Memory Copy Intrinsic (Memory.Copy), September 16, 2026
+
+- Added `Memory.Copy(src_address, dst_address, length)` intrinsic support in `src/compiler/analysis.rs` and 6502 pointer block copy loop codegen in `src/compiler/codegen.rs`.
+- Added integration test `test_memory_copy_codegen` in `tests/memory_intrinsics_test.rs`.
+
+# Dev Loop 1 — Add Bitwise Shift Intrinsics (BITSHL, BITSHR), September 16, 2026
+
+- Added `BITSHL(val, count)` and `BITSHR(val, count)` bitwise shift intrinsics with constant folding, semantic analysis, and 6502 assembly code generation in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Added test coverage in `tests/bitwise_shift_test.rs`.
+
 # Remote branch merge and Memory.Fill fix — September 16, 2026
 
 - Refreshed GitHub refs and merged both additional remote branches (`dev-loops-intrinsics-diagnostics-13998583794852208848` and `jules-11030633264594705231-c27375b8`) into the updated `main` at `6134fa4`.

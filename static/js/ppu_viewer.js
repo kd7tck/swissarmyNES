@@ -217,4 +217,26 @@ class PpuViewer {
         }
         return html;
     }
+
+    static formatAttributeGrid(paletteData) {
+        if (!paletteData || paletteData.length < 32) return '';
+        let result = '';
+        for (let bg = 0; bg < 4; bg++) {
+            const sub = [];
+            for (let c = 0; c < 4; c++) {
+                const idx = bg * 4 + c;
+                sub.push('$' + paletteData[idx].toString(16).toUpperCase().padStart(2, '0'));
+            }
+            result += `BG ${bg}: ${sub.join(' ')}\n`;
+        }
+        for (let sp = 0; sp < 4; sp++) {
+            const sub = [];
+            for (let c = 0; c < 4; c++) {
+                const idx = 16 + sp * 4 + c;
+                sub.push('$' + paletteData[idx].toString(16).toUpperCase().padStart(2, '0'));
+            }
+            result += `SP ${sp}: ${sub.join(' ')}\n`;
+        }
+        return result.trim();
+    }
 }

@@ -98,3 +98,58 @@ fn test_memory_fill_preserves_length_for_indexed_destination() {
     assert!(length_save > address_index);
     assert!(code.iter().any(|line| line.contains("CPY $04")));
 }
+
+#[test]
+fn test_memory_copy_codegen() {
+    let mut st = SymbolTable::new();
+    st.define(
+        "src_buf".to_string(),
+        DataType::Array(Box::new(DataType::Byte), 10),
+        SymbolKind::Variable,
+    )
+    .unwrap();
+    st.define(
+        "dst_buf".to_string(),
+        DataType::Array(Box::new(DataType::Byte), 10),
+        SymbolKind::Variable,
+    )
+    .unwrap();
+
+    let program = Program {
+        declarations: vec![
+            TopLevel::Dim(
+                "src_buf".to_string(),
+                DataType::Array(Box::new(DataType::Byte), 10),
+                None,
+            ),
+            TopLevel::Dim(
+                "dst_buf".to_string(),
+                DataType::Array(Box::new(DataType::Byte), 10),
+                None,
+            ),
+            TopLevel::Sub(
+                "Main".to_string(),
+                vec![],
+                vec![Statement::Call(
+                    Expression::MemberAccess(
+                        Box::new(Expression::Identifier("Memory".to_string())),
+                        "Copy".to_string(),
+                    ),
+                    vec![
+                        Expression::Identifier("src_buf".to_string()),
+                        Expression::Identifier("dst_buf".to_string()),
+                        Expression::Integer(10),
+                    ],
+                )],
+            ),
+        ],
+    };
+
+    let mut cg = CodeGenerator::new(st);
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
+
+    // Verify copy loop generation
+    assert!(code.iter().any(|line| line.contains("LDA ($00),Y")));
+    assert!(code.iter().any(|line| line.contains("STA ($02),Y")));
+    assert!(code.iter().any(|line| line.contains("CPY $04")));
+}

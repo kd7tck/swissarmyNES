@@ -176,21 +176,17 @@ impl SemanticAnalyzer {
                         let folded = Self::fold_constants_expr(init);
                         if let Expression::Integer(val) = folded {
                             match dtype {
-                                DataType::Byte => {
-                                    if !(0..=255).contains(&val) {
-                                        self.errors.push(format!(
-                                            "Constant value {} out of range for BYTE (0 to 255)",
-                                            val
-                                        ));
-                                    }
+                                DataType::Byte if !(0..=255).contains(&val) => {
+                                    self.errors.push(format!(
+                                        "Constant value {} out of range for BYTE (0 to 255)",
+                                        val
+                                    ));
                                 }
-                                DataType::Int => {
-                                    if !(-128..=127).contains(&val) {
-                                        self.errors.push(format!(
-                                            "Constant value {} out of range for INT (-128 to 127)",
-                                            val
-                                        ));
-                                    }
+                                DataType::Int if !(-128..=127).contains(&val) => {
+                                    self.errors.push(format!(
+                                        "Constant value {} out of range for INT (-128 to 127)",
+                                        val
+                                    ));
                                 }
                                 _ => {}
                             }
@@ -372,21 +368,17 @@ impl SemanticAnalyzer {
                 if let Expression::Integer(val) = folded {
                     if let Some(dtype) = target_type {
                         match dtype {
-                            DataType::Byte => {
-                                if !(0..=255).contains(&val) {
-                                    self.errors.push(format!(
-                                        "Constant value {} out of range for BYTE (0 to 255)",
-                                        val
-                                    ));
-                                }
+                            DataType::Byte if !(0..=255).contains(&val) => {
+                                self.errors.push(format!(
+                                    "Constant value {} out of range for BYTE (0 to 255)",
+                                    val
+                                ));
                             }
-                            DataType::Int => {
-                                if !(-128..=127).contains(&val) {
-                                    self.errors.push(format!(
-                                        "Constant value {} out of range for INT (-128 to 127)",
-                                        val
-                                    ));
-                                }
+                            DataType::Int if !(-128..=127).contains(&val) => {
+                                self.errors.push(format!(
+                                    "Constant value {} out of range for INT (-128 to 127)",
+                                    val
+                                ));
                             }
                             _ => {}
                         }

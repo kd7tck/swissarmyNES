@@ -60,7 +60,33 @@ pub async fn compile(Json(payload): Json<CompileRequest>) -> impl IntoResponse {
     }
 }
 
+pub const MAX_SOURCE_LENGTH: usize = 1024 * 1024; // 1 MB
+
 pub fn compile_source(
+    source: Option<String>,
+    project_name: Option<String>,
+    assets: Option<ProjectAssets>,
+) -> Result<(Vec<u8>, SourceMap), String> {
+    if let Some(ref s) = source {
+        if s.len() > MAX_SOURCE_LENGTH {
+            return Err(format!(
+                "Source code exceeds maximum length limit of {} bytes",
+                MAX_SOURCE_LENGTH
+            ));
+        }
+    }
+    let handle = std::thread::Builder::new()
+        .name("compile_thread".to_string())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(move || compile_source_internal(source, project_name, assets))
+        .map_err(|e| format!("Failed to spawn compiler thread: {}", e))?;
+
+    handle
+        .join()
+        .map_err(|_| "Compiler thread panicked or overflowed stack".to_string())?
+}
+
+fn compile_source_internal(
     source: Option<String>,
     project_name: Option<String>,
     assets: Option<ProjectAssets>,

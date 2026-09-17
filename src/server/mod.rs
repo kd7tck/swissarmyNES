@@ -1,4 +1,5 @@
 use axum::{
+    extract::DefaultBodyLimit,
     routing::{get, post},
     Router,
 };
@@ -9,6 +10,7 @@ pub mod project;
 
 pub fn app() -> Router {
     Router::new()
+        .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
         .route("/api/compile", post(api::compile))
         .route(
             "/api/projects",

@@ -6,7 +6,7 @@ All items start pending. Historical roadmap completion labels do not check these
 
 ## Foundation gates
 
-- [ ] M0: baseline recaptured against the developer's actual HEAD; current roadmap numbering reconciled.
+- [x] M0: baseline recaptured against the developer's actual HEAD (355cb1e); current roadmap numbering reconciled.
 - [ ] R01: native host matrix, workspace checks, pinned WASM generation, browser harness, clean setup.
 - [ ] R02: previously failing API fixtures now compile and boot; production/legacy helpers unified.
 - [ ] R03: bank windows, reserved RAM, asset lengths, overflow, vectors, and deterministic output verified.

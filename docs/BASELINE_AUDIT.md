@@ -2,13 +2,31 @@
 
 Repository: <https://github.com/kd7tck/swissarmyNES>
 
-Audited commit: `4610516840d7991bce7e1d879e1f4e2fa831f10e`
+Current HEAD examined: `355cb1e` (2026-09-17) — Supersedes commit `4610516` (2026-09-12).
 
-Commit subject: `Merge pull request #146 from kd7tck/update-design-roadmap-7977881238202525954`
+## Re-baseline Status at HEAD (355cb1e)
 
-Commit date: 2026-09-12. Audit: September 12–13, 2026. Local checkout: `D:\AI github\swissarmyNES`.
+The audit issues previously blocking `POST /api/compile` on minimal programs are closed at HEAD:
+- Minimal `SUB Main()\nEND SUB`: Returns HTTP 200 (valid 139,280-byte MMC1 ROM).
+- WORD math `LET w = 1000 + 500`: Returns HTTP 200 (correct 1500 result at `$05C0` in RAM).
+- Controller call `Controller.Read()`: Returns HTTP 200 (emits runtime helpers in switchable bank).
 
-This report records observations made while preparing the [developer handoff](DEVELOPER_HANDOFF_THROUGH_PHASE_40.md). Application source was not repaired as part of this planning task. The acceptance checklist is intentionally pending.
+### Audit Item Resolution Summary
+
+- **Closed at HEAD**: A01 (compile_source invokes generate_banks), A02 (helper availability in banked path), A03 (current_prg_bank defined), A04 (RAM allocation bounds error past `$07F0`), A05 (versioned LinkedSourceMap contract), A22 (3-OS CI matrix).
+- **Open at HEAD**: A23 (empty project/file name validation).
+- **New Findings Identified**:
+  - **F1**: Parser/analyzer/codegen recursion depth guard required to prevent process SIGABRT on deeply nested inputs.
+  - **F2**: Tracked WASM and binary test artifacts in git despite `.gitignore`.
+  - **F3/F4**: MMC1 default ROM size and mirroring configuration.
+  - **F5**: Constant division/modulo by zero compile-time diagnostic.
+  - **SUB parameters**: Scope retention issue during codegen.
+  - **FOR loop step**: Unsigned underflow on `FOR i = 10 TO 0 STEP -1` with `BYTE`/`WORD`.
+  - **SELECT CASE**: Support for `TO` ranges and `IS` comparisons in parser/codegen.
+
+---
+
+Historical record below reflects initial audit state at commit `4610516840d7991bce7e1d879e1f4e2fa831f10e`:
 
 ## Executed checks
 

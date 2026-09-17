@@ -371,6 +371,9 @@ pub fn delete_file(project_name: &str, file_name: &str) -> Result<(), String> {
 }
 
 fn validate_project_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("Invalid project name: Project name cannot be empty".to_string());
+    }
     if !name
         .chars()
         .all(|c| (c.is_ascii_lowercase() || c.is_ascii_digit()) || c == '_' || c == '-')
@@ -381,6 +384,9 @@ fn validate_project_name(name: &str) -> Result<(), String> {
 }
 
 fn validate_filename(name: &str) -> Result<(), String> {
+    if name.is_empty() || name == "." || name == ".." {
+        return Err("Invalid filename: Filename cannot be empty, '.' or '..'".to_string());
+    }
     if name.contains('/') || name.contains('\\') || name.contains("..") {
         return Err("Invalid filename: Paths not allowed".to_string());
     }

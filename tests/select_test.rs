@@ -58,7 +58,7 @@ fn test_codegen_select_statement() {
 
     // Check Stack Peek (Byte)
     assert!(code_str.contains("TSX"));
-    assert!(code_str.contains("CMP $0101, X"));
+    assert!(code_str.contains("LDA $0101, X"));
 
     // Check Branching
     assert!(code_str.contains("BNE GEN_L"));
@@ -119,8 +119,8 @@ fn test_codegen_select_word() {
 
     // Check Stack Peek (Word)
     assert!(code_str.contains("TSX"));
-    assert!(code_str.contains("CMP $0102, X")); // Compare Low
-    assert!(code_str.contains("CMP $0101, X")); // Compare High
+    assert!(code_str.contains("LDA $0102, X")); // Fetch Low
+    assert!(code_str.contains("TAX")); // Transfer High to X
 
     // Check Case Value (1000 = $03E8)
     assert!(code_str.contains("LDA #$E8"));

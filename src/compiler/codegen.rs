@@ -1,7 +1,7 @@
 // KEEP
 use crate::compiler::ast::{
-    BinaryOperator, DataType, Expression, Program, Statement, StatementKind, TopLevel,
-    TopLevelKind, UnaryOperator,
+    BinaryOperator, CaseCondition, DataType, Expression, Program, Statement, StatementKind,
+    TopLevel, TopLevelKind, UnaryOperator,
 };
 use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 use std::collections::HashMap;
@@ -3079,7 +3079,11 @@ impl CodeGenerator {
         for (content, label) in literals {
             self.emit(format!("{}:", label));
             let bytes: Vec<String> = content.bytes().map(|b| format!("${:02X}", b)).collect();
-            self.emit(format!("  db {}, $00", bytes.join(", ")));
+            if bytes.is_empty() {
+                self.emit("  db $00".to_string());
+            } else {
+                self.emit(format!("  db {}, $00", bytes.join(", ")));
+            }
         }
         self.emit("".to_string());
     }
@@ -3574,8 +3578,17 @@ impl CodeGenerator {
             StatementKind::PlaySfx(expr) => self.collect_strings_expr(expr),
             StatementKind::Select(expr, cases, else_b) => {
                 self.collect_strings_expr(expr);
-                for (val, block) in cases {
-                    self.collect_strings_expr(val);
+                for (conditions, block) in cases {
+                    for cond in conditions {
+                        match cond {
+                            CaseCondition::Value(val) => self.collect_strings_expr(val),
+                            CaseCondition::Range(start, end) => {
+                                self.collect_strings_expr(start);
+                                self.collect_strings_expr(end);
+                            }
+                            CaseCondition::Is(_, val) => self.collect_strings_expr(val),
+                        }
+                    }
                     self.collect_strings_block(block);
                 }
                 if let Some(b) = else_b {
@@ -3736,9 +3749,21 @@ impl CodeGenerator {
         ));
         self.select_stack_depth = 0;
         match &decl.kind {
-            TopLevelKind::Sub(name, _, body) => {
+            TopLevelKind::Sub(name, params, body) => {
                 self.emit(format!("{}:", name));
                 self.symbol_table.enter_scope();
+                if let Some((_, sig_params)) = self.sub_signatures.get(name).cloned() {
+                    for ((param_name, param_type), (addr, _)) in
+                        params.iter().zip(sig_params.iter())
+                    {
+                        self.symbol_table.define(
+                            param_name.clone(),
+                            param_type.clone(),
+                            SymbolKind::Param,
+                        )?;
+                        self.symbol_table.assign_address(param_name, *addr)?;
+                    }
+                }
                 self.generate_block(body)?;
                 self.symbol_table.exit_scope();
                 self.emit("  RTS".to_string());
@@ -4284,19 +4309,102 @@ impl CodeGenerator {
                 self.generate_block(body)?;
 
                 // Increment: var = var + step
-                let increment = Statement {
-                    source_file: stmt.source_file.clone(),
-                    kind: StatementKind::Let(
-                        Expression::Identifier(var_name.clone()),
-                        Expression::BinaryOp(
-                            Box::new(Expression::Identifier(var_name.clone())),
-                            BinaryOperator::Add,
-                            Box::new(step_val_expr),
-                        ),
-                    ),
-                    line: self.current_line,
+                let (var_addr, var_type) = if let Some(sym) = self.symbol_table.resolve(var_name) {
+                    let addr = sym.address.ok_or_else(|| {
+                        format!("Address not assigned for variable '{}'", var_name)
+                    })?;
+                    (addr, sym.data_type.clone())
+                } else {
+                    return Err(format!("Undefined loop variable '{}'", var_name));
                 };
-                self.generate_statement(&increment)?;
+
+                match var_type {
+                    DataType::Byte | DataType::Int => {
+                        if is_negative_step {
+                            let abs_step = match &step_val_expr {
+                                Expression::Integer(val) => val.unsigned_abs() as u8,
+                                Expression::UnaryOp(UnaryOperator::Negate, inner) => {
+                                    if let Expression::Integer(val) = **inner {
+                                        val.unsigned_abs() as u8
+                                    } else {
+                                        1
+                                    }
+                                }
+                                _ => 1,
+                            };
+                            self.emit(format!("  LDA ${:04X}", var_addr));
+                            self.emit("  SEC".to_string());
+                            self.emit(format!("  SBC #{}", abs_step));
+                            self.emit(format!("  STA ${:04X}", var_addr));
+                            self.emit(format!("  BCC {}", exit_label));
+                        } else {
+                            let step_num = match &step_val_expr {
+                                Expression::Integer(val) => *val as u8,
+                                _ => 1,
+                            };
+                            self.emit(format!("  LDA ${:04X}", var_addr));
+                            self.emit("  CLC".to_string());
+                            self.emit(format!("  ADC #{}", step_num));
+                            self.emit(format!("  STA ${:04X}", var_addr));
+                            self.emit(format!("  BCS {}", exit_label));
+                        }
+                    }
+                    DataType::Word => {
+                        if is_negative_step {
+                            let abs_step = match &step_val_expr {
+                                Expression::Integer(val) => val.unsigned_abs() as u16,
+                                Expression::UnaryOp(UnaryOperator::Negate, inner) => {
+                                    if let Expression::Integer(val) = **inner {
+                                        val.unsigned_abs() as u16
+                                    } else {
+                                        1
+                                    }
+                                }
+                                _ => 1,
+                            };
+                            let low = (abs_step & 0xFF) as u8;
+                            let high = ((abs_step >> 8) & 0xFF) as u8;
+                            self.emit(format!("  LDA ${:04X}", var_addr));
+                            self.emit("  SEC".to_string());
+                            self.emit(format!("  SBC #{}", low));
+                            self.emit(format!("  STA ${:04X}", var_addr));
+                            self.emit(format!("  LDA ${:04X}", var_addr + 1));
+                            self.emit(format!("  SBC #{}", high));
+                            self.emit(format!("  STA ${:04X}", var_addr + 1));
+                            self.emit(format!("  BCC {}", exit_label));
+                        } else {
+                            let step_num = match &step_val_expr {
+                                Expression::Integer(val) => *val as u16,
+                                _ => 1,
+                            };
+                            let low = (step_num & 0xFF) as u8;
+                            let high = ((step_num >> 8) & 0xFF) as u8;
+                            self.emit(format!("  LDA ${:04X}", var_addr));
+                            self.emit("  CLC".to_string());
+                            self.emit(format!("  ADC #{}", low));
+                            self.emit(format!("  STA ${:04X}", var_addr));
+                            self.emit(format!("  LDA ${:04X}", var_addr + 1));
+                            self.emit(format!("  ADC #{}", high));
+                            self.emit(format!("  STA ${:04X}", var_addr + 1));
+                            self.emit(format!("  BCS {}", exit_label));
+                        }
+                    }
+                    _ => {
+                        let increment = Statement {
+                            source_file: stmt.source_file.clone(),
+                            kind: StatementKind::Let(
+                                Expression::Identifier(var_name.clone()),
+                                Expression::BinaryOp(
+                                    Box::new(Expression::Identifier(var_name.clone())),
+                                    BinaryOperator::Add,
+                                    Box::new(step_val_expr),
+                                ),
+                            ),
+                            line: self.current_line,
+                        };
+                        self.generate_statement(&increment)?;
+                    }
+                }
 
                 self.emit(format!("  JMP {}", loop_label));
                 self.emit(format!("{}:", exit_label));
@@ -4433,38 +4541,155 @@ impl CodeGenerator {
                 self.select_stack_depth += pushed_bytes;
 
                 // 3. Generate Checks
-                for (case_val, case_body) in cases {
+                for (conditions, case_body) in cases {
+                    let match_label = self.new_label();
                     let next_case = self.new_label();
 
-                    // Eval Case Value -> A/X
-                    self.generate_expression(case_val)?;
+                    for cond in conditions {
+                        let skip_cond = self.new_label();
+                        match expr_type {
+                            DataType::Byte | DataType::Bool | DataType::Int | DataType::Enum(_) => {
+                                match cond {
+                                    CaseCondition::Value(val_expr) => {
+                                        self.generate_expression(val_expr)?;
+                                        self.emit("  TSX".to_string());
+                                        self.emit("  CMP $0101, X".to_string());
+                                        self.emit(format!("  BEQ {}", match_label));
+                                    }
+                                    CaseCondition::Is(op, val_expr) => {
+                                        self.generate_expression(val_expr)?;
+                                        self.emit("  STA $00".to_string());
+                                        self.emit("  TSX".to_string());
+                                        self.emit("  LDA $0101, X".to_string());
+                                        self.emit("  SEC".to_string());
+                                        self.emit("  SBC $00".to_string());
+                                        match op {
+                                            BinaryOperator::Equal => {
+                                                self.emit(format!("  BEQ {}", match_label));
+                                            }
+                                            BinaryOperator::NotEqual => {
+                                                self.emit(format!("  BNE {}", match_label));
+                                            }
+                                            BinaryOperator::LessThan => {
+                                                self.emit(format!("  BCC {}", match_label));
+                                            }
+                                            BinaryOperator::GreaterThanOrEqual => {
+                                                self.emit(format!("  BCS {}", match_label));
+                                            }
+                                            BinaryOperator::GreaterThan => {
+                                                self.emit(format!("  BCC {}", skip_cond));
+                                                self.emit(format!("  BNE {}", match_label));
+                                            }
+                                            BinaryOperator::LessThanOrEqual => {
+                                                self.emit(format!("  BCC {}", match_label));
+                                                self.emit(format!("  BEQ {}", match_label));
+                                            }
+                                            _ => {}
+                                        }
+                                        self.emit(format!("{}:", skip_cond));
+                                    }
+                                    CaseCondition::Range(start_expr, end_expr) => {
+                                        self.generate_expression(start_expr)?;
+                                        self.emit("  STA $00".to_string());
+                                        self.emit("  TSX".to_string());
+                                        self.emit("  LDA $0101, X".to_string());
+                                        self.emit("  SEC".to_string());
+                                        self.emit("  SBC $00".to_string());
+                                        self.emit(format!("  BCC {}", skip_cond));
 
-                    // Compare (Stack vs A/X)
-                    self.emit("  TSX".to_string());
+                                        self.generate_expression(end_expr)?;
+                                        self.emit("  STA $00".to_string());
+                                        self.emit("  TSX".to_string());
+                                        self.emit("  LDA $0101, X".to_string());
+                                        self.emit("  SEC".to_string());
+                                        self.emit("  SBC $00".to_string());
+                                        self.emit(format!("  BCC {}", match_label));
+                                        self.emit(format!("  BEQ {}", match_label));
+                                        self.emit(format!("{}:", skip_cond));
+                                    }
+                                }
+                            }
+                            _ => match cond {
+                                CaseCondition::Value(val_expr) => {
+                                    self.generate_expression(val_expr)?;
+                                    self.emit("  STX $01".to_string());
+                                    self.emit("  TSX".to_string());
+                                    self.emit("  CMP $0102, X".to_string());
+                                    self.emit(format!("  BNE {}", skip_cond));
+                                    self.emit("  LDA $01".to_string());
+                                    self.emit("  CMP $0101, X".to_string());
+                                    self.emit(format!("  BEQ {}", match_label));
+                                    self.emit(format!("{}:", skip_cond));
+                                }
+                                CaseCondition::Is(op, val_expr) => {
+                                    self.generate_expression(val_expr)?;
+                                    self.emit("  STA $00".to_string());
+                                    self.emit("  STX $01".to_string());
+                                    self.emit("  TSX".to_string());
+                                    self.emit("  LDA $0102, X".to_string());
+                                    self.emit("  SEC".to_string());
+                                    self.emit("  SBC $00".to_string());
+                                    self.emit("  LDA $0101, X".to_string());
+                                    self.emit("  SBC $01".to_string());
+                                    match op {
+                                        BinaryOperator::Equal => {
+                                            self.emit(format!("  BEQ {}", match_label));
+                                        }
+                                        BinaryOperator::NotEqual => {
+                                            self.emit(format!("  BNE {}", match_label));
+                                        }
+                                        BinaryOperator::LessThan => {
+                                            self.emit(format!("  BCC {}", match_label));
+                                        }
+                                        BinaryOperator::GreaterThanOrEqual => {
+                                            self.emit(format!("  BCS {}", match_label));
+                                        }
+                                        BinaryOperator::GreaterThan => {
+                                            self.emit(format!("  BCC {}", skip_cond));
+                                            self.emit(format!("  BNE {}", match_label));
+                                        }
+                                        BinaryOperator::LessThanOrEqual => {
+                                            self.emit(format!("  BCC {}", match_label));
+                                            self.emit(format!("  BEQ {}", match_label));
+                                        }
+                                        _ => {}
+                                    }
+                                    self.emit(format!("{}:", skip_cond));
+                                }
+                                CaseCondition::Range(start_expr, end_expr) => {
+                                    self.generate_expression(start_expr)?;
+                                    self.emit("  STA $00".to_string());
+                                    self.emit("  STX $01".to_string());
+                                    self.emit("  TSX".to_string());
+                                    self.emit("  LDA $0102, X".to_string());
+                                    self.emit("  SEC".to_string());
+                                    self.emit("  SBC $00".to_string());
+                                    self.emit("  LDA $0101, X".to_string());
+                                    self.emit("  SBC $01".to_string());
+                                    self.emit(format!("  BCC {}", skip_cond));
 
-                    match expr_type {
-                        DataType::Byte | DataType::Bool | DataType::Int | DataType::Enum(_) => {
-                            // A has Case Val. Stack has Select Val at $0101,X
-                            self.emit("  CMP $0101, X".to_string());
-                            self.emit(format!("  BNE {}", next_case));
-                        }
-                        _ => {
-                            // A=Low, X=High of Case Val.
-                            // Stack: High at 101, Low at 102.
-                            // We must save X (High Byte) because TSX clobbers it.
-                            self.emit("  STX $01".to_string()); // Save High
-                            self.emit("  TSX".to_string());
-
-                            self.emit("  CMP $0102, X".to_string()); // Compare Low
-                            self.emit(format!("  BNE {}", next_case));
-
-                            self.emit("  LDA $01".to_string()); // Restore High
-                            self.emit("  CMP $0101, X".to_string()); // Compare High
-                            self.emit(format!("  BNE {}", next_case));
+                                    self.generate_expression(end_expr)?;
+                                    self.emit("  STA $00".to_string());
+                                    self.emit("  STX $01".to_string());
+                                    self.emit("  TSX".to_string());
+                                    self.emit("  LDA $0102, X".to_string());
+                                    self.emit("  SEC".to_string());
+                                    self.emit("  SBC $00".to_string());
+                                    self.emit("  LDA $0101, X".to_string());
+                                    self.emit("  SBC $01".to_string());
+                                    self.emit(format!("  BCC {}", match_label));
+                                    self.emit(format!("  BEQ {}", match_label));
+                                    self.emit(format!("{}:", skip_cond));
+                                }
+                            },
                         }
                     }
 
-                    // If we are here, it matched.
+                    // None of the conditions matched for this case block
+                    self.emit(format!("  JMP {}", next_case));
+
+                    // Matched block
+                    self.emit(format!("{}:", match_label));
                     self.generate_block(case_body)?;
                     self.emit(format!("  JMP {}", end_select_label));
 

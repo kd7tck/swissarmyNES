@@ -1,7 +1,7 @@
 // KEEP
 use super::ast::{
-    AnimationFrame, BinaryOperator, DataType, Expression, MetaspriteTile, Program, Statement,
-    StatementKind, TopLevel, TopLevelKind, UnaryOperator,
+    AnimationFrame, BinaryOperator, CaseCondition, DataType, Expression, MetaspriteTile, Program,
+    Statement, StatementKind, TopLevel, TopLevelKind, UnaryOperator,
 };
 use super::lexer::Token;
 
@@ -582,6 +582,8 @@ impl Parser {
                         Token::Hash => line.push('#'),
                         Token::Colon => line.push(':'),
                         Token::SemiColon => line.push(';'),
+                        Token::Is => line.push_str("is"),
+                        Token::To => line.push_str("to"),
                         _ => line.push('?'),
                     }
                     line.push(' ');
@@ -763,6 +765,8 @@ impl Parser {
                         Token::Hash => line.push('#'),
                         Token::Colon => line.push(':'),
                         Token::SemiColon => line.push(';'),
+                        Token::Is => line.push_str("IS"),
+                        Token::To => line.push_str("TO"),
                         _ => line.push('?'),
                     }
                     line.push(' ');
@@ -983,9 +987,16 @@ impl Parser {
         self.consume(Token::Newline, "Expected newline after FOR definition")?;
         let body = self.parse_block()?;
         self.consume(Token::Next, "Expected NEXT")?;
-        if let Token::Identifier(next_var) = self.peek() {
-            if *next_var == var_name {
+        if let Token::Identifier(next_var) = self.peek().clone() {
+            if next_var == var_name {
                 self.advance();
+            } else {
+                return Err(format!(
+                    "Line {}: Mismatched NEXT variable '{}' for FOR loop variable '{}'",
+                    self.current_line(),
+                    next_var,
+                    var_name
+                ));
             }
         }
         Ok(Statement {
@@ -1011,10 +1022,10 @@ impl Parser {
                     let block = self.parse_block()?;
                     case_else = Some(block);
                 } else {
-                    let val = self.parse_expression()?;
-                    self.consume(Token::Newline, "Expected newline after CASE <val>")?;
+                    let conditions = self.parse_case_conditions()?;
+                    self.consume(Token::Newline, "Expected newline after CASE <conditions>")?;
                     let block = self.parse_block()?;
-                    cases.push((val, block));
+                    cases.push((conditions, block));
                 }
             } else {
                 return Err(format!(
@@ -1031,6 +1042,43 @@ impl Parser {
             source_file: "main.swiss".to_string(),
             line,
         })
+    }
+
+    fn parse_case_conditions(&mut self) -> Result<Vec<CaseCondition>, String> {
+        let mut conditions = Vec::new();
+        loop {
+            if self.match_token(Token::Is) {
+                let op = match self.advance().clone() {
+                    Token::Equal => BinaryOperator::Equal,
+                    Token::NotEqual => BinaryOperator::NotEqual,
+                    Token::Less => BinaryOperator::LessThan,
+                    Token::Greater => BinaryOperator::GreaterThan,
+                    Token::LessEqual => BinaryOperator::LessThanOrEqual,
+                    Token::GreaterEqual => BinaryOperator::GreaterThanOrEqual,
+                    tok => {
+                        return Err(format!(
+                            "Line {}: Expected comparison operator after IS, found {:?}",
+                            self.current_line(),
+                            tok
+                        ))
+                    }
+                };
+                let expr = self.parse_expression()?;
+                conditions.push(CaseCondition::Is(op, expr));
+            } else {
+                let expr = self.parse_expression()?;
+                if self.match_token(Token::To) {
+                    let end_expr = self.parse_expression()?;
+                    conditions.push(CaseCondition::Range(expr, end_expr));
+                } else {
+                    conditions.push(CaseCondition::Value(expr));
+                }
+            }
+            if !self.match_token(Token::Comma) {
+                break;
+            }
+        }
+        Ok(conditions)
     }
 
     pub fn parse_expression(&mut self) -> Result<Expression, String> {

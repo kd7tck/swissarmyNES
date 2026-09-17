@@ -1,4 +1,6 @@
-use crate::compiler::ast::{Expression, Program, Statement, StatementKind, TopLevel, TopLevelKind};
+use crate::compiler::ast::{
+    CaseCondition, Expression, Program, Statement, StatementKind, TopLevel, TopLevelKind,
+};
 use crate::compiler::lexer::Lexer;
 use crate::compiler::parser::Parser;
 use std::collections::{HashMap, HashSet};
@@ -301,9 +303,24 @@ fn replace_args_in_statement(stmt: &Statement, mapping: &HashMap<String, Express
             replace_args_in_expression(expr.clone(), mapping),
             cases
                 .iter()
-                .map(|(e, b)| {
+                .map(|(conds, b)| {
                     (
-                        replace_args_in_expression(e.clone(), mapping),
+                        conds
+                            .iter()
+                            .map(|cond| match cond {
+                                CaseCondition::Value(e) => CaseCondition::Value(
+                                    replace_args_in_expression(e.clone(), mapping),
+                                ),
+                                CaseCondition::Range(start, end) => CaseCondition::Range(
+                                    replace_args_in_expression(start.clone(), mapping),
+                                    replace_args_in_expression(end.clone(), mapping),
+                                ),
+                                CaseCondition::Is(op, e) => CaseCondition::Is(
+                                    op.clone(),
+                                    replace_args_in_expression(e.clone(), mapping),
+                                ),
+                            })
+                            .collect(),
                         replace_args_in_statements(b, mapping),
                     )
                 })

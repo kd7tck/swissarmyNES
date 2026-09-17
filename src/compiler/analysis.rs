@@ -1,5 +1,8 @@
 // KEEP
-use crate::compiler::ast::{DataType, Expression, Program, Statement, StatementKind, TopLevelKind};
+use crate::compiler::ast::{
+    BinaryOperator, CaseCondition, DataType, Expression, Program, Statement, StatementKind,
+    TopLevelKind,
+};
 use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 
 pub struct SemanticAnalyzer {
@@ -170,6 +173,28 @@ impl SemanticAnalyzer {
                         self.errors.push(e);
                     }
                     if let Some(init) = init_expr {
+                        let folded = Self::fold_constants_expr(init);
+                        if let Expression::Integer(val) = folded {
+                            match dtype {
+                                DataType::Byte => {
+                                    if !(0..=255).contains(&val) {
+                                        self.errors.push(format!(
+                                            "Constant value {} out of range for BYTE (0 to 255)",
+                                            val
+                                        ));
+                                    }
+                                }
+                                DataType::Int => {
+                                    if !(-128..=127).contains(&val) {
+                                        self.errors.push(format!(
+                                            "Constant value {} out of range for INT (-128 to 127)",
+                                            val
+                                        ));
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
                         match dtype {
                             DataType::String => {
                                 if let Expression::StringLiteral(_) = init {
@@ -342,6 +367,31 @@ impl SemanticAnalyzer {
     fn analyze_statement(&mut self, stmt: &Statement) {
         match &stmt.kind {
             StatementKind::Let(target, expr) => {
+                let target_type = self.resolve_type(target);
+                let folded = Self::fold_constants_expr(expr);
+                if let Expression::Integer(val) = folded {
+                    if let Some(dtype) = target_type {
+                        match dtype {
+                            DataType::Byte => {
+                                if !(0..=255).contains(&val) {
+                                    self.errors.push(format!(
+                                        "Constant value {} out of range for BYTE (0 to 255)",
+                                        val
+                                    ));
+                                }
+                            }
+                            DataType::Int => {
+                                if !(-128..=127).contains(&val) {
+                                    self.errors.push(format!(
+                                        "Constant value {} out of range for INT (-128 to 127)",
+                                        val
+                                    ));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
                 // Check target validity (LValue)
                 match target {
                     Expression::Identifier(name) => {
@@ -884,8 +934,21 @@ impl SemanticAnalyzer {
             StatementKind::Select(expr, cases, case_else) => {
                 self.analyze_expression(expr);
                 self.unsafe_return_depth += 1;
-                for (val, block) in cases {
-                    self.analyze_expression(val);
+                for (conditions, block) in cases {
+                    for cond in conditions {
+                        match cond {
+                            CaseCondition::Value(val) => {
+                                self.analyze_expression(val);
+                            }
+                            CaseCondition::Range(start, end) => {
+                                self.analyze_expression(start);
+                                self.analyze_expression(end);
+                            }
+                            CaseCondition::Is(_, val) => {
+                                self.analyze_expression(val);
+                            }
+                        }
+                    }
                     self.analyze_block(block);
                 }
                 if let Some(b) = case_else {
@@ -1344,9 +1407,23 @@ impl SemanticAnalyzer {
                     self.analyze_expression(arg);
                 }
             }
-            Expression::BinaryOp(l, _, r) => {
+            Expression::BinaryOp(l, op, r) => {
                 self.analyze_expression(l);
                 self.analyze_expression(r);
+                if matches!(op, BinaryOperator::Divide | BinaryOperator::Modulo) {
+                    let r_folded = Self::fold_constants_expr(r);
+                    if let Expression::Integer(0) = r_folded {
+                        self.errors.push("Division by zero".to_string());
+                    }
+                }
+            }
+            Expression::StringLiteral(s) => {
+                if s.len() > 255 {
+                    self.errors.push(format!(
+                        "String literal exceeds maximum length of 255 characters (length: {})",
+                        s.len()
+                    ));
+                }
             }
             Expression::UnaryOp(_, e) => self.analyze_expression(e),
             Expression::Peek(e) => self.analyze_expression(e),

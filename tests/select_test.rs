@@ -1,4 +1,6 @@
-use swissarmynes::compiler::ast::{DataType, Expression, Program, Statement, TopLevel};
+use swissarmynes::compiler::ast::{
+    CaseCondition, DataType, Expression, Program, Statement, TopLevel,
+};
 use swissarmynes::compiler::codegen::CodeGenerator;
 use swissarmynes::compiler::symbol_table::{SymbolKind, SymbolTable};
 
@@ -26,14 +28,14 @@ fn test_codegen_select_statement() {
                     Expression::Identifier("x".to_string()),
                     vec![
                         (
-                            Expression::Integer(1),
+                            vec![CaseCondition::Value(Expression::Integer(1))],
                             vec![Statement::Let(
                                 Expression::Identifier("x".to_string()),
                                 Expression::Integer(10),
                             )],
                         ),
                         (
-                            Expression::Integer(2),
+                            vec![CaseCondition::Value(Expression::Integer(2))],
                             vec![Statement::Let(
                                 Expression::Identifier("x".to_string()),
                                 Expression::Integer(20),
@@ -61,7 +63,7 @@ fn test_codegen_select_statement() {
     assert!(code_str.contains("CMP $0101, X"));
 
     // Check Branching
-    assert!(code_str.contains("BNE GEN_L"));
+    assert!(code_str.contains("BEQ GEN_L"));
     assert!(code_str.contains("JMP GEN_L"));
 
     // Check Case Values
@@ -96,7 +98,7 @@ fn test_codegen_select_word() {
                 vec![Statement::Select(
                     Expression::Identifier("w".to_string()),
                     vec![(
-                        Expression::Integer(1000),
+                        vec![CaseCondition::Value(Expression::Integer(1000))],
                         vec![Statement::Let(
                             Expression::Identifier("w".to_string()),
                             Expression::Integer(1),

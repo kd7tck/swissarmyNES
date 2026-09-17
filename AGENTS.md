@@ -50,6 +50,12 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
+# Remote branch merge and Memory.Fill fix — September 16, 2026
+
+- Merged the two additional GitHub branches `dev-loops-intrinsics-diagnostics-13998583794852208848` and `jules-11030633264594705231-c27375b8` into `main` after refreshing remote refs. Their overlapping Math intrinsic implementations were reconciled so Abs, Min, Max, Sign, and Clamp coexist.
+- Fixed `Memory.Fill` length corruption for indexed destinations: address generation uses `$00/$01`, so length is now preserved on the stack and copied to `$04` only after address generation. The indexed-destination regression test passes.
+- Source-only delivery policy remains active; generated WASM, wasm-pack, ROM/trace fixtures, and logs are excluded from the final commit.
+
 ### Mapper Trait & Cartridge Header Testing — September 16, 2026
 
 - Implemented the `Mapper` trait in `emulator/src/cartridge.rs` with `read_prg`, `write_prg`, `read_chr`, `write_chr`, and `step_irq` operations, implemented for `Emulator` in `emulator/src/lib.rs`.
@@ -246,11 +252,28 @@ Historical implementation summary: phases 31-38 were marked complete.
     - **CodeGenerator Stack**: When evaluating arguments for subroutines or built-ins, complex expressions can clobber temporary registers (like `$02/$03` or `$06`). Use the Stack (`PHA`/`PLA`) to protect intermediate values.
 
 - **Dev Loops (Math Intrinsics, Bitwise Ops, Constant Folding, Lexer Diagnostics, JS Editor Tests)**:
-    - Added `Math.Min` and `Math.Max` intrinsic support across analysis and 6502 code generation (supporting 8-bit & 16-bit operands).
-    - Added `BITAND`, `BITOR`, `BITXOR`, and `BITNOT` bitwise functions in analysis and codegen.
-    - Implemented `fold_constants_expr` in `SemanticAnalyzer` for compile-time constant expression optimization.
+    - Added `Math.Min`, `Math.Max`, `Math.Clamp`, and `Math.Sign` intrinsic support across analysis and 6502 code generation (supporting 8-bit & 16-bit operands).
+    - Added `BITAND`, `BITOR`, `BITXOR`, and `BITNOT` bitwise functions in analysis and codegen, including compile-time constant folding.
+    - Implemented `fold_constants_expr` in `SemanticAnalyzer` for compile-time constant expression optimization (including binary ops, unary ops, and bitwise calls).
+    - Added compile-time array out-of-bounds constant index validation in `SemanticAnalyzer`.
+    - Added `Controller.AnyPressed()` intrinsic helper in `SemanticAnalyzer` and `CodeGenerator`.
     - Enhanced `Lexer` with column position tracking (`column: usize`) and line:column error formatting.
     - Expanded JS unit tests in `tests/js/editor.test.cjs` covering pause/unpause state transitions and emulator reset.
 
+- **Dev Loop 1: Cartridge Header Parsing & NES 2.0 Hardening**:
+    - Enhanced `CartridgeInfo::parse` unit tests in `emulator/tests/cartridge.rs` to verify edge cases including invalid magic signature, corrupted iNES variants, submapper masks, and NES 2.0 flags.
+
+- **Dev Loop 2: Compiler Math Intrinsics (`Math.Abs`)**:
+    - Implemented `Math.Abs` intrinsic in `src/compiler/analysis.rs` and `src/compiler/codegen.rs` supporting 8-bit and 16-bit signed operands. Added test coverage in `tests/math_intrinsics_test.rs`.
+
+- **Dev Loop 3: Compiler Memory Utility Intrinsic (`Memory.Fill`)**:
+    - Implemented `Memory.Fill(address, length, value)` intrinsic in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`. Added test coverage in `tests/memory_intrinsics_test.rs`.
+
+- **Dev Loop 4: UxROM (Mapper 2) Support in Emulator Engine**:
+    - Verified and tested UxROM (Mapper 2) PRG bank switching support in `emulator/tests/mapper_test.rs`.
+
+- **Dev Loop 5: Frontend Debugger Enhancements & JS Unit Tests**:
+    - Enhanced `PpuViewer.formatOamEntries` in `static/js/ppu_viewer.js` and added JS unit test in `tests/js/ppu_viewer.test.cjs`.
+
 - **Next Steps**:
-    - Continue PPU and APU accuracy enhancements as detailed in DESIGN.md.
+    - Run pre-commit checks and submit completed work.

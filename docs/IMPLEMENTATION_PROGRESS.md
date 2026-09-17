@@ -1,4 +1,66 @@
+# Remote branch merge and Memory.Fill fix — September 16, 2026
+
+- Refreshed GitHub refs and merged both additional remote branches (`dev-loops-intrinsics-diagnostics-13998583794852208848` and `jules-11030633264594705231-c27375b8`) into the updated `main` at `6134fa4`.
+- Reconciled overlapping Math intrinsic implementations so `Math.Abs`, `Math.Min`, `Math.Max`, `Math.Sign`, and `Math.Clamp` remain available together, along with the mapper, frontend, and diagnostic work from both branches.
+- Fixed `Memory.Fill` overwriting its length when an indexed destination generated address scratch code in `$00/$01`; the length now survives on the stack until the destination address is complete. Added an indexed-destination regression test.
+- Native workspace tests, strict Clippy, formatting, WASM rebuild, and all frontend Node tests pass after the fix. Phase acceptance remains incomplete.
+
+# Dev Loop 5 — Add Controller.AnyPressed Intrinsic, September 16, 2026
+
+- Added `Controller.AnyPressed()` intrinsic support in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Added integration test `test_controller_any_pressed` in `tests/controller_test.rs`.
+
+# Dev Loop 4 — Array Out-Of-Bounds Constant Index Error Diagnostics, September 16, 2026
+
+- Added semantic validation in `src/compiler/analysis.rs` reporting errors for array indexing with out-of-bounds constant indices.
+- Added integration test `test_array_out_of_bounds_constant` in `tests/array_test.rs`.
+
+# Dev Loop 3 — Constant Folding for Bitwise Operations, September 16, 2026
+
+- Extended `fold_constants_expr` in `src/compiler/analysis.rs` to fold `BITAND`, `BITOR`, `BITXOR`, and `BITNOT` expressions at compile time.
+- Verified with unit tests in `tests/foundation_test.rs`.
+
+# Dev Loop 2 — Add Math.Sign Intrinsic Alias, September 16, 2026
+
+- Added `Math.Sign(val)` intrinsic validation in `src/compiler/analysis.rs` and 6502 assembly generation in `src/compiler/codegen.rs`.
+- Added integration test `test_math_sign_generation` in `tests/math_advanced_test.rs`.
+
+# Dev Loop 1 — Add Math.Clamp Intrinsic, September 16, 2026
+
+- Added `Math.Clamp(val, min, max)` intrinsic validation in `src/compiler/analysis.rs` and 8-bit/16-bit 6502 assembly generation in `src/compiler/codegen.rs`.
+- Added integration test `test_math_clamp_generation` in `tests/math_advanced_test.rs`.
+
 # Latest checkpoint — Mapper Trait Abstraction and Cartridge Header Testing, September 16, 2026
+# Latest checkpoint — Loop 5: Frontend Debugger Enhancements & JS Unit Tests
+
+- Enhanced PPU Debugger OAM formatting in `static/js/ppu_viewer.js`.
+- Added OAM entry formatting test coverage in `tests/js/ppu_viewer.test.cjs`.
+- All native Rust workspace tests and Node.js frontend tests pass.
+
+# Earlier checkpoint — Loop 4: UxROM (Mapper 2) Support in Emulator Engine
+
+- Verified UxROM (Mapper 2) switchable $8000-$BFFF bank and fixed $C000-$FFFF bank execution.
+- Added integration test `test_uxrom_mapper_2_bank_switching` in `emulator/tests/mapper_test.rs`.
+- All emulator tests pass.
+
+# Earlier checkpoint — Loop 3: Compiler Memory Utility Intrinsic (`Memory.Fill`)
+
+- Added `Memory.Fill(address, length, value)` intrinsic in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Generates efficient 6502 RAM fill loops. Added test coverage in `tests/memory_intrinsics_test.rs`.
+
+# Earlier checkpoint — Loop 2: Compiler Math Intrinsics (`Math.Abs`)
+
+- Added `Math.Abs` intrinsic in `src/compiler/analysis.rs` and `src/compiler/codegen.rs`.
+- Supports 8-bit and 16-bit signed operands, generating 6502 assembly sign checks and two's complement negations.
+- Added tests in `tests/math_intrinsics_test.rs`.
+
+# Earlier checkpoint — Loop 1: Cartridge Header Parsing & NES 2.0 Hardening
+
+- Hardened and tested `CartridgeInfo::parse` in `emulator/src/cartridge.rs` and `emulator/tests/cartridge.rs`.
+- Verified validation for invalid signature ("NES\x1a"), corrupted header variant flags, truncated headers, zero PRG ROM, and invalid NES 2.0 RAM sizes.
+- All emulator tests pass.
+
+# Earlier checkpoint — Mapper Trait Abstraction and Cartridge Header Testing, September 16, 2026
 
 - Implemented the `Mapper` trait in `emulator/src/cartridge.rs` (`read_prg`, `write_prg`, `read_chr`, `write_chr`, `step_irq`) and implemented it for `Emulator` in `emulator/src/lib.rs`.
 - Added `emulator/tests/mapper_test.rs` integration tests to exercise `read_prg`, `write_prg`, `read_chr`, `write_chr`, and `step_irq` via the `Mapper` trait.

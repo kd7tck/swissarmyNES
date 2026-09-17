@@ -1,3 +1,9 @@
+# Upstream merge — September 16, 2026
+
+Fast-forwarded main from 4610516 to 6134fa4. Reconciled the pre-merge working tree: upstream already contains the prior implementation, including trainer reset, and adds mapper/bus, math/bitwise, lexer and frontend test work. Retained upstream additions when resolving overlaps. Recovery stash bf34b04798b00a6ecefe1b5dc7cef22244f17e33 (pre-upstream-merge-2026-09-16) is retained; original external fixtures are backed up in .tools/merge-backup-20260916.
+
+Source-only policy restored: generated static/wasm files, emulator/wasm-pack and its stamp, and downloaded nestest payloads are removed from the index but retained locally. Phase acceptance remains incomplete. The merged `Memory.Fill` implementation was corrected to preserve its length across indexed address generation; the regression test and post-fix checks are recorded in the latest progress checkpoint.
+
 # Latest checkpoint — trainer reset fix, September 15, 2026
 
 User requested a concrete short implementation before stopping at low credits (last reported 6%). No commit. Source/build/test-only final commit policy remains unchanged.

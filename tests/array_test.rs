@@ -74,4 +74,30 @@ mod tests {
         // Look for INY
         assert!(asm_lines.iter().any(|line| line.contains("INY")));
     }
+
+    #[test]
+    fn test_array_out_of_bounds_constant() {
+        let source = "
+            DIM arr(5) AS BYTE
+            SUB Main()
+                arr(10) = 5
+            END SUB
+        ";
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("Lexing failed");
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().expect("Parsing failed");
+        let mut analyzer = SemanticAnalyzer::new();
+        let res = analyzer.analyze(&program);
+        assert!(
+            res.is_err(),
+            "Expected out-of-bounds array access to fail analysis"
+        );
+        let errs = res.unwrap_err();
+        assert!(
+            errs.iter().any(|e| e.contains("index out of bounds")),
+            "Expected out of bounds error message, got: {:?}",
+            errs
+        );
+    }
 }

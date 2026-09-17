@@ -9,3 +9,6 @@ target/
 **/*.log
 projects/*
 !projects/.gitkeep
+
+/emulator/wasm-pack
+/emulator/wasm-pack.stamp

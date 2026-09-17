@@ -289,6 +289,111 @@ fn test_math_min_max_generation() {
 }
 
 #[test]
+fn test_math_clamp_generation() {
+    let mut st = SymbolTable::new();
+    st.define(
+        "b".to_string(),
+        DataType::Byte,
+        swissarmynes::compiler::symbol_table::SymbolKind::Variable,
+    )
+    .unwrap();
+    st.define(
+        "w".to_string(),
+        DataType::Word,
+        swissarmynes::compiler::symbol_table::SymbolKind::Variable,
+    )
+    .unwrap();
+
+    let program = Program {
+        declarations: vec![
+            TopLevel::Dim("b".to_string(), DataType::Byte, None),
+            TopLevel::Dim("w".to_string(), DataType::Word, None),
+            TopLevel::Sub(
+                "Main".to_string(),
+                vec![],
+                vec![
+                    Statement::Let(
+                        Expression::Identifier("b".to_string()),
+                        Expression::Call(
+                            Box::new(Expression::MemberAccess(
+                                Box::new(Expression::Identifier("Math".to_string())),
+                                "Clamp".to_string(),
+                            )),
+                            vec![
+                                Expression::Integer(150),
+                                Expression::Integer(10),
+                                Expression::Integer(100),
+                            ],
+                        ),
+                    ),
+                    Statement::Let(
+                        Expression::Identifier("w".to_string()),
+                        Expression::Call(
+                            Box::new(Expression::MemberAccess(
+                                Box::new(Expression::Identifier("Math".to_string())),
+                                "Clamp".to_string(),
+                            )),
+                            vec![
+                                Expression::Integer(500),
+                                Expression::Integer(100),
+                                Expression::Integer(1000),
+                            ],
+                        ),
+                    ),
+                ],
+            ),
+        ],
+    };
+
+    let mut cg = CodeGenerator::new(st);
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
+
+    // Check that Clamp comparisons are emitted
+    assert!(code
+        .iter()
+        .any(|line| line.contains("CMP $01") || line.contains("CMP $00")));
+}
+
+#[test]
+fn test_math_sign_generation() {
+    let mut st = SymbolTable::new();
+    st.define(
+        "i".to_string(),
+        DataType::Int,
+        swissarmynes::compiler::symbol_table::SymbolKind::Variable,
+    )
+    .unwrap();
+
+    let program = Program {
+        declarations: vec![
+            TopLevel::Dim("i".to_string(), DataType::Int, None),
+            TopLevel::Sub(
+                "Main".to_string(),
+                vec![],
+                vec![Statement::Let(
+                    Expression::Identifier("i".to_string()),
+                    Expression::Call(
+                        Box::new(Expression::MemberAccess(
+                            Box::new(Expression::Identifier("Math".to_string())),
+                            "Sign".to_string(),
+                        )),
+                        vec![Expression::Integer(-50)],
+                    ),
+                )],
+            ),
+        ],
+    };
+
+    let mut cg = CodeGenerator::new(st);
+    let (code, _) = cg.generate(&program).expect("Codegen failed");
+
+    // Check that sign checking instructions are emitted
+    assert!(code
+        .iter()
+        .any(|line| line.contains("CPX #$80") || line.contains("CMP #$80")));
+}
+
+#[test]
 fn test_bitwise_builtins_generation() {
     let mut st = SymbolTable::new();
     st.define(

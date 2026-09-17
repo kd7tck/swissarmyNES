@@ -60,7 +60,25 @@ pub async fn compile(Json(payload): Json<CompileRequest>) -> impl IntoResponse {
     }
 }
 
+pub const MAX_SOURCE_LENGTH: usize = 1_048_576; // 1 MB (1024 * 1024 bytes)
+
 pub fn compile_source(
+    source: Option<String>,
+    project_name: Option<String>,
+    assets: Option<ProjectAssets>,
+) -> Result<(Vec<u8>, SourceMap), String> {
+    let builder = std::thread::Builder::new()
+        .name("compiler_thread".to_string())
+        .stack_size(16 * 1024 * 1024);
+    let handle = builder
+        .spawn(move || compile_source_internal(source, project_name, assets))
+        .map_err(|e| format!("Failed to spawn compiler thread: {e}"))?;
+    handle
+        .join()
+        .map_err(|_| "Compiler thread panicked".to_string())?
+}
+
+fn compile_source_internal(
     source: Option<String>,
     project_name: Option<String>,
     assets: Option<ProjectAssets>,
@@ -77,6 +95,10 @@ pub fn compile_source(
     } else {
         return Err("No source provided and no project context".to_string());
     };
+
+    if source_code.len() > MAX_SOURCE_LENGTH {
+        return Err("Source code exceeds maximum allowed length (1 MB)".to_string());
+    }
 
     // Resolve assets
     let resolved_assets = if let Some(a) = assets {

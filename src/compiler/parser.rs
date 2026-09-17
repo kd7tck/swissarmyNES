@@ -5,9 +5,12 @@ use super::ast::{
 };
 use super::lexer::Token;
 
+pub const MAX_RECURSION_DEPTH: usize = 256;
+
 pub struct Parser {
     tokens: Vec<(Token, usize)>,
     position: usize,
+    recursion_depth: usize,
 }
 
 #[derive(PartialEq, PartialOrd)]
@@ -30,6 +33,7 @@ impl Parser {
         Self {
             tokens,
             position: 0,
+            recursion_depth: 0,
         }
     }
 
@@ -635,6 +639,20 @@ impl Parser {
     }
 
     fn parse_statement(&mut self) -> Result<Statement, String> {
+        if self.recursion_depth >= MAX_RECURSION_DEPTH {
+            return Err(format!(
+                "Line {}: Maximum recursion depth exceeded ({})",
+                self.current_line(),
+                MAX_RECURSION_DEPTH
+            ));
+        }
+        self.recursion_depth += 1;
+        let result = self.parse_statement_internal();
+        self.recursion_depth -= 1;
+        result
+    }
+
+    fn parse_statement_internal(&mut self) -> Result<Statement, String> {
         let start_line = self.current_line();
         if self.match_token(Token::Let) {
             let target = self.parse_precedence(Precedence::Comparison)?;
@@ -1038,6 +1056,20 @@ impl Parser {
     }
 
     fn parse_precedence(&mut self, precedence: Precedence) -> Result<Expression, String> {
+        if self.recursion_depth >= MAX_RECURSION_DEPTH {
+            return Err(format!(
+                "Line {}: Maximum recursion depth exceeded ({})",
+                self.current_line(),
+                MAX_RECURSION_DEPTH
+            ));
+        }
+        self.recursion_depth += 1;
+        let result = self.parse_precedence_internal(precedence);
+        self.recursion_depth -= 1;
+        result
+    }
+
+    fn parse_precedence_internal(&mut self, precedence: Precedence) -> Result<Expression, String> {
         let mut left = self.parse_unary()?;
 
         while precedence <= self.get_precedence(self.peek()) {

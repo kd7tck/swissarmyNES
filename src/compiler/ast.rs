@@ -29,6 +29,7 @@ pub enum BinaryOperator {
     Modulo,
     ShiftLeft,
     ShiftRight,
+    To,
 }
 
 #[derive(Debug, PartialEq, Clone)]

@@ -7,6 +7,7 @@ pub struct SemanticAnalyzer {
     errors: Vec<String>,
     unsafe_return_depth: usize,
     current_bank: u8,
+    recursion_depth: usize,
 }
 
 impl Default for SemanticAnalyzer {
@@ -22,6 +23,7 @@ impl SemanticAnalyzer {
             errors: Vec::new(),
             unsafe_return_depth: 0,
             current_bank: 0,
+            recursion_depth: 0,
         };
         analyzer.register_stdlib();
         analyzer
@@ -333,13 +335,38 @@ impl SemanticAnalyzer {
         }
     }
 
+    fn enter_depth(&mut self) -> Result<(), ()> {
+        if self.recursion_depth >= 256 {
+            self.errors.push("Maximum recursion depth exceeded".to_string());
+            return Err(());
+        }
+        self.recursion_depth += 1;
+        Ok(())
+    }
+
+    fn leave_depth(&mut self) {
+        self.recursion_depth = self.recursion_depth.saturating_sub(1);
+    }
+
     fn analyze_block(&mut self, statements: &[Statement]) {
+        if self.enter_depth().is_err() {
+            return;
+        }
         for stmt in statements {
             self.analyze_statement(stmt);
         }
+        self.leave_depth();
     }
 
     fn analyze_statement(&mut self, stmt: &Statement) {
+        if self.enter_depth().is_err() {
+            return;
+        }
+        self.analyze_statement_inner(stmt);
+        self.leave_depth();
+    }
+
+    fn analyze_statement_inner(&mut self, stmt: &Statement) {
         match &stmt.kind {
             StatementKind::Let(target, expr) => {
                 // Check target validity (LValue)
@@ -919,8 +946,19 @@ impl SemanticAnalyzer {
     }
 
     fn analyze_expression(&mut self, expr: &Expression) {
+        if self.enter_depth().is_err() {
+            return;
+        }
+        self.analyze_expression_inner(expr);
+        self.leave_depth();
+    }
+
+    fn analyze_expression_inner(&mut self, expr: &Expression) {
         match expr {
             Expression::Identifier(name) => {
+                if name == "__IS__" || name == "__SELECT_VAL__" {
+                    return;
+                }
                 if self.symbol_table.resolve(name).is_none() {
                     self.errors.push(format!("Undefined variable '{}'", name));
                 }
@@ -1344,7 +1382,13 @@ impl SemanticAnalyzer {
                     self.analyze_expression(arg);
                 }
             }
-            Expression::BinaryOp(l, _, r) => {
+            Expression::BinaryOp(l, op, r) => {
+                if matches!(op, crate::compiler::ast::BinaryOperator::Divide | crate::compiler::ast::BinaryOperator::Modulo) {
+                    let r_folded = Self::fold_constants_expr(r);
+                    if let Expression::Integer(0) = r_folded {
+                        self.errors.push("Division by zero".to_string());
+                    }
+                }
                 self.analyze_expression(l);
                 self.analyze_expression(r);
             }

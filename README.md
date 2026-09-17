@@ -4,7 +4,7 @@
 
 ## Current Status
 The project is currently in active development, following a strict roadmap defined in `DESIGN.md`.
-For the current completion plan, read the [developer handoff through phase 40](docs/DEVELOPER_HANDOFF_THROUGH_PHASE_40.md), [baseline audit](docs/BASELINE_AUDIT.md), and [acceptance worksheet](docs/PHASE_40_ACCEPTANCE_CHECKLIST.md). The September 2026 audit found that native tests pass but the production compile API fails on minimal programs; historical completion labels below do not constitute end-to-end acceptance.
+For the current completion plan, read the [developer handoff through phase 40](docs/DEVELOPER_HANDOFF_THROUGH_PHASE_40.md), [baseline audit](docs/BASELINE_AUDIT.md), and [acceptance worksheet](docs/PHASE_40_ACCEPTANCE_CHECKLIST.md). At HEAD (commit 355cb1e), the production compile API (`POST /api/compile`) successfully compiles programs into valid NES ROMs. Ongoing development focuses on parser/compiler recursion limits, subroutine parameter scopes, loop handling edge cases, and repo hygiene.
 **Historically marked complete:** phases 1 through 30.
 - **Core Compiler**: Lexer, Parser, AST, Symbol Table, Code Generation, Assembly.
 - **Language Features**: Strings, Arrays (`DIM`), Structures (`TYPE`), Enums (`ENUM`), Macros (`DEF MACRO`), Advanced Math (16-bit, Signed), Control Flow (`SELECT CASE`, `FOR`, `WHILE`).

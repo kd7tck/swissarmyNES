@@ -36,6 +36,8 @@ pub struct CodeGenerator {
     interrupt_targets: Vec<(String, String)>,
     string_literals: HashMap<String, String>,
     select_stack_depth: usize,
+    select_expr_type: Option<DataType>,
+    recursion_depth: usize,
 }
 
 impl CodeGenerator {
@@ -262,6 +264,8 @@ impl CodeGenerator {
             interrupt_targets: Vec::new(),
             string_literals: HashMap::new(),
             select_stack_depth: 0,
+            select_expr_type: None,
+            recursion_depth: 0,
         }
     }
 
@@ -3736,9 +3740,18 @@ impl CodeGenerator {
         ));
         self.select_stack_depth = 0;
         match &decl.kind {
-            TopLevelKind::Sub(name, _, body) => {
+            TopLevelKind::Sub(name, params, body) => {
                 self.emit(format!("{}:", name));
                 self.symbol_table.enter_scope();
+                if let Some((_, sig_params)) = self.sub_signatures.get(name).cloned() {
+                    for (i, (param_name, _)) in params.iter().enumerate() {
+                        if i < sig_params.len() {
+                            let (addr, dtype) = &sig_params[i];
+                            let _ = self.symbol_table.define(param_name.clone(), dtype.clone(), SymbolKind::Param);
+                            let _ = self.symbol_table.assign_address(param_name, *addr);
+                        }
+                    }
+                }
                 self.generate_block(body)?;
                 self.symbol_table.exit_scope();
                 self.emit("  RTS".to_string());
@@ -3763,7 +3776,26 @@ impl CodeGenerator {
         Ok(())
     }
 
+    fn enter_depth(&mut self) -> Result<(), String> {
+        if self.recursion_depth >= 256 {
+            return Err("Maximum recursion depth exceeded".to_string());
+        }
+        self.recursion_depth += 1;
+        Ok(())
+    }
+
+    fn leave_depth(&mut self) {
+        self.recursion_depth = self.recursion_depth.saturating_sub(1);
+    }
+
     fn generate_block(&mut self, statements: &[Statement]) -> Result<(), String> {
+        self.enter_depth()?;
+        let res = self.generate_block_inner(statements);
+        self.leave_depth();
+        res
+    }
+
+    fn generate_block_inner(&mut self, statements: &[Statement]) -> Result<(), String> {
         for stmt in statements {
             self.generate_statement(stmt)?;
         }
@@ -3771,6 +3803,13 @@ impl CodeGenerator {
     }
 
     fn generate_statement(&mut self, stmt: &Statement) -> Result<(), String> {
+        self.enter_depth()?;
+        let res = self.generate_statement_inner(stmt);
+        self.leave_depth();
+        res
+    }
+
+    fn generate_statement_inner(&mut self, stmt: &Statement) -> Result<(), String> {
         self.output.push(format!(
             ";@source {}",
             serde_json::json!({"file": stmt.source_file, "line": stmt.line})
@@ -4259,20 +4298,29 @@ impl CodeGenerator {
                 self.emit(format!("{}:", loop_label));
 
                 // Condition:
-                // If step < 0: Check var >= end
+                // If step < 0: Check (var >= end) AND (var <= start) to detect underflow/wrap
                 // If step >= 0: Check var <= end
-                let operator = if is_negative_step {
-                    BinaryOperator::GreaterThanOrEqual
+                let condition = if is_negative_step {
+                    Expression::BinaryOp(
+                        Box::new(Expression::BinaryOp(
+                            Box::new(Expression::Identifier(var_name.clone())),
+                            BinaryOperator::GreaterThanOrEqual,
+                            Box::new(end_expr.clone()),
+                        )),
+                        BinaryOperator::And,
+                        Box::new(Expression::BinaryOp(
+                            Box::new(Expression::Identifier(var_name.clone())),
+                            BinaryOperator::LessThanOrEqual,
+                            Box::new(start_expr.clone()),
+                        )),
+                    )
                 } else {
-                    BinaryOperator::LessThanOrEqual
+                    Expression::BinaryOp(
+                        Box::new(Expression::Identifier(var_name.clone())),
+                        BinaryOperator::LessThanOrEqual,
+                        Box::new(end_expr.clone()),
+                    )
                 };
-
-                // Synthesize condition expression
-                let condition = Expression::BinaryOp(
-                    Box::new(Expression::Identifier(var_name.clone())),
-                    operator,
-                    Box::new(end_expr.clone()),
-                );
 
                 self.generate_expression(&condition)?;
 
@@ -4413,6 +4461,8 @@ impl CodeGenerator {
 
                 // 1. Evaluate Expression
                 let expr_type = self.generate_expression(expr)?;
+                let prev_select_type = self.select_expr_type.clone();
+                self.select_expr_type = Some(expr_type.clone());
 
                 // 2. Push to Stack
                 let pushed_bytes = match expr_type {
@@ -4436,35 +4486,58 @@ impl CodeGenerator {
                 for (case_val, case_body) in cases {
                     let next_case = self.new_label();
 
-                    // Eval Case Value -> A/X
-                    self.generate_expression(case_val)?;
-
-                    // Compare (Stack vs A/X)
-                    self.emit("  TSX".to_string());
-
-                    match expr_type {
-                        DataType::Byte | DataType::Bool | DataType::Int | DataType::Enum(_) => {
-                            // A has Case Val. Stack has Select Val at $0101,X
-                            self.emit("  CMP $0101, X".to_string());
-                            self.emit(format!("  BNE {}", next_case));
+                    // Synthesize case condition expression using __SELECT_VAL__
+                    let cond = match case_val {
+                        Expression::BinaryOp(low, BinaryOperator::To, high) => {
+                            Expression::BinaryOp(
+                                Box::new(Expression::BinaryOp(
+                                    Box::new(Expression::Identifier("__SELECT_VAL__".to_string())),
+                                    BinaryOperator::GreaterThanOrEqual,
+                                    low.clone(),
+                                )),
+                                BinaryOperator::And,
+                                Box::new(Expression::BinaryOp(
+                                    Box::new(Expression::Identifier("__SELECT_VAL__".to_string())),
+                                    BinaryOperator::LessThanOrEqual,
+                                    high.clone(),
+                                )),
+                            )
                         }
-                        _ => {
-                            // A=Low, X=High of Case Val.
-                            // Stack: High at 101, Low at 102.
-                            // We must save X (High Byte) because TSX clobbers it.
-                            self.emit("  STX $01".to_string()); // Save High
-                            self.emit("  TSX".to_string());
-
-                            self.emit("  CMP $0102, X".to_string()); // Compare Low
-                            self.emit(format!("  BNE {}", next_case));
-
-                            self.emit("  LDA $01".to_string()); // Restore High
-                            self.emit("  CMP $0101, X".to_string()); // Compare High
-                            self.emit(format!("  BNE {}", next_case));
+                        Expression::BinaryOp(is_ident, op, val) => {
+                            if let Expression::Identifier(ref name) = **is_ident {
+                                if name == "__IS__" {
+                                    Expression::BinaryOp(
+                                        Box::new(Expression::Identifier("__SELECT_VAL__".to_string())),
+                                        op.clone(),
+                                        val.clone(),
+                                    )
+                                } else {
+                                    Expression::BinaryOp(
+                                        Box::new(Expression::Identifier("__SELECT_VAL__".to_string())),
+                                        BinaryOperator::Equal,
+                                        Box::new(case_val.clone()),
+                                    )
+                                }
+                            } else {
+                                Expression::BinaryOp(
+                                    Box::new(Expression::Identifier("__SELECT_VAL__".to_string())),
+                                    BinaryOperator::Equal,
+                                    Box::new(case_val.clone()),
+                                )
+                            }
                         }
-                    }
+                        _ => Expression::BinaryOp(
+                            Box::new(Expression::Identifier("__SELECT_VAL__".to_string())),
+                            BinaryOperator::Equal,
+                            Box::new(case_val.clone()),
+                        ),
+                    };
 
-                    // If we are here, it matched.
+                    self.generate_expression(&cond)?;
+                    self.emit("  CMP #0".to_string());
+                    self.emit(format!("  BEQ {}", next_case));
+
+                    // If matched, execute body and jump to end
                     self.generate_block(case_body)?;
                     self.emit(format!("  JMP {}", end_select_label));
 
@@ -4483,6 +4556,7 @@ impl CodeGenerator {
                     self.emit("  PLA".to_string());
                 }
                 self.select_stack_depth -= pushed_bytes;
+                self.select_expr_type = prev_select_type;
             }
             _ => {}
         }
@@ -4550,6 +4624,9 @@ impl CodeGenerator {
     fn resolve_type(&self, expr: &Expression) -> Option<DataType> {
         match expr {
             Expression::Identifier(name) => {
+                if name == "__SELECT_VAL__" {
+                    return self.select_expr_type.clone();
+                }
                 self.symbol_table.resolve(name).map(|s| s.data_type.clone())
             }
             Expression::MemberAccess(base, member) => {
@@ -4774,6 +4851,13 @@ impl CodeGenerator {
     }
 
     fn generate_expression(&mut self, expr: &Expression) -> Result<DataType, String> {
+        self.enter_depth()?;
+        let res = self.generate_expression_inner(expr);
+        self.leave_depth();
+        res
+    }
+
+    fn generate_expression_inner(&mut self, expr: &Expression) -> Result<DataType, String> {
         match expr {
             Expression::Call(callee, args) => {
                 // Controller Logic
@@ -5831,6 +5915,22 @@ impl CodeGenerator {
                 }
             }
             Expression::Identifier(name) => {
+                if name == "__SELECT_VAL__" {
+                    let dtype = self.select_expr_type.clone().unwrap_or(DataType::Byte);
+                    self.emit("  TSX".to_string());
+                    match dtype {
+                        DataType::Byte | DataType::Bool | DataType::Int | DataType::Enum(_) => {
+                            self.emit(format!("  LDA $01{:02X}, X", self.select_stack_depth));
+                            self.emit("  LDX #0".to_string());
+                            return Ok(dtype);
+                        }
+                        _ => {
+                            self.emit(format!("  LDA $01{:02X}, X", self.select_stack_depth));
+                            self.emit(format!("  LDX $01{:02X}, X", self.select_stack_depth - 1));
+                            return Ok(dtype);
+                        }
+                    }
+                }
                 let (sym_addr, sym_type, sym_kind, sym_val) =
                     if let Some(sym) = self.symbol_table.resolve(name) {
                         (
@@ -5903,14 +6003,18 @@ impl CodeGenerator {
             }
             Expression::BinaryOp(l, op, r) => {
                 let tl = self.generate_expression(l)?;
-                if tl == DataType::Byte || tl == DataType::Bool {
+                let bytes_pushed = if tl == DataType::Byte || tl == DataType::Bool {
                     self.emit("  PHA".to_string());
+                    1
                 } else {
                     self.emit("  PHA".to_string());
                     self.emit("  TXA".to_string());
                     self.emit("  PHA".to_string());
-                }
+                    2
+                };
+                self.select_stack_depth += bytes_pushed;
                 let tr = self.generate_expression(r)?;
+                self.select_stack_depth -= bytes_pushed;
 
                 let is_16 = tl == DataType::Word
                     || tr == DataType::Word

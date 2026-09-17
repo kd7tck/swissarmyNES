@@ -5,9 +5,12 @@ use super::ast::{
 };
 use super::lexer::Token;
 
+pub const MAX_RECURSION_DEPTH: usize = 256;
+
 pub struct Parser {
     tokens: Vec<(Token, usize)>,
     position: usize,
+    recursion_depth: usize,
 }
 
 #[derive(PartialEq, PartialOrd)]
@@ -30,6 +33,7 @@ impl Parser {
         Self {
             tokens,
             position: 0,
+            recursion_depth: 0,
         }
     }
 
@@ -634,7 +638,30 @@ impl Parser {
         ))
     }
 
+    fn enter_depth(&mut self) -> Result<(), String> {
+        if self.recursion_depth >= MAX_RECURSION_DEPTH {
+            return Err(format!(
+                "Line {}: Maximum recursion depth exceeded (nesting limit: {})",
+                self.current_line(),
+                MAX_RECURSION_DEPTH
+            ));
+        }
+        self.recursion_depth += 1;
+        Ok(())
+    }
+
+    fn leave_depth(&mut self) {
+        self.recursion_depth = self.recursion_depth.saturating_sub(1);
+    }
+
     fn parse_statement(&mut self) -> Result<Statement, String> {
+        self.enter_depth()?;
+        let res = self.parse_statement_inner();
+        self.leave_depth();
+        res
+    }
+
+    fn parse_statement_inner(&mut self) -> Result<Statement, String> {
         let start_line = self.current_line();
         if self.match_token(Token::Let) {
             let target = self.parse_precedence(Precedence::Comparison)?;
@@ -901,6 +928,13 @@ impl Parser {
     }
 
     fn parse_block(&mut self) -> Result<Vec<Statement>, String> {
+        self.enter_depth()?;
+        let res = self.parse_block_inner();
+        self.leave_depth();
+        res
+    }
+
+    fn parse_block_inner(&mut self) -> Result<Vec<Statement>, String> {
         let mut statements = Vec::new();
         while !self.check_block_end() && !self.is_at_end() {
             if self.match_token(Token::Newline) {
@@ -1011,10 +1045,42 @@ impl Parser {
                     let block = self.parse_block()?;
                     case_else = Some(block);
                 } else {
-                    let val = self.parse_expression()?;
-                    self.consume(Token::Newline, "Expected newline after CASE <val>")?;
+                    let case_val = if let Token::Identifier(ref name) = self.peek().clone() {
+                        if name.eq_ignore_ascii_case("IS") {
+                            self.advance(); // consume IS
+                            let op = match self.peek() {
+                                Token::Equal => BinaryOperator::Equal,
+                                Token::NotEqual => BinaryOperator::NotEqual,
+                                Token::Less => BinaryOperator::LessThan,
+                                Token::LessEqual => BinaryOperator::LessThanOrEqual,
+                                Token::Greater => BinaryOperator::GreaterThan,
+                                Token::GreaterEqual => BinaryOperator::GreaterThanOrEqual,
+                                t => return Err(format!("Line {}: Expected comparison operator after IS, found {:?}", self.current_line(), t)),
+                            };
+                            self.advance(); // consume operator
+                            let val = self.parse_expression()?;
+                            Expression::BinaryOp(Box::new(Expression::Identifier("__IS__".to_string())), op, Box::new(val))
+                        } else {
+                            let val1 = self.parse_expression()?;
+                            if self.match_token(Token::To) {
+                                let val2 = self.parse_expression()?;
+                                Expression::BinaryOp(Box::new(val1), BinaryOperator::To, Box::new(val2))
+                            } else {
+                                val1
+                            }
+                        }
+                    } else {
+                        let val1 = self.parse_expression()?;
+                        if self.match_token(Token::To) {
+                            let val2 = self.parse_expression()?;
+                            Expression::BinaryOp(Box::new(val1), BinaryOperator::To, Box::new(val2))
+                        } else {
+                            val1
+                        }
+                    };
+                    self.consume(Token::Newline, "Expected newline after CASE condition")?;
                     let block = self.parse_block()?;
-                    cases.push((val, block));
+                    cases.push((case_val, block));
                 }
             } else {
                 return Err(format!(
@@ -1038,6 +1104,13 @@ impl Parser {
     }
 
     fn parse_precedence(&mut self, precedence: Precedence) -> Result<Expression, String> {
+        self.enter_depth()?;
+        let res = self.parse_precedence_inner(precedence);
+        self.leave_depth();
+        res
+    }
+
+    fn parse_precedence_inner(&mut self, precedence: Precedence) -> Result<Expression, String> {
         let mut left = self.parse_unary()?;
 
         while precedence <= self.get_precedence(self.peek()) {

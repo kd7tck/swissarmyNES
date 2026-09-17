@@ -84,6 +84,26 @@ mod tests {
     fn test_invalid_names() {
         assert!(create_project("invalid name").is_err());
         assert!(create_project("test/../test").is_err());
+        assert!(create_project("").is_err());
+        assert!(create_project(".").is_err());
+        assert!(create_project("..").is_err());
+
+        assert!(get_project("").is_err());
+        assert!(get_project(".").is_err());
+        assert!(get_project("..").is_err());
+
+        use swissarmynes::server::project::{delete_file, read_file, write_file};
+        assert!(read_file("test_proj", "").is_err());
+        assert!(read_file("test_proj", ".").is_err());
+        assert!(read_file("test_proj", "..").is_err());
+
+        assert!(write_file("test_proj", "", "data").is_err());
+        assert!(write_file("test_proj", ".", "data").is_err());
+        assert!(write_file("test_proj", "..", "data").is_err());
+
+        assert!(delete_file("test_proj", "").is_err());
+        assert!(delete_file("test_proj", ".").is_err());
+        assert!(delete_file("test_proj", "..").is_err());
     }
 
     #[test]

@@ -2,11 +2,14 @@
 use crate::compiler::ast::{DataType, Expression, Program, Statement, StatementKind, TopLevelKind};
 use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 
+pub const MAX_RECURSION_DEPTH: usize = 256;
+
 pub struct SemanticAnalyzer {
     pub symbol_table: SymbolTable,
     errors: Vec<String>,
     unsafe_return_depth: usize,
     current_bank: u8,
+    recursion_depth: usize,
 }
 
 impl Default for SemanticAnalyzer {
@@ -22,6 +25,7 @@ impl SemanticAnalyzer {
             errors: Vec::new(),
             unsafe_return_depth: 0,
             current_bank: 0,
+            recursion_depth: 0,
         };
         analyzer.register_stdlib();
         analyzer
@@ -340,6 +344,19 @@ impl SemanticAnalyzer {
     }
 
     fn analyze_statement(&mut self, stmt: &Statement) {
+        if self.recursion_depth >= MAX_RECURSION_DEPTH {
+            self.errors.push(format!(
+                "Line {}: Maximum recursion depth exceeded ({})",
+                stmt.line, MAX_RECURSION_DEPTH
+            ));
+            return;
+        }
+        self.recursion_depth += 1;
+        self.analyze_statement_internal(stmt);
+        self.recursion_depth -= 1;
+    }
+
+    fn analyze_statement_internal(&mut self, stmt: &Statement) {
         match &stmt.kind {
             StatementKind::Let(target, expr) => {
                 // Check target validity (LValue)
@@ -919,6 +936,19 @@ impl SemanticAnalyzer {
     }
 
     fn analyze_expression(&mut self, expr: &Expression) {
+        if self.recursion_depth >= MAX_RECURSION_DEPTH {
+            self.errors.push(format!(
+                "Maximum recursion depth exceeded ({})",
+                MAX_RECURSION_DEPTH
+            ));
+            return;
+        }
+        self.recursion_depth += 1;
+        self.analyze_expression_internal(expr);
+        self.recursion_depth -= 1;
+    }
+
+    fn analyze_expression_internal(&mut self, expr: &Expression) {
         match expr {
             Expression::Identifier(name) => {
                 if self.symbol_table.resolve(name).is_none() {
@@ -1344,9 +1374,19 @@ impl SemanticAnalyzer {
                     self.analyze_expression(arg);
                 }
             }
-            Expression::BinaryOp(l, _, r) => {
+            Expression::BinaryOp(l, op, r) => {
                 self.analyze_expression(l);
                 self.analyze_expression(r);
+                if matches!(
+                    op,
+                    crate::compiler::ast::BinaryOperator::Divide
+                        | crate::compiler::ast::BinaryOperator::Modulo
+                ) {
+                    let folded_r = Self::fold_constants_expr(r);
+                    if let Expression::Integer(0) = folded_r {
+                        self.errors.push("Division by zero".to_string());
+                    }
+                }
             }
             Expression::UnaryOp(_, e) => self.analyze_expression(e),
             Expression::Peek(e) => self.analyze_expression(e),

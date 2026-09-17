@@ -18,6 +18,8 @@ pub type Assembly = Vec<String>;
 pub type SourceMap = Vec<(usize, u16)>;
 
 // KEEP
+pub const MAX_RECURSION_DEPTH: usize = 256;
+
 pub struct CodeGenerator {
     symbol_table: SymbolTable,
     output: Assembly,
@@ -36,6 +38,7 @@ pub struct CodeGenerator {
     interrupt_targets: Vec<(String, String)>,
     string_literals: HashMap<String, String>,
     select_stack_depth: usize,
+    recursion_depth: usize,
 }
 
 impl CodeGenerator {
@@ -262,6 +265,7 @@ impl CodeGenerator {
             interrupt_targets: Vec::new(),
             string_literals: HashMap::new(),
             select_stack_depth: 0,
+            recursion_depth: 0,
         }
     }
 
@@ -3771,6 +3775,19 @@ impl CodeGenerator {
     }
 
     fn generate_statement(&mut self, stmt: &Statement) -> Result<(), String> {
+        if self.recursion_depth >= MAX_RECURSION_DEPTH {
+            return Err(format!(
+                "Line {}: Maximum recursion depth exceeded ({})",
+                stmt.line, MAX_RECURSION_DEPTH
+            ));
+        }
+        self.recursion_depth += 1;
+        let result = self.generate_statement_internal(stmt);
+        self.recursion_depth -= 1;
+        result
+    }
+
+    fn generate_statement_internal(&mut self, stmt: &Statement) -> Result<(), String> {
         self.output.push(format!(
             ";@source {}",
             serde_json::json!({"file": stmt.source_file, "line": stmt.line})
@@ -4774,6 +4791,19 @@ impl CodeGenerator {
     }
 
     fn generate_expression(&mut self, expr: &Expression) -> Result<DataType, String> {
+        if self.recursion_depth >= MAX_RECURSION_DEPTH {
+            return Err(format!(
+                "Maximum recursion depth exceeded ({})",
+                MAX_RECURSION_DEPTH
+            ));
+        }
+        self.recursion_depth += 1;
+        let result = self.generate_expression_internal(expr);
+        self.recursion_depth -= 1;
+        result
+    }
+
+    fn generate_expression_internal(&mut self, expr: &Expression) -> Result<DataType, String> {
         match expr {
             Expression::Call(callee, args) => {
                 // Controller Logic

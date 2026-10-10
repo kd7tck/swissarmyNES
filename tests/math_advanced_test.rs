@@ -348,10 +348,61 @@ fn test_math_clamp_generation() {
     let mut cg = CodeGenerator::new(st);
     let (code, _) = cg.generate(&program).expect("Codegen failed");
 
-    // Check that Clamp comparisons are emitted
-    assert!(code
-        .iter()
-        .any(|line| line.contains("CMP $01") || line.contains("CMP $00")));
+    // Literal bounds promote these calls to WORD; verify both actual bounds
+    // rather than incidental CMP instructions in unused runtime helpers.
+    assert!(code.iter().any(|line| line.contains("SBC $04")));
+    assert!(code.iter().any(|line| line.contains("SBC $06")));
+}
+
+#[test]
+fn clamp_executes_byte_word_signed_and_nested_boundaries() {
+    use swiss_emulator::Emulator;
+    use swissarmynes::server::api::compile_source;
+    let source = r#"
+        DIM b AS BYTE
+        DIM low AS BYTE
+        DIM high AS BYTE
+        DIM values(8) AS WORD
+        SUB Main()
+            low = 10
+            high = 100
+            b = 150
+            values(0) = Math.Clamp(b, low, high)
+            values(1) = Math.Clamp(5, 10, 100)
+            values(2) = Math.Clamp(500, 100, 1000)
+            values(3) = Math.Clamp(65535, 32768, 60000)
+            values(4) = Math.Clamp(-5, -10, 10)
+            values(5) = Math.Clamp(-128, -10, 10)
+            values(6) = Math.Clamp(127, -10, 10)
+            values(7) = Math.Clamp(Math.Clamp(150, 10, 100), 20, 90)
+        END SUB
+    "#;
+    let (rom, _) = compile_source(Some(source.into()), None, None).unwrap();
+    let mut emulator = Emulator::new();
+    emulator.load_rom(&rom).unwrap();
+    for _ in 0..10 {
+        emulator.step().unwrap();
+    }
+    for (index, expected) in [
+        100u16,
+        10,
+        500,
+        60000,
+        (-5i16) as u16,
+        (-10i16) as u16,
+        10,
+        90,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let address = 0x5c3 + index as u16 * 2;
+        assert_eq!(
+            u16::from_le_bytes([emulator.peek_cpu(address), emulator.peek_cpu(address + 1)]),
+            expected,
+            "clamp case {index}"
+        );
+    }
 }
 
 #[test]

@@ -12,6 +12,7 @@ mod tests {
             speed: 2,
             vol_sequence: vec![15, 10, 5, 0],
             pitch_sequence: vec![0, 1, 2],
+            arpeggio_sequence: vec![],
             duty_sequence: vec![0, 1],
             does_loop: false,
         };
@@ -33,43 +34,43 @@ mod tests {
         // 1. Check Envelopes
         let env_blob = compile_envelopes(&Some(assets.clone())).unwrap();
 
-        // Count: 0 User + 3 SFX = 3
-        assert_eq!(env_blob[0], 3);
+        // Count: 0 User + 4 SFX = 4 (volume, timer offset, duty, semitones)
+        assert_eq!(env_blob[0], 4);
 
-        // Pointers: 3 * 2 = 6 bytes.
-        // Ptr1 (Vol): Start + 7.
+        // Pointers: 4 * 2 = 8 bytes.
+        // Ptr1 (Vol): Start + 9.
         // Start = $DA00.
-        // Offset = 7.
-        // Ptr1 = $DA07. -> 07 DA
-        assert_eq!(env_blob[1], 0x07);
+        // Offset = 9.
+        // Ptr1 = $DA09. -> 09 DA
+        assert_eq!(env_blob[1], 0x09);
         assert_eq!(env_blob[2], 0xDA);
 
         // Vol Data:
         // Loop: FF (No Loop)
-        assert_eq!(env_blob[7], 0xFF);
+        assert_eq!(env_blob[9], 0xFF);
         // Steps: (15, 2), (10, 2), (5, 2), (0, 2) -> 8 bytes
-        assert_eq!(env_blob[8], 15);
-        assert_eq!(env_blob[9], 2);
-        assert_eq!(env_blob[14], 0);
-        assert_eq!(env_blob[15], 2);
-        // Term: 0, 0
+        assert_eq!(env_blob[10], 15);
+        assert_eq!(env_blob[11], 2);
         assert_eq!(env_blob[16], 0);
-        assert_eq!(env_blob[17], 0);
+        assert_eq!(env_blob[17], 2);
+        // Term: 0, 0
+        assert_eq!(env_blob[18], 0);
+        assert_eq!(env_blob[19], 0);
 
-        // Next Env (Pitch) starts at 18
-        // Ptr2 = $DA00 + 18 = $DA12 -> 12 DA
-        assert_eq!(env_blob[3], 0x12);
+        // Next Env (Pitch) starts at 20.
+        // Ptr2 = $DA00 + 20 = $DA14 -> 14 DA
+        assert_eq!(env_blob[3], 0x14);
         assert_eq!(env_blob[4], 0xDA);
 
         // Pitch Data:
         // Loop: FF
-        assert_eq!(env_blob[18], 0xFF);
+        assert_eq!(env_blob[20], 0xFF);
         // Steps: (0, 2), (1, 2), (2, 2) -> 6 bytes
         // Term: 0, 0
 
-        // Next Env (Duty) starts at 18 + 1 + 6 + 2 = 27
-        // Ptr3 = $DA1B -> 1B DA
-        assert_eq!(env_blob[5], 0x1B);
+        // Next Env (Duty) starts at 20 + 1 + 6 + 2 = 29.
+        // Ptr3 = $DA1D -> 1D DA
+        assert_eq!(env_blob[5], 0x1D);
         assert_eq!(env_blob[6], 0xDA);
 
         // 2. Check SFX Data
@@ -94,6 +95,7 @@ mod tests {
         assert_eq!(sfx_blob[6], 1);
         // DutyEnvID: 2
         assert_eq!(sfx_blob[7], 2);
+        assert_eq!(sfx_blob[8], 3); // Arpeggio
     }
 
     #[test]
@@ -105,6 +107,7 @@ mod tests {
             speed: 2,
             vol_sequence: vec![15],
             pitch_sequence: vec![0],
+            arpeggio_sequence: vec![],
             duty_sequence: vec![0],
             does_loop: true,
         };
@@ -125,8 +128,8 @@ mod tests {
 
         let env_blob = compile_envelopes(&Some(assets)).unwrap();
 
-        // Ptr1 (Vol) at Start+7
+        // Ptr1 (Vol) at Start+9
         // Vol Loop should be 0 (Start index) instead of 0xFF
-        assert_eq!(env_blob[7], 0);
+        assert_eq!(env_blob[9], 0);
     }
 }

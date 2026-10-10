@@ -51,6 +51,115 @@ pub fn generate_period_table() -> Vec<u8> {
 use crate::server::project::ProjectAssets;
 use std::iter;
 
+/// Runtime pointer tables use doubled eight-bit indices and envelope steps use Y.
+/// Reject data before narrowing it so malformed projects cannot read unrelated ROM.
+pub fn validate_audio_assets(assets: &ProjectAssets) -> Result<(), String> {
+    if assets.audio_tracks.len() > 128 || assets.sound_effects.len() > 128 {
+        return Err("Audio track and effect tables support at most 128 entries".into());
+    }
+    let envelope_count = assets.envelopes.len() + assets.sound_effects.len() * 4;
+    if envelope_count > 128 {
+        return Err(
+            "Audio envelope table supports at most 128 entries including SFX envelopes".into(),
+        );
+    }
+    if assets.samples.len() > 64 {
+        return Err("DPCM sample table supports at most 64 entries".into());
+    }
+    for sample in &assets.samples {
+        if sample.data.len() > 4081 {
+            return Err(format!("DPCM sample '{}' exceeds 4081 bytes", sample.name));
+        }
+    }
+    for env in &assets.envelopes {
+        if env.steps.len() > 127 || env.steps.iter().any(|(_, duration)| *duration == 0) {
+            return Err(format!(
+                "Envelope '{}' needs at most 127 nonzero-duration steps",
+                env.name
+            ));
+        }
+        if env
+            .loop_index
+            .is_some_and(|index| index as usize >= env.steps.len())
+        {
+            return Err(format!("Envelope '{}' has an invalid loop index", env.name));
+        }
+    }
+    for track in &assets.audio_tracks {
+        if track.channel > 3 {
+            return Err(format!(
+                "Track '{}' channel must be 0..3 (Pulse1, Pulse2, Triangle, DMC)",
+                track.name
+            ));
+        }
+        for id in [track.vol_env, track.pitch_env, track.arpeggio_env]
+            .into_iter()
+            .flatten()
+        {
+            if id as usize >= assets.envelopes.len() {
+                return Err(format!(
+                    "Track '{}' refers to missing envelope {id}",
+                    track.name
+                ));
+            }
+        }
+        if let Some(id) = track.vol_env {
+            if assets.envelopes[id as usize]
+                .steps
+                .iter()
+                .any(|(value, _)| !(0..=15).contains(value))
+            {
+                return Err(format!(
+                    "Track '{}' volume envelope must contain values 0..15",
+                    track.name
+                ));
+            }
+        }
+        for note in &track.notes {
+            if note.pitch != 0xff
+                && (if track.channel == 3 {
+                    note.pitch as usize >= assets.samples.len()
+                } else {
+                    note.pitch >= 96
+                })
+            {
+                return Err(format!(
+                    "Track '{}' has an invalid note/sample index {}",
+                    track.name, note.pitch
+                ));
+            }
+        }
+    }
+    for effect in &assets.sound_effects {
+        // Macro effects use tonal envelopes; DMC samples are played through tracks.
+        if effect.channel > 2 {
+            return Err(format!(
+                "Effect '{}' channel must be 0..2 (Pulse1, Pulse2, Triangle)",
+                effect.name
+            ));
+        }
+        if effect.vol_sequence.len() > 127
+            || effect.pitch_sequence.len() > 127
+            || effect.duty_sequence.len() > 127
+            || effect.arpeggio_sequence.len() > 127
+        {
+            return Err(format!(
+                "Effect '{}' sequences support at most 127 steps",
+                effect.name
+            ));
+        }
+        if effect.vol_sequence.iter().any(|value| *value > 15)
+            || effect.duty_sequence.iter().any(|value| *value > 3)
+        {
+            return Err(format!(
+                "Effect '{}' volume must be 0..15 and duty must be 0..3",
+                effect.name
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Compiles DPCM samples into two blobs:
 /// 1. `samples_blob`: The raw sample data, padded and aligned for DMC.
 /// 2. `table_blob`: A lookup table (Address Byte, Length Byte) for each sample.
@@ -62,6 +171,7 @@ pub fn compile_samples(assets: &Option<ProjectAssets>) -> Result<(Vec<u8>, Vec<u
     let mut current_addr = start_addr;
 
     if let Some(assets) = assets {
+        validate_audio_assets(assets)?;
         for sample in &assets.samples {
             // 1. Alignment check
             let alignment_needed = current_addr % 64;
@@ -75,9 +185,6 @@ pub fn compile_samples(assets: &Option<ProjectAssets>) -> Result<(Vec<u8>, Vec<u
             let mut data = sample.data.clone();
             if data.is_empty() {
                 data.push(0);
-            }
-            if data.len() > 4081 {
-                data.truncate(4081);
             }
 
             // Length must be 16*N + 1
@@ -140,9 +247,10 @@ pub fn compile_samples(assets: &Option<ProjectAssets>) -> Result<(Vec<u8>, Vec<u
 pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, String> {
     let mut blob = Vec::new();
     if let Some(assets) = assets {
+        validate_audio_assets(assets)?;
         let user_env_count = assets.envelopes.len();
         let sfx_count = assets.sound_effects.len();
-        let total_count = user_env_count + (sfx_count * 3); // Vol, Pitch, Duty per SFX
+        let total_count = user_env_count + (sfx_count * 4); // Vol, Pitch, Duty, Arpeggio per SFX
 
         blob.push(total_count as u8);
 
@@ -194,7 +302,11 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, Stri
                 blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
                 env_idx += 1;
 
-                blob.push(loop_val);
+                blob.push(if sfx.vol_sequence.is_empty() {
+                    0xFF
+                } else {
+                    loop_val
+                });
                 current_offset += 1;
 
                 for &val in &sfx.vol_sequence {
@@ -215,7 +327,11 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, Stri
                 blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
                 env_idx += 1;
 
-                blob.push(loop_val);
+                blob.push(if sfx.pitch_sequence.is_empty() {
+                    0xFF
+                } else {
+                    loop_val
+                });
                 current_offset += 1;
 
                 for &val in &sfx.pitch_sequence {
@@ -236,7 +352,11 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, Stri
                 blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
                 env_idx += 1;
 
-                blob.push(loop_val);
+                blob.push(if sfx.duty_sequence.is_empty() {
+                    0xFF
+                } else {
+                    loop_val
+                });
                 current_offset += 1;
 
                 for &val in &sfx.duty_sequence {
@@ -246,6 +366,27 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, Stri
                 }
                 blob.push(0);
                 blob.push(0);
+                current_offset += 2;
+            }
+            // Arpeggio values are signed semitones; empty sequences never loop.
+            {
+                let abs_addr = start_addr + current_offset;
+                let ptr_idx = 1 + (env_idx * 2);
+                blob[ptr_idx] = (abs_addr & 0xFF) as u8;
+                blob[ptr_idx + 1] = ((abs_addr >> 8) & 0xFF) as u8;
+                env_idx += 1;
+                blob.push(if sfx.arpeggio_sequence.is_empty() {
+                    0xFF
+                } else {
+                    loop_val
+                });
+                current_offset += 1;
+                for &value in &sfx.arpeggio_sequence {
+                    blob.push(value as u8);
+                    blob.push(speed);
+                    current_offset += 2;
+                }
+                blob.extend([0, 0]);
                 current_offset += 2;
             }
         }
@@ -268,6 +409,7 @@ pub fn compile_envelopes(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, Stri
 pub fn compile_sfx_data(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, String> {
     let mut blob = Vec::new();
     if let Some(assets) = assets {
+        validate_audio_assets(assets)?;
         let count = assets.sound_effects.len();
         blob.push(count as u8);
 
@@ -292,17 +434,19 @@ pub fn compile_sfx_data(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, Strin
             // VolEnvID (1)
             // PitchEnvID (1)
             // DutyEnvID (1)
+            // ArpeggioEnvID (1)
 
             blob.push(sfx.channel);
             blob.push(sfx.priority);
 
             // Calculate Envelope IDs
-            let base_env_id = user_env_count + (i * 3);
+            let base_env_id = user_env_count + (i * 4);
             blob.push(base_env_id as u8); // Vol
             blob.push((base_env_id + 1) as u8); // Pitch
             blob.push((base_env_id + 2) as u8); // Duty
+            blob.push((base_env_id + 3) as u8); // Arpeggio
 
-            current_offset += 5;
+            current_offset += 6;
         }
     } else {
         blob.push(0);
@@ -343,6 +487,7 @@ pub fn compile_sfx_data(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, Strin
 /// - **Priority** (1 byte): The priority level of the track. Higher values interrupt lower values.
 /// - **VolEnv** (1 byte): Index of Volume Envelope ($FF = None).
 /// - **PitchEnv** (1 byte): Index of Pitch Envelope ($FF = None).
+/// - **ArpeggioEnv** (1 byte): Index of signed-semitone Envelope ($FF = None).
 /// - **Note Sequence**: A stream of `[Duration, Pitch]` pairs.
 ///   - **Duration** (1 byte): Frames to play. 0 = End.
 ///   - **Pitch** (1 byte): Period Table Index. For DMC: Sample Index.
@@ -351,6 +496,7 @@ pub fn compile_audio_data(assets: &Option<ProjectAssets>) -> Result<Vec<u8>, Str
     let mut blob = Vec::new();
 
     if let Some(assets) = assets {
+        validate_audio_assets(assets)?;
         let count = assets.audio_tracks.len();
         blob.push(count as u8);
 

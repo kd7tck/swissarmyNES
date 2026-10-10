@@ -17,7 +17,6 @@ class PpuViewer {
         this.container.style.backgroundColor = '#1e1e1e';
         this.container.style.border = '2px solid #444';
         this.container.style.zIndex = '1000';
-        this.container.style.display = 'flex';
         this.container.style.flexDirection = 'column';
         this.container.style.padding = '10px';
         this.container.style.color = '#eee';
@@ -78,8 +77,8 @@ class PpuViewer {
         this.nametableCanvas.style.imageRendering = 'pixelated';
 
         this.paletteCanvas = document.createElement('canvas');
-        this.paletteCanvas.width = 256; // Arbitrary width
-        this.paletteCanvas.height = 32;
+        this.paletteCanvas.width = 16; // 32 RGBA palette entries, two rows.
+        this.paletteCanvas.height = 2;
         this.paletteCanvas.style.imageRendering = 'pixelated';
         this.paletteCanvas.style.width = '100%';
 
@@ -96,6 +95,7 @@ class PpuViewer {
 
     attach(emulator) {
         this.emulator = emulator;
+        this.update();
     }
 
     show() {
@@ -145,13 +145,12 @@ class PpuViewer {
     }
 
     drawPatternTables() {
-        if (!this.emulator.update_pattern_tables) return;
+        if (!this.emulator?.update_pattern_tables || !window.wasmMemory) return;
         this.emulator.update_pattern_tables();
         const ptr = this.emulator.get_pattern_tables();
         const len = this.emulator.get_pattern_tables_len();
-        if (len === 0) return;
-
-        const memory = new Uint8Array(window.wasmMemory.buffer, ptr, len);
+        const memory = this.readBuffer(ptr, len, 256 * 128 * 4, 'pattern');
+        if (!memory) return;
         // RGBA data
         const ctx = this.patternCanvas.getContext('2d');
         const imgData = ctx.createImageData(256, 128);
@@ -159,30 +158,42 @@ class PpuViewer {
         ctx.putImageData(imgData, 0, 0);
     }
 
+    drawViewport(ctx) {
+        const position = this.emulator?.viewport_position?.();
+        if (!position || position.length !== 2) return;
+        const x = position[0] % 512, y = position[1] % 480;
+        ctx.strokeStyle = '#ff0';
+        ctx.lineWidth = 2;
+        // Clipped copies make nametable wrapping visible at both screen seams.
+        for (const dx of [0, -512]) {
+            for (const dy of [0, -480]) {
+                ctx.strokeRect(x + dx, y + dy, 256, 240);
+            }
+        }
+    }
+
     drawNametables() {
-        if (!this.emulator.update_nametables) return;
+        if (!this.emulator?.update_nametables || !window.wasmMemory) return;
         this.emulator.update_nametables();
         const ptr = this.emulator.get_nametables();
         const len = this.emulator.get_nametables_len();
-        if (len === 0) return;
-
-        const memory = new Uint8Array(window.wasmMemory.buffer, ptr, len);
+        const memory = this.readBuffer(ptr, len, 512 * 480 * 4, 'nametable');
+        if (!memory) return;
         const ctx = this.nametableCanvas.getContext('2d');
         const imgData = ctx.createImageData(512, 480);
         imgData.data.set(memory);
         ctx.putImageData(imgData, 0, 0);
+        this.drawViewport(ctx);
     }
 
     drawPalettes() {
-        if (!this.emulator.update_palettes) return;
+        if (!this.emulator?.update_palettes || !window.wasmMemory) return;
         this.emulator.update_palettes();
         const ptr = this.emulator.get_palettes();
         const len = this.emulator.get_palettes_len();
-        if (len === 0) return;
-
-        const memory = new Uint8Array(window.wasmMemory.buffer, ptr, len);
         // The emulator exports exactly 32 RGBA entries in two rows of 16.
-        if (len !== 32 * 4) throw new Error('Invalid palette buffer length');
+        const memory = this.readBuffer(ptr, len, 32 * 4, 'palette');
+        if (!memory) return;
         const ctx = this.paletteCanvas.getContext('2d');
         this.paletteCanvas.width = 16;
         this.paletteCanvas.height = 2;
@@ -193,12 +204,23 @@ class PpuViewer {
         this.paletteCanvas.style.imageRendering = 'pixelated';
     }
     drawOAM() {
-        if (!this.emulator.get_oam_data) return;
+        if (!this.emulator?.get_oam_data || !window.wasmMemory) return;
         const ptr = this.emulator.get_oam_data();
         const len = this.emulator.get_oam_data_len();
-        const memory = new Uint8Array(window.wasmMemory.buffer, ptr, len);
+        const memory = this.readBuffer(ptr, len, 256, 'OAM');
 
         this.oamList.innerHTML = PpuViewer.formatOamEntries(memory);
+    }
+
+    readBuffer(ptr, len, expected, name) {
+        if (!window.wasmMemory || len === 0) return null;
+        if (len !== expected) throw new Error(`Invalid ${name} buffer length`);
+        // Recreate views after each core update because WASM memory may grow.
+        const buffer = window.wasmMemory.buffer;
+        if (!Number.isInteger(ptr) || ptr < 0 || ptr + len > buffer.byteLength) {
+            throw new Error(`Invalid ${name} buffer bounds`);
+        }
+        return new Uint8Array(buffer, ptr, len);
     }
 
     static formatOamEntries(memory) {
@@ -211,11 +233,11 @@ class PpuViewer {
             const attr = memory[i * 4 + 2];
             const x = memory[i * 4 + 3];
 
-            // Highlight used sprites (Y < 240 usually)
-            const color = y >= 240 ? '#555' : '#fff';
+            // OAM stores top minus one; 239 starts at the first offscreen scanline.
+            const color = y >= 239 ? '#555' : '#fff';
             const hexTile = tile.toString(16).toUpperCase().padStart(2, '0');
             const binAttr = attr.toString(2).padStart(8, '0');
-            html += `<div style="color:${color}">Sprite ${i}: X=${x} Y=${y} Tile=$${hexTile} Attr=${binAttr}</div>`;
+            html += `<div style="color:${color}">Sprite ${i}: X=${x} Y=${y} Tile=$${hexTile} Attr=${binAttr} Top=${y + 1} Palette=${attr & 3} Priority=${attr & 0x20 ? 'behind' : 'front'} Flip=${attr & 0x40 ? 'H' : '-'}${attr & 0x80 ? 'V' : '-'}</div>`;
         }
         return html;
     }

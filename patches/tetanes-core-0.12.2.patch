@@ -2156,3 +2156,26 @@ index 6578790..466dba1 100644
 +impl Clock for Nrom {}
 +impl Regional for Nrom {}
 +impl Sram for Nrom {}
+diff --git a/src/mapper/m004_txrom.rs b/src/mapper/m004_txrom.rs
+--- a/src/mapper/m004_txrom.rs
++++ b/src/mapper/m004_txrom.rs
+@@ -253,7 +253,9 @@
+     fn map_peek(&self, addr: u16) -> MappedRead {
+         match addr {
+             0x0000..=0x1FFF => MappedRead::Chr(self.chr_banks.translate(addr)),
+             0x2000..=0x3EFF if self.mirroring == Mirroring::FourScreen => {
+-                MappedRead::ExRam((addr & 0x1FFF) as usize)
++                // $3000-$3EFF mirrors $2000-$2EFF, within four 1 KiB tables.
++                // Preserve independent tables without indexing past 4 KiB ExRAM.
++                MappedRead::ExRam((addr & 0x0FFF) as usize)
+             }
+             0x6000..=0x7FFF => MappedRead::PrgRam(self.prg_ram_banks.translate(addr)),
+@@ -268,7 +270,7 @@
+         match addr {
+             0x0000..=0x1FFF => MappedWrite::ChrRam(self.chr_banks.translate(addr), val),
+             0x2000..=0x3EFF if self.mirroring == Mirroring::FourScreen => {
+-                MappedWrite::ExRam((addr & 0x1FFF) as usize, val)
++                MappedWrite::ExRam((addr & 0x0FFF) as usize, val)
+             }
+             0x6000..=0x7FFF => MappedWrite::PrgRam(self.prg_ram_banks.translate(addr), val),
+             0x8000..=0xFFFF => {

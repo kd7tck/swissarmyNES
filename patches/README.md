@@ -6,14 +6,19 @@ storage, checks and applies the adjacent source patch, then replaces the generat
 dependency directory. The archive retains upstream authorship and MIT/Apache-2.0
 license metadata. No upstream binaries or generated files are committed here.
 
-The patch currently corrects independent NES 2.0 volatile/nonvolatile RAM size
-decoding and NROM's explicit PRG RAM absence/small-capacity mirroring. Legacy NROM
-keeps its previous default RAM behavior. The production emulator and native tests
-resolve the same patched dependency through the root Cargo patch declaration.
+The patch corrects independent NES 2.0 volatile/nonvolatile RAM size decoding,
+NROM's explicit PRG RAM absence/small-capacity mirroring, and MMC3 four-screen
+nametable mirrors. The MMC3 correction keeps $3000-$3EFF accesses inside its
+4 KiB extra RAM; a production CPU/PPUDATA regression reproduced the prior
+out-of-bounds panic. Legacy NROM keeps its default RAM behavior. Native tests
+and generated WASM resolve the same patch through the root Cargo declaration.
 
-RAM and NVRAM capacity is combined in the backend bus; separate nonvolatile save
-and reset policies remain unfinished. Other mappers' implicit allocations have
-not yet been reconciled. Do not interpret this patch as complete NES 2.0 support.
+RAM and NVRAM share backend storage, with declared battery partitions owned by
+the emulator wrapper's snapshot/restore/reset policy. Mapper allocations that
+disagree with NES 2.0 declarations are rejected before replacing the active game.
+Unsupported NROM geometries and board capabilities are reported explicitly.
+See [runtime contracts](../docs/RUNTIME_CONTRACTS.md) for the supported boundary;
+this patch does not imply unrestricted NES 2.0 board support.
 
 When editing the patch, regenerate the dependency, run the native cartridge and
 CPU regressions, rebuild WASM, and run `node --test tests/js/*.test.cjs`.

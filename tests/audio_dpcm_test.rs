@@ -92,7 +92,10 @@ fn test_compile_audio_dmc() {
         chr_bank: vec![],
         palettes: vec![],
         nametables: vec![],
-        samples: vec![],
+        samples: vec![DpcmSample {
+            name: "Sample 0".into(),
+            data: vec![0xaa],
+        }],
         envelopes: vec![],
         sound_effects: vec![],
         metatiles: vec![],

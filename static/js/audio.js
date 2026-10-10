@@ -80,7 +80,13 @@ class AudioTracker {
         const btnPlay = document.getElementById('btn-play-track');
         if (btnPlay) {
             btnPlay.addEventListener('click', () => {
-                console.log("Preview not implemented in JS yet. Compile to hear.");
+                if (!this.tracks[this.currentTrackIndex]?.notes.length) {
+                    alert('Add notes to this track before playing it.');
+                    return;
+                }
+                // Preview uses the same compiled APU runtime as the game,
+                // including DPCM and envelopes, rather than a second synth.
+                window.editor?.runEmulator({previewTrackId: this.currentTrackIndex});
             });
         }
 
@@ -122,7 +128,16 @@ class AudioTracker {
             });
         }
 
-        window.addEventListener('envelopes-updated', () => {
+        window.addEventListener('envelopes-updated', event => {
+            const removed = event.detail?.deletedIndex;
+            if (Number.isInteger(removed)) {
+                for (const track of this.tracks) {
+                    for (const field of ['vol_env', 'pitch_env', 'arpeggio_env']) {
+                        if (track[field] === removed) track[field] = null;
+                        else if (track[field] > removed) track[field]--;
+                    }
+                }
+            }
             this.loadTrackUI();
         });
 
@@ -135,13 +150,25 @@ class AudioTracker {
     renderGrid() {
         this.root.innerHTML = '';
 
-        let startOctave = 4;
+        const sampleTrack = this.tracks[this.currentTrackIndex]?.channel === 3;
+        if (sampleTrack && this.samples.length === 0) {
+            const hint = document.createElement('p');
+            hint.textContent = 'Import a WAV sample to add DMC notes.';
+            this.root.appendChild(hint);
+            return;
+        }
+        const rows = sampleTrack ? this.samples.length : this.rows;
+        this.root.style.gridTemplateRows = `repeat(${rows}, 20px)`;
+        this.root.style.gridTemplateColumns = `${sampleTrack ? 120 : 40}px repeat(${this.cols}, 1fr)`;
+
+        // The preserved period table begins at physical C2, so index48 is C6.
+        let startOctave = 6;
         let noteIndex = this.noteNames.length - 1;
 
-        for (let r = 0; r < this.rows; r++) {
+        for (let r = 0; r < rows; r++) {
             const currentNote = this.noteNames[noteIndex];
             const isBlackKey = currentNote.includes('#');
-            const labelText = `${currentNote}${startOctave}`;
+            const labelText = sampleTrack ? `${r}: ${this.samples[r].name}` : `${currentNote}${startOctave}`;
 
             const label = document.createElement('div');
             label.className = `tracker-row-label ${isBlackKey ? 'black-key' : ''}`;
@@ -153,7 +180,7 @@ class AudioTracker {
                 cell.className = 'tracker-cell';
                 cell.dataset.row = r;
                 cell.dataset.col = c;
-                cell.dataset.pitch = (startOctave * 12) + noteIndex;
+                cell.dataset.pitch = sampleTrack ? r : (startOctave * 12) + noteIndex;
 
                 cell.addEventListener('mousedown', (e) => this.toggleNote(r, c, cell));
 
@@ -179,7 +206,7 @@ class AudioTracker {
             track.notes.push({
                 row: row,
                 col: col,
-                pitch: cellElement.dataset.pitch,
+                pitch: Number(cellElement.dataset.pitch),
                 duration: this.defaultDuration
             });
             cellElement.classList.add('active');
@@ -187,6 +214,7 @@ class AudioTracker {
     }
 
     loadTrackUI() {
+        this.renderGrid();
         const cells = this.root.querySelectorAll('.tracker-cell');
         cells.forEach(c => c.classList.remove('active'));
 
@@ -194,6 +222,18 @@ class AudioTracker {
 
         const instrumentSelect = document.getElementById('audio-instrument-select');
         if (instrumentSelect) {
+            instrumentSelect.innerHTML = '';
+            const choices = track.channel === 3
+                ? Array.from({length: 16}, (_, rate) => [rate, `DMC rate ${rate}`])
+                : track.channel === 2 ? [[0xff, 'Triangle linear counter on']]
+                : [[0x9f, '50% duty, max volume'], [0xbf, '75% duty, max volume'],
+                    [0x3f, '25% duty, max volume'], [0xcf, '75% duty, decay']];
+            for (const [value, name] of choices) {
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = name;
+                instrumentSelect.appendChild(option);
+            }
             if (track.instrument === undefined) track.instrument = 0x9F;
             instrumentSelect.value = track.instrument;
         }
@@ -232,7 +272,10 @@ class AudioTracker {
 
     getData() {
         return {
-            audio_tracks: this.tracks, // Renamed to match struct key
+            audio_tracks: this.tracks.map(track => ({...track, notes: track.notes.map(note => ({
+                ...note, pitch: Number(note.pitch), row: Number(note.row ?? 0),
+                col: Number(note.col ?? note.step ?? 0), duration: Number(note.duration)
+            }))})),
             samples: this.samples,
             envelopes: this.envelopeEditor ? this.envelopeEditor.getEnvelopes() : []
         };
@@ -247,10 +290,10 @@ class AudioTracker {
             this.tracks = data.audio_tracks.map((t, i) => ({
                 name: t.name || `Track ${i+1}`,
                 notes: t.notes.map(n => ({
-                    row: n.row,
-                    col: n.col || n.step,
-                    pitch: n.pitch,
-                    duration: n.duration
+                    row: n.row ?? 0,
+                    col: n.col ?? n.step ?? 0,
+                    pitch: Number(n.pitch),
+                    duration: Number(n.duration)
                 })),
                 channel: (t.channel !== undefined) ? t.channel : i,
                 instrument: (t.instrument !== undefined) ? t.instrument : ((i===2)?0xFF:((i===3)?0x0F:0x9F)),
@@ -300,30 +343,57 @@ class AudioTracker {
         const file = fileInput.files[0];
         const name = nameInput.value || file.name.split('.')[0];
 
-        const arrayBuffer = await file.arrayBuffer();
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-        const dpcmData = this.encodeDPCM(audioBuffer);
-
-        this.samples.push({
-            name: name,
-            data: Array.from(dpcmData)
-        });
-
-        this.renderSampleList();
-        alert(`Imported sample "${name}" (${dpcmData.length} bytes)`);
+        let audioContext;
+        const project = window.projectManager?.currentProject;
+        const samples = this.samples;
+        try {
+            if (!/\.wav$/i.test(file.name)) throw new Error('Choose a WAV file.');
+            if (samples.length >= 64) throw new Error('At most 64 DPCM samples are supported.');
+            const arrayBuffer = await file.arrayBuffer();
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            const track = this.tracks[this.currentTrackIndex];
+            const rate = track.channel === 3 ? track.instrument & 15 : 15;
+            const dpcmData = this.encodeDPCM(audioBuffer, rate);
+            if (project !== window.projectManager?.currentProject || samples !== this.samples) return;
+            samples.push({name, data: Array.from(dpcmData)});
+            this.renderSampleList();
+            this.loadTrackUI();
+            alert(`Imported sample "${name}" (${dpcmData.length} bytes, DMC rate ${rate})`);
+        } catch (error) {
+            alert('Sample import failed: ' + error.message);
+        } finally {
+            try { await audioContext?.close(); } catch (error) { console.warn('Audio context cleanup:', error); }
+        }
     }
 
-    encodeDPCM(audioBuffer) {
+    encodeDPCM(audioBuffer, rate = 15) {
         const channelData = audioBuffer.getChannelData(0);
+        // Resample to the chosen NTSC DMC bit clock so a 44.1/48kHz WAV
+        // retains its duration at playback. The byte count is checked before
+        // encoding; the hardware cannot describe more than 4081 bytes.
+        const periods = [428,380,340,320,286,254,226,214,190,160,142,128,106,84,72,54];
+        if (!Number.isInteger(rate) || rate < 0 || rate > 15) throw new Error('DMC rate must be 0..15.');
+        const sourceRate = audioBuffer.sampleRate;
+        if (!Number.isFinite(sourceRate) || sourceRate <= 0 || channelData.length === 0) {
+            throw new Error('WAV has no valid audio samples.');
+        }
+        const targetRate = 1789773 / periods[rate];
+        const bitCount = Math.ceil(channelData.length * targetRate / sourceRate);
+        if (Math.ceil(bitCount / 8) > 4081) throw new Error('WAV is too long for a 4081-byte DPCM sample at this rate.');
         let accumulator = 0;
         const outputBytes = [];
         let currentByte = 0;
         let bitIndex = 0;
 
-        for (let i = 0; i < channelData.length; i++) {
-            const target = Math.floor((channelData[i] + 1.0) * 63.5);
+        for (let i = 0; i < bitCount; i++) {
+            const position = i * sourceRate / targetRate;
+            const low = Math.floor(position);
+            const fraction = position - low;
+            const first = channelData[Math.min(low, channelData.length - 1)];
+            const next = channelData[Math.min(low + 1, channelData.length - 1)];
+            if (!Number.isFinite(first) || !Number.isFinite(next)) throw new Error('WAV contains invalid samples.');
+            const target = Math.floor((first + (next - first) * fraction + 1.0) * 63.5);
             const clampedTarget = Math.max(0, Math.min(127, target));
 
             let bit = 0;
@@ -366,7 +436,15 @@ class AudioTracker {
             btnDelete.style.marginLeft = '10px';
             btnDelete.onclick = () => {
                 this.samples.splice(i, 1);
+                // Keep remaining sample IDs stable in authored DMC notes.
+                for (const track of this.tracks.filter(track => track.channel === 3)) {
+                    track.notes = track.notes.filter(note => note.pitch !== i).map(note => {
+                        const pitch = note.pitch > i && note.pitch !== 255 ? note.pitch - 1 : note.pitch;
+                        return {...note, pitch, row: pitch};
+                    });
+                }
                 this.renderSampleList();
+                this.loadTrackUI();
             };
             li.appendChild(btnDelete);
 

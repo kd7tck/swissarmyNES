@@ -233,7 +233,6 @@ class SFXEditor {
                                 <option value="0">Pulse 1</option>
                                 <option value="1">Pulse 2</option>
                                 <option value="2">Triangle</option>
-                                <option value="3">Noise</option>
                             </select>
                         </div>
                         <div class="sfx-property-row">
@@ -259,6 +258,7 @@ class SFXEditor {
                     <div class="sfx-seq-tabs">
                         <button id="tab-vol" class="active">Volume</button>
                         <button id="tab-pitch">Pitch</button>
+                        <button id="tab-arpeggio">Arpeggio</button>
                         <button id="tab-duty">Duty</button>
                     </div>
 
@@ -324,7 +324,7 @@ class SFXEditor {
         document.getElementById('sfx-loop').onchange = updateCurrent;
 
         // Tabs
-        ['vol', 'pitch', 'duty'].forEach(type => {
+        ['vol', 'pitch', 'arpeggio', 'duty'].forEach(type => {
             document.getElementById(`tab-${type}`).onclick = () => {
                 this.currentTab = type;
                 this.updateTabs();
@@ -335,8 +335,10 @@ class SFXEditor {
 
     playSFX() {
         if (this.currentIndex >= 0 && this.sfxList[this.currentIndex]) {
-            this.synth.play(this.sfxList[this.currentIndex]);
-            this.startOscillator();
+            try {
+                this.synth.play(this.sfxList[this.currentIndex]);
+                this.startOscillator();
+            } catch (e) { alert('Unable to preview SFX: ' + e.message); }
         }
     }
 
@@ -401,7 +403,7 @@ class SFXEditor {
     }
 
     updateTabs() {
-        ['vol', 'pitch', 'duty'].forEach(type => {
+        ['vol', 'pitch', 'arpeggio', 'duty'].forEach(type => {
             const btn = document.getElementById(`tab-${type}`);
             if (type === this.currentTab) btn.classList.add('active');
             else btn.classList.remove('active');
@@ -420,6 +422,7 @@ class SFXEditor {
             if (sfx.channel === undefined) sfx.channel = 0;
             if (!sfx.vol_sequence) sfx.vol_sequence = [];
             if (!sfx.pitch_sequence) sfx.pitch_sequence = [];
+            if (!sfx.arpeggio_sequence) sfx.arpeggio_sequence = [];
             if (!sfx.duty_sequence) sfx.duty_sequence = [];
         });
 
@@ -496,7 +499,9 @@ class SFXEditor {
         if (this.currentTab === 'vol') {
             this.seqEditor = new SequenceCanvas(container, sfx.vol_sequence, 0, 15, '#4CAF50', 'Volume', () => {});
         } else if (this.currentTab === 'pitch') {
-            this.seqEditor = new SequenceCanvas(container, sfx.pitch_sequence, -32, 32, '#E91E63', 'Pitch Offset', () => {});
+            this.seqEditor = new SequenceCanvas(container, sfx.pitch_sequence, -32, 32, '#E91E63', 'Timer Offset', () => {});
+        } else if (this.currentTab === 'arpeggio') {
+            this.seqEditor = new SequenceCanvas(container, sfx.arpeggio_sequence, -48, 47, '#FF9800', 'Semitones from note 48', () => {});
         } else if (this.currentTab === 'duty') {
             this.seqEditor = new SequenceCanvas(container, sfx.duty_sequence, 0, 3, '#2196F3', 'Duty Cycle', () => {});
         }
@@ -511,6 +516,7 @@ class SFXEditor {
             does_loop: false,
             vol_sequence: [15, 12, 8, 4, 0],
             pitch_sequence: [0, 0, 0, 0, 0],
+            arpeggio_sequence: [],
             duty_sequence: [0, 0, 0, 0, 0]
         };
         this.sfxList.push(newSFX);
@@ -576,9 +582,23 @@ class SFXEditor {
 
     importSFX(data, filename) {
         // Validate it looks like an SFX object
-        if (typeof data !== 'object') {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
              alert('Invalid SFX file format.');
              return;
+        }
+        // Reject malformed sequences before inserting into the editable asset list.
+        const ranges = {vol_sequence: [0, 15], pitch_sequence: [-128, 127], arpeggio_sequence: [-128, 127], duty_sequence: [0, 3]};
+        for (const [field, [min, max]] of Object.entries(ranges)) {
+            if (data[field] !== undefined && (!Array.isArray(data[field]) || data[field].some(value => !Number.isInteger(value) || value < min || value > max))) {
+                alert(`Invalid ${field}: expected integer values from ${min} to ${max}.`);
+                return;
+            }
+        }
+        for (const [field, min, max] of [['channel', 0, 2], ['priority', 0, 255], ['speed', 1, 255]]) {
+            if (data[field] !== undefined && (!Number.isInteger(data[field]) || data[field] < min || data[field] > max)) {
+                alert(`Invalid ${field}: expected an integer from ${min} to ${max}.`);
+                return;
+            }
         }
 
         // Sanitize / Default
@@ -590,6 +610,7 @@ class SFXEditor {
             does_loop: !!data.does_loop,
             vol_sequence: Array.isArray(data.vol_sequence) ? data.vol_sequence : [15, 0],
             pitch_sequence: Array.isArray(data.pitch_sequence) ? data.pitch_sequence : [0, 0],
+            arpeggio_sequence: Array.isArray(data.arpeggio_sequence) ? data.arpeggio_sequence : [],
             duty_sequence: Array.isArray(data.duty_sequence) ? data.duty_sequence : [0, 0]
         };
 
@@ -612,6 +633,7 @@ class SFXEditor {
             does_loop: sfx.does_loop,
             vol_sequence: sfx.vol_sequence,
             pitch_sequence: sfx.pitch_sequence,
+            arpeggio_sequence: sfx.arpeggio_sequence,
             duty_sequence: sfx.duty_sequence
         };
 

@@ -4,7 +4,7 @@
 
 ## Current Status
 The project is currently in active development, following a strict roadmap defined in `DESIGN.md`.
-For the current completion plan, read the [developer handoff through phase 40](docs/DEVELOPER_HANDOFF_THROUGH_PHASE_40.md), [baseline audit](docs/BASELINE_AUDIT.md), and [acceptance worksheet](docs/PHASE_40_ACCEPTANCE_CHECKLIST.md). The September 2026 audit found that native tests pass but the production compile API fails on minimal programs; historical completion labels below do not constitute end-to-end acceptance.
+For the current completion plan, read the [developer handoff through phase 40](docs/DEVELOPER_HANDOFF_THROUGH_PHASE_40.md), [baseline audit](docs/BASELINE_AUDIT.md), and [acceptance worksheet](docs/PHASE_40_ACCEPTANCE_CHECKLIST.md). The production compile failure recorded in the September baseline has been repaired and is covered by HTTP and ROM-execution tests. Broader phase acceptance, including actual browser/audio/controller and host-matrix evidence, remains in progress.
 **Historically marked complete:** phases 1 through 30.
 - **Core Compiler**: Lexer, Parser, AST, Symbol Table, Code Generation, Assembly.
 - **Language Features**: Strings, Arrays (`DIM`), Structures (`TYPE`), Enums (`ENUM`), Macros (`DEF MACRO`), Advanced Math (16-bit, Signed), Control Flow (`SELECT CASE`, `FOR`, `WHILE`).
@@ -70,8 +70,8 @@ A hybrid language designed for the NES, combining BASIC simplicity with low-leve
 
 1. **Clone the repository:**
    ```bash
-   git clone <repository-url>
-   cd SwissArmyNES
+   git clone https://github.com/kd7tck/swissarmyNES.git
+   cd swissarmyNES
    ```
 
 2. **Build the browser emulator from source:**
@@ -105,6 +105,14 @@ A hybrid language designed for the NES, combining BASIC simplicity with low-leve
    cargo +1.98.0 test --workspace --all-targets --locked
    node --test tests/js/*.test.cjs
    ```
+   A portable verification command performs fixture/core preparation, formatting,
+   native tests, strict Clippy, fresh WASM generation, and all JavaScript tests:
+   ```bash
+   node scripts/verify.mjs
+   ```
+   Use `--offline` for Cargo when all dependencies are cached, `--native` to skip
+   WASM generation, or `--frontend` for source JavaScript tests without a generated
+   bundle. Generated browser files remain ignored; rebuild before starting the IDE.
    The fixture script downloads the external nestest ROM (`nestest.nes`), reference trace (`nestest.trace`),
    and author documentation (`nestest-readme.txt` / upstream `nestest.txt`, available online at
    `https://github.com/christopherpow/nes-test-roms/blob/master/other/nestest.txt`) at a pinned revision

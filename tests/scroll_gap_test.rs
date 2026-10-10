@@ -1,29 +1,25 @@
 #[cfg(test)]
 mod tests {
     use swissarmynes::compiler::{
-        ast::{DataType, Program},
-        codegen::CodeGenerator,
-        symbol_table::SymbolTable,
+        analysis::SemanticAnalyzer, ast::Program, codegen::CodeGenerator, lexer::Lexer,
+        parser::Parser, symbol_table::SymbolTable,
     };
+
+    fn parse_fixture(source: &str) -> (Program, SymbolTable) {
+        let mut lexer = Lexer::new(source);
+        let mut parser = Parser::new(lexer.tokenize().unwrap());
+        let program = parser.parse().unwrap();
+        let mut analyzer = SemanticAnalyzer::new();
+        analyzer.analyze(&program).unwrap();
+        (program, analyzer.symbol_table)
+    }
 
     #[test]
     fn test_scroll_load_row_asm() {
-        let mut symbol_table = SymbolTable::new();
-        // Define 'arr'
-        symbol_table
-            .define(
-                "arr".to_string(),
-                DataType::Array(Box::new(DataType::Byte), 32),
-                swissarmynes::compiler::symbol_table::SymbolKind::Variable,
-            )
-            .unwrap();
-        symbol_table.assign_address("arr", 0x0500).unwrap();
-
+        // Reachability pruning retains only helpers requested by real source.
+        let (program, symbol_table) =
+            parse_fixture("DIM arr(32) AS BYTE\nSUB Main()\nScroll.LoadRow(480, arr)\nEND SUB\n");
         let mut codegen = CodeGenerator::new(symbol_table);
-
-        let program = Program {
-            declarations: vec![],
-        };
 
         let (asm, _) = codegen.generate(&program).unwrap();
         let asm_str = asm.join("\n");
@@ -36,12 +32,12 @@ mod tests {
 
                 // Check for gap skipping logic
                 assert!(
-                    routine.contains("CMP #$F0"),
-                    "Runtime_Scroll_LoadRow missing CMP #$F0 check"
+                    routine.contains("JSR Runtime_Scroll_NormalizeY"),
+                    "Runtime_Scroll_LoadRow must normalize repeated 240-pixel screens"
                 );
                 assert!(
-                    routine.contains("Scroll_Row_Gap_Skip"),
-                    "Runtime_Scroll_LoadRow missing Gap Skip Label"
+                    asm_str.contains("Scroll_Row_Gap_Skip"),
+                    "Runtime scroll normalization missing terminal gap-skip label"
                 );
             } else {
                 panic!("Scroll_LoadRow_Done: label not found");
@@ -53,11 +49,10 @@ mod tests {
 
     #[test]
     fn test_scroll_load_column_asm() {
-        let symbol_table = SymbolTable::new();
+        let (program, symbol_table) = parse_fixture(
+            "DIM arr(30) AS BYTE\nSUB Main()\nScroll.LoadColumn(256, arr)\nEND SUB\n",
+        );
         let mut codegen = CodeGenerator::new(symbol_table);
-        let program = Program {
-            declarations: vec![],
-        };
         let (asm, _) = codegen.generate(&program).unwrap();
         let asm_str = asm.join("\n");
 

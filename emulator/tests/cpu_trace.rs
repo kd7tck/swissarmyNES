@@ -22,7 +22,7 @@ fn compare_record(state: &CpuState, line: &str) -> Result<(), String> {
         u64::from(state.y),
         u64::from(state.status),
         u64::from(state.sp),
-        state.cycles as u64,
+        state.cycles,
     ];
     for (index, field) in ["PC", "A", "X", "Y", "P", "SP", "cycles"]
         .iter()

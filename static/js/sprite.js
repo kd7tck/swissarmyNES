@@ -8,6 +8,7 @@ class SpriteEditor {
         this.selectedTileIndex = 0;
         this.selectedAttr = 0;
         this.zoom = 2;
+        this.animationRequest = null;
 
         this.initUI();
         this.bindEvents();
@@ -112,7 +113,7 @@ class SpriteEditor {
         document.getElementById('btn-play-anim').onclick = () => this.playAnimation();
 
         // Listen for global events
-        window.addEventListener('chr-changed', () => this.renderChrPicker());
+        window.addEventListener('chr-changed', () => { this.renderChrPicker(); this.renderMetasprite(); });
         window.addEventListener('palette-changed', () => {
             this.renderChrPicker();
             this.renderMetasprite();
@@ -120,6 +121,12 @@ class SpriteEditor {
     }
 
     loadData(assets) {
+        this.stopAnimation();
+        this.currentMetasprite = null;
+        this.currentAnimation = null;
+        this.selectedFrameIndex = undefined;
+        document.getElementById('metasprite-editor-view').style.display = 'none';
+        document.getElementById('animation-editor-view').style.display = 'none';
         this.metasprites = assets.metasprites || [];
         this.animations = assets.animations || [];
 
@@ -171,6 +178,7 @@ class SpriteEditor {
     }
 
     selectMetasprite(ms) {
+        this.stopAnimation();
         this.currentMetasprite = ms;
         this.currentAnimation = null;
 
@@ -185,6 +193,8 @@ class SpriteEditor {
     }
 
     selectAnimation(anim) {
+        this.stopAnimation();
+        this.selectedFrameIndex = undefined;
         this.currentAnimation = anim;
         this.currentMetasprite = null;
 
@@ -212,6 +222,7 @@ class SpriteEditor {
     addMetasprite() {
         const name = prompt("Metasprite Name:", "NewSprite");
         if(name) {
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) { alert('Metasprite names must be valid code identifiers.'); return; }
             const newMs = { name: name, tiles: [] };
             this.metasprites.push(newMs);
             this.selectMetasprite(newMs);
@@ -219,6 +230,10 @@ class SpriteEditor {
     }
 
     deleteMetasprite() {
+        if (this.currentMetasprite && this.animations.some(animation => animation.frames.some(frame => frame.metasprite === this.currentMetasprite.name))) {
+            alert('Remove the animation frames using this metasprite before deleting it.');
+            return;
+        }
         if(this.currentMetasprite && confirm("Delete Metasprite?")) {
             const idx = this.metasprites.indexOf(this.currentMetasprite);
             this.metasprites.splice(idx, 1);
@@ -230,7 +245,15 @@ class SpriteEditor {
 
     renameMetasprite(name) {
         if(this.currentMetasprite) {
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) { alert('Metasprite names must be valid code identifiers.'); return; }
+            const previous = this.currentMetasprite.name;
             this.currentMetasprite.name = name;
+            // Animation references are names, so keep authored frames valid on rename.
+            for (const animation of this.animations) {
+                for (const frame of animation.frames) {
+                    if (frame.metasprite === previous) frame.metasprite = name;
+                }
+            }
             this.renderMetaspriteList();
         }
     }
@@ -355,11 +378,12 @@ class SpriteEditor {
         // Get Sprite Palettes from project
         if(window.projectManager && window.projectManager.assets) {
             // Palettes 4-7 are sprites
-            const palIdx = 4 + attrIdx;
+            const palIdx = 4 + (attrIdx & 3);
             const palettes = window.projectManager.assets.palettes;
             if(palettes && palettes[palIdx]) {
                 // Convert NES colors to RGB
-                return palettes[palIdx].colors.map(c => window.paletteEditor ? window.paletteEditor.getHexColor(c) : '#FFF');
+                return palettes[palIdx].colors.map(c => window.paletteEditor?.nesPalette
+                    ? '#' + window.paletteEditor.nesPalette[c & 0x3F] : '#FFF');
             }
         }
         return ['#00000000', '#F00', '#0F0', '#00F']; // Default debug
@@ -368,7 +392,7 @@ class SpriteEditor {
     drawTile(ctx, tileIdx, x, y, scale, attr) {
         // This duplicates some logic from MapEditor/CHREditor but keeps it self contained for now
         // Ideally we have a shared Renderer service
-        const bank = window.projectManager.assets.chr_bank;
+        const bank = window.projectManager?.assets?.chr_bank;
         if(!bank) return;
 
         const offset = tileIdx * 16;
@@ -385,7 +409,9 @@ class SpriteEditor {
 
                 if(val !== 0) { // Transparent
                     ctx.fillStyle = palette[val];
-                    ctx.fillRect(x + col * scale, y + row * scale, scale, scale);
+                    const drawX = attr & 0x40 ? 7 - col : col;
+                    const drawY = attr & 0x80 ? 7 - row : row;
+                    ctx.fillRect(x + drawX * scale, y + drawY * scale, scale, scale);
                 }
             }
         }
@@ -395,6 +421,7 @@ class SpriteEditor {
     addAnimation() {
         const name = prompt("Animation Name:", "NewAnim");
         if(name) {
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) { alert('Animation names must be valid code identifiers.'); return; }
             const newAnim = { name: name, frames: [], does_loop: true };
             this.animations.push(newAnim);
             this.selectAnimation(newAnim);
@@ -403,6 +430,7 @@ class SpriteEditor {
 
     deleteAnimation() {
         if(this.currentAnimation && confirm("Delete Animation?")) {
+            this.stopAnimation();
             const idx = this.animations.indexOf(this.currentAnimation);
             this.animations.splice(idx, 1);
             this.currentAnimation = null;
@@ -413,6 +441,7 @@ class SpriteEditor {
 
     renameAnimation(name) {
         if(this.currentAnimation) {
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) { alert('Animation names must be valid code identifiers.'); return; }
             this.currentAnimation.name = name;
             this.renderAnimationList();
         }
@@ -444,6 +473,7 @@ class SpriteEditor {
         const meta = document.getElementById('anim-frame-meta').value;
         const dur = parseInt(document.getElementById('anim-frame-dur').value);
         if(!meta) { alert("Select a metasprite first"); return; }
+        if (!Number.isInteger(dur) || dur < 1 || dur > 255) { alert('Frame duration must be 1–255 frames.'); return; }
 
         this.currentAnimation.frames.push({ metasprite: meta, duration: dur });
         this.renderFrameList();
@@ -453,6 +483,7 @@ class SpriteEditor {
         if(!this.currentAnimation || this.selectedFrameIndex === undefined) return;
         const meta = document.getElementById('anim-frame-meta').value;
         const dur = parseInt(document.getElementById('anim-frame-dur').value);
+        if (!meta || !Number.isInteger(dur) || dur < 1 || dur > 255) { alert('Select a metasprite and a duration of 1–255 frames.'); return; }
 
         this.currentAnimation.frames[this.selectedFrameIndex] = { metasprite: meta, duration: dur };
         this.renderFrameList();
@@ -465,20 +496,41 @@ class SpriteEditor {
         this.renderFrameList();
     }
 
+    stopAnimation() {
+        if (this.animationRequest !== null) cancelAnimationFrame(this.animationRequest);
+        this.animationRequest = null;
+    }
+
     playAnimation() {
+        this.stopAnimation();
         if(!this.currentAnimation || this.currentAnimation.frames.length === 0) return;
+        const animation = this.currentAnimation;
 
         let frameIdx = 0;
-        let timer = 0;
+        let startTime = null;
         const canvas = document.getElementById('anim-preview-canvas');
         const ctx = canvas.getContext('2d');
         const cx = 128;
         const cy = 128;
         const zoom = 2;
 
-        const loop = () => {
+        const loop = time => {
+            this.animationRequest = null;
+            if (animation !== this.currentAnimation || animation.frames.length === 0) return;
+            if (startTime === null) startTime = time;
+            // Preview durations are NES frames, independent of monitor refresh rate.
+            let elapsed = Math.max(0, Math.floor((time - startTime) * 60 / 1000));
+            const total = animation.frames.reduce((sum, frame) => sum + Math.max(1, frame.duration), 0);
+            const finished = !animation.does_loop && elapsed >= total;
+            if (animation.does_loop) elapsed %= total;
+            else elapsed = Math.min(elapsed, total - 1);
+            frameIdx = 0;
+            while (frameIdx < animation.frames.length - 1 && elapsed >= Math.max(1, animation.frames[frameIdx].duration)) {
+                elapsed -= Math.max(1, animation.frames[frameIdx].duration);
+                frameIdx++;
+            }
             // Draw current frame
-            const frame = this.currentAnimation.frames[frameIdx];
+            const frame = animation.frames[frameIdx];
             const ms = this.metasprites.find(m => m.name === frame.metasprite);
 
             // Clear
@@ -496,20 +548,8 @@ class SpriteEditor {
                 });
             }
 
-            timer++;
-            if(timer >= frame.duration) {
-                timer = 0;
-                frameIdx++;
-                if(frameIdx >= this.currentAnimation.frames.length) {
-                    if(this.currentAnimation.does_loop) {
-                        frameIdx = 0;
-                    } else {
-                        return; // Stop
-                    }
-                }
-            }
-            requestAnimationFrame(loop);
+            if (!finished) this.animationRequest = requestAnimationFrame(loop);
         };
-        loop();
+        this.animationRequest = requestAnimationFrame(loop);
     }
 }

@@ -402,7 +402,7 @@ fn generated_nmi_advances_music_envelopes_each_real_frame() {
     track.arpeggio_env = Some(0);
     track.vol_env = Some(1);
     assets.audio_tracks.push(track);
-    let source = "DIM ticks AS BYTE\nSUB Main()\nSound.Play(0)\nPOKE($2000, $80)\nEND SUB\nINTERRUPT NMI()\nLET ticks = ticks + 1\nEND INTERRUPT";
+    let source = "DIM ticks AS BYTE\nSUB Main()\nSound.Play(0)\nPOKE($2000, $80)\nFOR ticks = 0 TO 255\nWAIT_VBLANK\nNEXT ticks\nEND SUB\nINTERRUPT NMI()\nLET ticks = ticks + 1\nEND INTERRUPT";
     let (rom, _) = compile_source(Some(source.into()), None, Some(assets)).unwrap();
     let mut deck = ControlDeck::new();
     deck.load_rom("frame-audio.nes", &mut &rom[..]).unwrap();

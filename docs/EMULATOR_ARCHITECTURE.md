@@ -14,12 +14,12 @@ Bus routing and mirroring (P39-06) is tested and verified in `emulator/tests/bus
 
 This is not complete architecture acceptance. In particular:
 
-- The backend's default RAM allocation must be reconciled with explicit NES 2.0 absence and RAM/NVRAM declarations; metadata decoding alone does not prove allocation semantics.
+- The loader now rejects backend allocations that disagree with explicit NES 2.0 declarations. Declared volatile/battery partitions, native/WASM snapshot/restore, and hard-reset preservation are covered by dedicated tests; mapper geometries that cannot represent those declarations still need explicit support rather than invented defaults.
 - Partial-bank exponent layouts are rejected with a clear geometry error. Additional geometry support needs mapper-aware handling.
-- Hard reset is a fresh cartridge boot: original trainer bytes are reapplied through the CPU bus after RAM reset. A regression verifies all 512 bytes and subsequent ROM execution, including retention after a failed replacement load.
+- Hard reset reinitializes volatile state, retains declared PRG/CHR battery regions, and reapplies original trainer bytes. Battery restoration validates length transactionally; storage/ROM identity remain the caller's responsibility. See [runtime contracts](RUNTIME_CONTRACTS.md).
 - Timing, reserved bits, input-device metadata, submapper behavior, and ambiguous legacy headers require further acceptance tests.
 - The roadmap's named mapper operations and recording-mapper IRQ/bus integration remain to implement. Current routing still uses the upstream MapRead/MapWrite implementation.
-- Canonical CPU trace comparison now passes all 8,991 records in native and generated browser WASM. Supplemental CPU/interrupt coverage is still incomplete.
+- Canonical CPU trace comparison passes all 8,991 records in native and generated browser WASM. Supplemental tests now classify all encodings, exhaustively verify binary ADC/SBC, and exercise JAM/reset and addressing/cycle edges; broader interrupt/bus coverage remains tracked by the acceptance worksheet.
 
 Do not mark phase 39 or 40 complete based on the focused cartridge and debugger tests.
 

@@ -7,6 +7,7 @@ class CHREditor {
         this.assets = null;
         this.currentTileIndex = 0;
         this.currentColorIndex = 1; // 0-3
+        this.currentPaletteIndex = 0;
         this.scale = 20; // Scale 8x8 up to 160x160
         this.bankCanvas = null;
         this.bankCtx = null;
@@ -54,6 +55,17 @@ class CHREditor {
         controls.appendChild(this.lblTile);
         controls.appendChild(btnNext);
         controls.appendChild(btnBank);
+        const paletteSelect = document.createElement('select');
+        paletteSelect.title = 'CHR preview and PNG conversion palette';
+        ['BG0', 'BG1', 'BG2', 'BG3', 'SP0', 'SP1', 'SP2', 'SP3'].forEach((name, index) => {
+            const option = document.createElement('option'); option.value = index; option.textContent = name;
+            paletteSelect.appendChild(option);
+        });
+        paletteSelect.onchange = e => {
+            this.currentPaletteIndex = Number(e.target.value);
+            this.updateRenderPalette(); this.render(); this.renderBank();
+        };
+        controls.appendChild(paletteSelect);
         this.container.appendChild(controls);
 
         // Tool Bar (Shift, Flip, Fill)
@@ -287,16 +299,22 @@ class CHREditor {
         }
 
         const reader = new FileReader();
+        const targetAssets = this.assets;
+        reader.onerror = () => alert('Unable to read PNG file.');
         reader.onload = (e) => {
             const img = new Image();
+            img.onerror = () => alert('Unable to decode PNG image.');
             img.onload = () => {
+                if (this.assets !== targetAssets) return;
+                if (img.width !== 128 || img.height !== 128) {
+                    alert('CHR import requires a 128x128 PNG.');
+                    return;
+                }
                 const tempCanvas = document.createElement('canvas');
                 tempCanvas.width = 128;
                 tempCanvas.height = 128;
                 const tempCtx = tempCanvas.getContext('2d');
-                // Draw image. If larger, it will be cropped? No, drawImage scales if we provide w,h.
-                // But we want 1:1 pixel mapping.
-                // We'll just draw at 0,0 and whatever fits fits.
+                // Exact dimensions preserve tile corners and one-to-one pixel mapping.
                 tempCtx.drawImage(img, 0, 0);
 
                 const imageData = tempCtx.getImageData(0, 0, 128, 128);
@@ -396,7 +414,7 @@ class CHREditor {
 
     updateRenderPalette() {
         if (this.assets && this.assets.palettes && this.assets.palettes.length > 0) {
-            const pal = this.assets.palettes[0];
+            const pal = this.assets.palettes[this.currentPaletteIndex || 0];
             if (pal && window.paletteEditor && window.paletteEditor.nesPalette) {
                 this.renderPalette = pal.colors.map(c => '#' + window.paletteEditor.nesPalette[c & 0x3F]);
             }
@@ -421,7 +439,7 @@ class CHREditor {
         });
     }
 
-    updatePixel(x, y, color) {
+    updatePixel(x, y, color, notify = true) {
         if (!this.assets || !this.assets.chr_bank) return;
         const tileOffset = this.currentTileIndex * 16;
         const bitMask = 1 << (7 - x);
@@ -434,8 +452,10 @@ class CHREditor {
         if (color & 1) this.assets.chr_bank[lowByteIdx] |= bitMask;
         if (color & 2) this.assets.chr_bank[highByteIdx] |= bitMask;
 
-        this.render();
-        window.dispatchEvent(new Event('chr-changed'));
+        if (notify) {
+            this.render();
+            window.dispatchEvent(new Event('chr-changed'));
+        }
     }
 
     getPixel(x, y) {
@@ -480,9 +500,23 @@ class CHREditor {
         // Write back
         for(let y=0; y<8; y++) {
             for(let x=0; x<8; x++) {
-                this.updatePixel(x, y, newBuffer[y*8+x]);
+                this.updatePixel(x, y, newBuffer[y*8+x], false);
             }
         }
+        this.render();
+        window.dispatchEvent(new Event('chr-changed'));
+    }
+
+    getCanvas() {
+        // Consumers need the complete unscaled bank, not the selected 8x8 tile.
+        this.renderBank();
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        if (this.bankCanvas) ctx.drawImage(this.bankCanvas, 0, 0, 128, 128);
+        return canvas;
     }
 
     flipTile(axis) {

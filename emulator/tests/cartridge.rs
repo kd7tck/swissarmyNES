@@ -159,7 +159,8 @@ fn exponent_image_and_trainer_execute_via_production_loader() {
 
 #[test]
 fn loaded_region_controls_exported_frame_cadence() {
-    for (timing, expected) in [(0, 60.0988), (1, 50.007), (3, 50.007)] {
+    // Dual-compatible images use the backend's configured NTSC default.
+    for (timing, expected) in [(0, 60.0988), (1, 50.007), (2, 60.0988), (3, 50.007)] {
         let mut rom = vec![0; 16 + 16384 + 8192];
         rom[..8].copy_from_slice(&[b'N', b'E', b'S', 0x1a, 1, 1, 0, 8]);
         rom[12] = timing;
@@ -237,4 +238,168 @@ fn nes2_nrom_rejects_unmappable_ram_and_missing_chr_storage() {
         .load_rom(&image(h, 16384))
         .unwrap_err()
         .contains("explicit 8 KiB CHR RAM"));
+}
+
+#[test]
+fn nrom_geometry_and_capabilities_reject_without_replacing_active_game() {
+    let mut emulator = swiss_emulator::Emulator::new();
+    let mut valid = image(header(), 16384 + 8192);
+    valid[16..19].copy_from_slice(&[0x4c, 0, 0x80]);
+    valid[16 + 0x3ffc..16 + 0x3ffe].copy_from_slice(&0x8000u16.to_le_bytes());
+    emulator.load_rom(&valid).unwrap();
+    emulator.trace_instruction().unwrap();
+    let before = emulator.get_cpu_state();
+    for (prg, chr) in [(3, 1), (1, 2)] {
+        let mut h = header();
+        h[4] = prg;
+        h[5] = chr;
+        let error = emulator
+            .load_rom(&image(
+                h,
+                usize::from(prg) * 16384 + usize::from(chr) * 8192,
+            ))
+            .unwrap_err();
+        assert!(error.contains("NROM supports"));
+        assert_eq!(emulator.get_cpu_state().cycles, before.cycles);
+        assert_eq!(emulator.get_cpu_state().pc, before.pc);
+        assert_eq!(emulator.peek_cpu(0x8000), 0x4c);
+    }
+    for (byte, value, message) in [
+        (8, 0x10, "submapper"),
+        (15, 2, "expansion device"),
+        (7, 9, "console"),
+        (14, 1, "miscellaneous"),
+    ] {
+        let mut h = header();
+        h[7] = 8;
+        h[byte] = value;
+        let error = emulator.load_rom(&image(h, 16384 + 8192)).unwrap_err();
+        assert!(error.contains(message), "{error}");
+        assert_eq!(emulator.get_cpu_state().cycles, before.cycles);
+    }
+    let mut legacy_ram = header();
+    legacy_ram[6] = 2;
+    legacy_ram[8] = 2;
+    assert!(emulator
+        .load_rom(&image(legacy_ram, 16384 + 8192))
+        .unwrap_err()
+        .contains("at most 8 KiB"));
+    let mut mixed_chr = header();
+    mixed_chr[7] = 8;
+    mixed_chr[11] = 7;
+    assert!(emulator
+        .load_rom(&image(mixed_chr, 16384 + 8192))
+        .unwrap_err()
+        .contains("mixed CHR"));
+    let mut four_screen = header();
+    four_screen[6] = 8;
+    assert!(
+        CartridgeInfo::parse(&image(four_screen, 16384 + 8192))
+            .unwrap()
+            .four_screen
+    );
+    assert!(emulator
+        .load_rom(&image(four_screen, 16384 + 8192))
+        .unwrap_err()
+        .contains("four-screen"));
+    assert_eq!(emulator.get_cpu_state().pc, before.pc);
+    assert_eq!(emulator.get_cpu_state().cycles, before.cycles);
+    assert_eq!(emulator.peek_cpu(0x8000), 0x4c);
+}
+
+#[test]
+fn reserved_headers_are_rejected_and_console_detail_is_preserved() {
+    for (byte, value) in [(12, 4), (13, 1), (14, 4), (15, 64)] {
+        let mut h = header();
+        h[7] = 8;
+        h[byte] = value;
+        assert!(CartridgeInfo::parse(&image(h, 16384 + 8192))
+            .unwrap_err()
+            .contains("reserved"));
+    }
+    let mut legacy = header();
+    legacy[12] = b'D';
+    assert!(CartridgeInfo::parse(&image(legacy, 16384 + 8192))
+        .unwrap_err()
+        .contains("reserved"));
+    let mut vs = header();
+    vs[7] = 9;
+    vs[13] = 0x52;
+    let parsed = CartridgeInfo::parse(&image(vs, 16384 + 8192)).unwrap();
+    assert_eq!((parsed.console, parsed.console_detail), (1, 0x52));
+    assert!(parsed
+        .validate_supported_layout()
+        .unwrap_err()
+        .contains("console"));
+}
+
+#[test]
+fn unsupported_replacement_preserves_pending_hardware_irq_and_oam_dma() {
+    use swiss_emulator::cartridge::Mapper;
+    use tetanes_core::cpu::{Cpu, Irq};
+    let mut rom = image(header(), 16384 + 8192);
+    let code = [
+        0x78, 0xa9, 0x8f, 0x8d, 0x10, 0x40, // IRQ-enabled DMC, with CPU I set.
+        0xa9, 0x10, 0x8d, 0x12, 0x40, // Sample at $C400.
+        0xa9, 0x00, 0x8d, 0x13, 0x40, // One byte.
+        0xa9, 0x10, 0x8d, 0x15, 0x40, 0x4c, 0x15, 0x80,
+    ];
+    rom[16..16 + code.len()].copy_from_slice(&code);
+    rom[16 + 0x400] = 0xa5;
+    rom[16 + 0x3ffc..16 + 0x3ffe].copy_from_slice(&0x8000u16.to_le_bytes());
+    let mut emulator = swiss_emulator::Emulator::new();
+    emulator.load_rom(&rom).unwrap();
+    for _ in 0..100 {
+        if Cpu::has_irq(Irq::DMC) {
+            break;
+        }
+        emulator.trace_instruction().unwrap();
+    }
+    assert!(
+        Cpu::has_irq(Irq::DMC),
+        "actual sample exhaustion must assert DMC IRQ"
+    );
+    assert_eq!(emulator.peek_cpu(0x4015) & 0x80, 0x80);
+    // Debug bus writes use the same OAM DMA request route as a CPU STA.
+    emulator.write_prg(0x4014, 2);
+    assert_eq!(Cpu::dmas_running(), Some((false, true)));
+    let signals = (
+        Cpu::irqs().bits(),
+        Cpu::nmi_pending(),
+        Cpu::dmas_running(),
+        Cpu::halt_for_dma(),
+        Cpu::dma_dummy_read(),
+        Cpu::dma_oam_addr(),
+    );
+    let before = emulator.get_cpu_state();
+    let mut unsupported = image(header(), 16384 + 8192);
+    unsupported[6] = 0xf0;
+    unsupported[7] = 0xf8;
+    unsupported[8] = 0x0f; // Unsupported mapper 4095 reaches backend candidate construction.
+    assert!(emulator
+        .load_rom(&unsupported)
+        .unwrap_err()
+        .contains("UnimplementedMapper"));
+    assert_eq!(
+        (
+            Cpu::irqs().bits(),
+            Cpu::nmi_pending(),
+            Cpu::dmas_running(),
+            Cpu::halt_for_dma(),
+            Cpu::dma_dummy_read(),
+            Cpu::dma_oam_addr()
+        ),
+        signals
+    );
+    assert_eq!(emulator.get_cpu_state().pc, before.pc);
+    assert_eq!(emulator.get_cpu_state().cycles, before.cycles);
+    assert_eq!(emulator.peek_cpu(0x4015) & 0x80, 0x80);
+    emulator.trace_instruction().unwrap();
+    let after = emulator.get_cpu_state();
+    assert!(
+        matches!(after.cycles - before.cycles, 516 | 517),
+        "preserved OAM DMA plus JMP"
+    );
+    assert_eq!(after.pc, before.pc);
+    assert!(Cpu::has_irq(Irq::DMC));
 }

@@ -53,23 +53,23 @@ mod tests {
             .unwrap();
         let trampoline_code = &asm[trampoline_idx..];
 
-        // Sparse indexed loops cover temporary ranges without rolling back
-        // persistent controller, text, sprite, scroll or RNG state.
-        for instruction in [
-            "LDX #0",
-            "LDY InterruptScratchAddresses,X",
-            "LDA $0000,Y",
-            "CPX #28",
-            "BNE Save_NMI_Scratch",
-            "LDX #27",
-            "STA $0000,Y",
-            "BPL Restore_NMI_Scratch",
-            "STA $07F1",
-        ] {
+        // Direct accesses preserve exactly the transient bytes while avoiding
+        // the indexed-loop cycle cost in every NMI.
+        for address in (0..16).chain(0x14..=0x17).chain(0xf0..=0xf7) {
+            for instruction in [format!("LDA ${address:02X}"), format!("STA ${address:02X}")] {
+                assert!(trampoline_code
+                    .iter()
+                    .any(|line| line.trim() == instruction));
+            }
+        }
+        for instruction in ["STA $07F1", "Save_NMI_Scratch:", "Restore_NMI_Scratch:"] {
             assert!(trampoline_code
                 .iter()
                 .any(|line| line.trim() == instruction));
         }
+        assert!(!trampoline_code
+            .iter()
+            .any(|line| line.contains("InterruptScratchAddresses")));
 
         // Check for JSR CallUserNMI
         assert!(trampoline_code

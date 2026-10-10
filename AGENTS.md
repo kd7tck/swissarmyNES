@@ -50,6 +50,25 @@ This document serves as the primary instruction manual for AI agents working on 
 -   **Memory Management**: The NES has 2KB of RAM. The compiler must manage this strictly (`$0000-$07FF`).
 
 ## Brain
+### Latest saved credit-low checkpoint — October 9, 2026
+
+- User paused again. World/demo/timing/pool/core repair and music/DPCM authoring work is saved uncommitted. Resume from the **first** section of `docs/IMPLEMENTATION_RESUME.md`; prior continuation/stop notes are historical.
+- First pending fix is Clippy's `trim().split_whitespace()` at codegen.rs308, then full native/format/Clippy/fresh WASM/Node verification. Actual browser failed to connect under sandbox and still needs a permitted local server; no GUI/device acceptance claim. Generated artifacts remain excluded.
+
+### Resumed full-platform completion — October 9, 2026
+
+- User resumed. Read the first section of `docs/IMPLEMENTATION_RESUME.md`; prior credit-low stops are historical. Continue World integration, game/audio timing, cartridge/CPU and browser workflow acceptance, then integrated checks and source-only commit. Exact work ownership/recovery notes are under `.tools/notes/`.
+
+### Credit-low stop — October 9, 2026
+
+- User requested checkpoint/pause. No commit; preserve modified/untracked source and tests based on `bd42af4`. Resume from the **first** section of `docs/IMPLEMENTATION_RESUME.md`, which lists passing tests and exact unfinished World/runtime/WASM/acceptance steps.
+- Release WASM compilation completed, but browser bindings/full Node matrix and final native/Clippy/format checks remain pending. Worker notes under ignored `.tools/notes/` document all edits. Do not infer complete phase acceptance from targeted green suites.
+
+### Active completion audit — October 9, 2026
+
+- Resumed from `bd42af4`; full phase acceptance remains pending. The first section of `docs/IMPLEMENTATION_PROGRESS.md` documents current scroll, sound/SFX/DPCM, project-save, emulator lifecycle/input, and graphics findings and their reproduction plans.
+- Continue the runtime/audio/frontend repair work and supplemental CPU/cartridge coverage. Keep per-file recovery notes under ignored `.tools/notes/`; generated artifacts must stay out of commits. Capture actual verification evidence before advancing the acceptance worksheet.
+
 # Plan–develop–test loop: runtime shift count normalization — September 16, 2026
 
 - Planned and implemented runtime masking for `BITSHL`/`BITSHR` counts in `src/compiler/codegen.rs` so generated code matches the existing constant-folding mask (`count & 31`).

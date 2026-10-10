@@ -18,6 +18,8 @@ function fixture() {
     Object.assign(editor, {
         emulatorRunning: true, frameRequest: null, lastFrameTime: null, frameDebt: 0,
         frameCount: 0, memoryViewerOpen: false, ppuViewer: {isVisible: false}, wasmMemory: null,
+        keyboardState: Array(8).fill(false), gamepadState: Array(8).fill(false),
+        lastSentState: Array(8).fill(false), pressedKeys: new Set(), audioSources: new Set(),
         emulator: {
             frame_rate() {return 60.0988;}, step() {steps++; return false;}, get_pixels() {return 0;}, get_pixels_len() {return 0;},
             get_audio_samples() {return 0;}, get_audio_samples_len() {return 0;}, reset() {}

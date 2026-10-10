@@ -47,7 +47,7 @@ pub struct AudioTrack {
     pub notes: Vec<AudioNote>,
     #[serde(default)]
     #[serde(alias = "envelope")]
-    pub channel: u8, // 0=Pulse1, 1=Pulse2, 2=Triangle, 3=Noise (Renamed from envelope)
+    pub channel: u8, // 0=Pulse1, 1=Pulse2, 2=Triangle, 3=DMC (legacy alias: envelope)
     #[serde(default)]
     pub instrument: u8, // Envelope/Duty setting (e.g. $9F for Max Vol, 50% Duty)
     #[serde(default)]
@@ -112,6 +112,9 @@ pub struct SoundEffect {
     pub vol_sequence: Vec<u8>,
     #[serde(default)]
     pub pitch_sequence: Vec<i8>,
+    /// Semitone offsets from the effect's base note, independent of timer offsets.
+    #[serde(default)]
+    pub arpeggio_sequence: Vec<i8>,
     #[serde(default)]
     pub duty_sequence: Vec<u8>,
     #[serde(default)]
@@ -396,6 +399,8 @@ fn validate_filename(name: &str) -> Result<(), String> {
 impl ProjectAssets {
     /// Validate dimensions before any slicing, narrowing conversions, or code generation.
     pub fn validate_for_compile(&self) -> Result<(), String> {
+        crate::compiler::audio::validate_audio_assets(self)?;
+        crate::compiler::world::validate_assets(self)?;
         if self.chr_bank.len() > 8192 {
             return Err("CHR data exceeds 8192 bytes".into());
         }

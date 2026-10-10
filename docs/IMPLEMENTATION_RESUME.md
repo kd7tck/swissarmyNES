@@ -1,3 +1,70 @@
+# Credit-low checkpoint — October 9, 2026 (World/demo/core repair saved)
+
+**User requested another checkpoint and pause. Stop implementation; no commit has been made.** The work remains on `main` based on `bd42af4`, with all modified/untracked source preserved. The continuation below is historical until the user resumes.
+
+## Latest completed work and evidence
+
+- **World workflow is implemented:** complete linker-managed map/attribute images in unused MMC1 banks, `World.Load`, `World.Tile`, selected-map `Collision.Tile`, map selection/deletion/reindexing, and coordinate-preserving world resizing. **6/6 production World tests and 38/38 focused frontend tests passed.** Directory/capacity, four-map readback, backtracking, empty/OOB cells, bank/control/scroll/IRQ restoration and 20-map cross-bank storage are covered. Worker notes: `.tools/notes/frontend-acceptance-2026-10-09.md`.
+- **Game timing and pool fixes pass targeted tests.** Built-in PPU writes under three looping tonal effects plus DMC finish at **964–1324 cycles**, below 2273-cycle NTSC vblank; full NMIs take **4294–5204 cycles**, below a frame. User NMI handlers remain responsible for their own PPU budget. Solid-wall movement and ten-slot capacity/cleared-reuse/invalid-despawn/neighbor preservation pass.
+- **Editable platform demo is installed** at ignored `projects/platform-demo`. Source is `examples/platform-demo/{main.swiss,rooms.swiss,assets.mjs,install.mjs,README.md}`; installer preserves existing user data. Production test passes includes/source maps, ≥3 rendered colors, eight OAM tiles, animation, input press edges/SFX, wall stopping, room switching, and pool behavior. Test: `tests/platform_demo_execution_test.rs`.
+- **Emulator boundary/core audit:** 31 targeted tests passed after `node scripts/prepare-core.mjs` successfully applied the full verified patch. Includes complete failed-load IRQ/NMI/DMA preservation, capability/header checks, scheduled NMI hijacking/reset isolation, actual MMC3 IRQ routing and four-screen mirror behavior. `patches/tetanes-core-0.12.2.patch` now appends two MMC3 nametable-mask corrections (`1FFF` → `0FFF`), preserving existing Cart/NROM sections. The real PPUDATA mirror test reproduced an ExRAM index4096/length4096 panic before repair and passes afterward. Simultaneous independent emulator instances remain unsupported by the thread-local backend signals; browser owns one active instance.
+- **Root music/DPCM authoring fixes:** Play now compiles selected music through the production APU/emulator. Notes serialize numeric pitch/column0 correctly; DMC grid selects sample IDs and all 16 rates; WAV import resamples to the selected DMC clock, rejects >4081 bytes and closes its context; deleting samples/envelopes repairs references. Tracker physical note labels reflect the preserved period table. **7/7 new `audio_authoring.test.cjs` tests passed.** The final review was interrupted at the pause; no further review edits were made.
+- **Earlier generated-WASM matrix passed 39/39**, including canonical trace, BigInt cycles, ALU/JAM and battery checks. **That bundle predates the latest emulator/core patch and music/World authoring changes; it is not final current-head evidence.** Generated bindings remain ignored.
+
+## First actions on resume
+
+1. Preserve the tree, then fix strict Clippy's known error at `src/compiler/codegen.rs:308`: `line.trim().split_whitespace()` must use `line.split_whitespace()`. Latest Clippy exited101; log `.tools/completion-clippy-final-20261009.log`. Do not suppress the lint. Formatting ran before that Clippy job, but final formatting/checks must be repeated after all subsequent edits.
+2. Run targeted World/demo/game/NMI/audio/emulator suites, full workspace tests, formatting and strict Clippy. Last full-native log `.tools/completion-native-resume-20261009.log` failed the pool-tail assertion **before its fix**; the worker's corrected targeted pool test passes, but full native was not rerun. No build/test/server jobs remain running.
+3. Rebuild release WASM against the newly prepared core, regenerate with wasm-bindgen0.2.106, run **all** `tests/js/*.test.cjs` (now includes the seven music authoring tests and expanded authoring tests). Keep BigInt cycle assertions. Use `scripts/verify.mjs`; do not re-prepare the core during a build.
+4. Finish actual browser verification against a freshly built server. Browser helper initialized in CUA, but every local-page attempt failed before the IDE loaded. Sandboxed local socket access is forbidden (`Invoke-WebRequest` reported access permissions); the copied server initially died with its launching command, then foreground PTY server session81142 listened but was stopped cleanly before core preparation. **No actual browser/audio/controller acceptance was performed.** Rebuild the server and, if sandbox prevents access again, request the required `exec_command` network-sandbox escalation for its local launch; no escalation was requested yet. Agent tabs were only connection-error pages, not usable IDE sessions.
+5. Re-run/review the root music-preview/bootstrap changes, verify demo save/compile/run, visual rendering and breakpoints/downloads. Demo native probe addresses: xWORD05C0, yWORD05C2, room05C4, loaded05C5, sound_hits05C6, frameWORD05C7, blocked05C9; eight sprites. Initial32/128/room0; Right200frames stopsx160; Up40 thenRight100 entersroom1; Apress increments sound_hits once per edge. Installer command: `node examples/platform-demo/install.mjs`.
+6. Update the stale shared docs: World/scroll/pool/NMI contracts, supported cartridge layouts, patch README's new MMC3 repair and implemented battery policy, completion evidence and actual release limitations. The acceptance worksheet still has historical pending entries; fill only from actual results, not configuration/mocks. Run source-only staged-tree checks and commit when this integrated batch is verified. Generated `.tools`, `target`, WASM, downloaded ROMs and logs stay excluded.
+
+Recovery notes: `.tools/notes/completion-2026-10-09.md`, `runtime-games-2026-10-09.md`, `frontend-acceptance-2026-10-09.md`, `audio-runtime-2026-10-09.md`, `cpu-bus-timing-2026-10-09.md`, `emulator-final-audit-2026-10-09.md`. All workers are stopped; no checkpoint commit.
+
+# Active full-platform continuation — October 9, 2026
+
+User resumed the checkpoint and requested the intended full NES development platform. The stop instruction below is historical. Preserve the working tree and targeted results recorded there; no commit yet.
+
+Current ownership: world runtime/assets/language integration; active NMI/gameplay timing and collision/pool acceptance; emulator cartridge/CPU acceptance; root handles integrated build checks, browser authoring/save/compile/run verification, documentation, and final source-only commit. Each worker updates ignored `.tools/notes/` with per-file changes.
+
+Finish the previously incomplete World pipeline and the existing batch's final verification before release. Keep the same core in native/WASM and validate actual guest execution. Actual host CI, audio output and physical-controller evidence must not be inferred from mocks.
+
+# Credit-low checkpoint — October 9, 2026 (stop requested)
+
+**STOP: user requested a checkpoint and pause. No commit was made.** Preserve the current working tree based on `bd42af4`; it contains substantial implemented repairs plus unfinished world integration. Resume only after the user asks. All generated outputs, downloaded fixtures, logs, and `.tools` notes remain ignored.
+
+## Verified work completed before the stop
+
+- Frontend source matrix: **36/36 tests passed**. Save/compile races, stale project/file loading, mixed keyboard/gamepad holds, dual Shift, audio cleanup, exact source-map/file breakpoints, RAM/PPU bounds and viewport, PNG conversion, graphics references/preview, and SFX arpeggio editing/preview have regressions.
+- Audio: **10 production CPU/APU execution tests passed**, plus encoding/DPCM/priority/SFX/Sound.Stop suites. `Sound.Play` starts music; `PLAY_SFX` now dispatches effects. Stop silences hardware; effects activate, observe priority, and resume music. Envelope timing/arpeggios/DPCM selection and input validation were repaired.
+- Emulator battery tests: **3 passed**. Only declared PRG/CHR NVRAM is exported/restored/preserved on reset; invalid payloads/replacements leave state intact. Unsupported NES 2.0 backend allocations are rejected transactionally.
+- CPU contract tests: **4 passed**, including the independent 256/151/56 inventory, 524,288 ADC/SBC operand/flag cases, page/zero-page timing, and all 12 JAM/reset paths.
+- Supplemental bus timing tests: **4 passed**. Actual device-visible official/stable-unofficial RMW dummy writes, DMC fetch/stalls, DMC/APU IRQ acknowledgement/masking, and PPU NMI priority over held APU IRQ are covered without injected IRQ entry. Interrupt hijacking and reset isolation remain gaps.
+- Root compiler tests: **3 runtime-linking tests plus 3 control-flow tests passed**. Reachability pruning frees fixed-bank capacity while preserving transitive and inline-ASM helper references. Dynamic stores use destination width; INT array reads sign-extend; decimal strings convert zero, unsigned boundaries, and negatives correctly.
+- Game runtime: final worker results are **14/14 game execution tests, 12/12 bank/interrupt tests, and NMI safety passing**. Scroll calls/pointers, repeated seams, two-stage attribute uploads, text clipping, metasprite/animation pointer boundaries, and collision overflow were repaired. Exact 28-address unrolled NMI/IRQ saves pass; idle NMI dropped from 1774 to **1136 cycles**. Active-audio/upload timing remains unmeasured.
+- Release WASM compilation completed successfully (session `67286`, exit 0). **Bindings were not regenerated and the expanded WASM Node tests have not run.**
+
+## Exact next steps
+
+1. Read ignored `.tools/notes/completion-2026-10-09.md` and worker notes (`runtime-games`, `audio-runtime`, `cpu-bus-timing`, `frontend-acceptance`, and world notes if added). Run `git status --short`; retain all modified/untracked source/tests. No staged release or commit exists.
+2. Finish phase-29 world integration. New `src/compiler/world.rs` has draft `runtime_assembly()` and an unused-bank, linker-managed directory/map packer. `compiler/mod.rs` exports it and the API calls `append_assets`. **Runtime emission, World namespace analysis/call dispatch, PPUMASK shadow `$F9`, and selected-map Collision.Tile wiring have not landed.** The worker's combined follow-up patch failed validation, leaving none of those edits; no World Cargo check/tests ran. Add/run four-map transitions, attributes, empty-cell, backtracking, bank/control restoration, and capacity tests. This area is unfinished.
+3. Finish the current game scratch/collision timing batch. Confirm the exact 28-address save/restore set, NMI frame counter `$FD`, two-stage 46-byte scroll buffer layout, active audio/upload vblank budget and last-PPU-write timing. Preserve working sound/channel RAM.
+4. Run formatting, targeted pending tests, strict all-target Clippy, then the full workspace suite. The earlier full run stopped at a stale `CMP $00` assertion in `control_flow_test`; that assertion was corrected and targeted tests pass, but the full matrix was **not rerun**. Log `.tools/completion-native-20261009.log` is the earlier failed run, not final evidence.
+5. Generate browser bindings with `.tools/bin/wasm-bindgen.exe` 0.2.106 from the successful release WASM, then run all Node tests. `CpuState.cycles` now exports **BigInt**; `tests/js/wasm.test.cjs` was updated and adds ALU/JAM/battery checks. Rebuild again if emulator source changes.
+6. Run clean-setup/portable verification and actual browser smoke tests. Computer-use skill was read, but no browser session/server was opened. `scripts/verify.mjs` provides frontend/native/full modes; source frontend mode passed before the final two tests were added (worker's complete run is 36/36). Do not re-prepare the core while Cargo is building it.
+7. Update README/DESIGN/Brain/architecture/schema/acceptance evidence with actual final results; select source/build/tests/docs explicitly and commit only after the complete batch passes. Actual remote host CI, audible-device and physical-controller evidence remain unverified. Full phases 1–40 acceptance is not claimed.
+
+# Active completion work — October 9, 2026
+
+User resumed and requested full completion, then asked to document the audit findings. Baseline is clean `main` at `bd42af4`; older pause/no-commit notes below are historical. Current delivery remains verified source/build/test/documentation commits, excluding generated outputs.
+
+Read the first section of `IMPLEMENTATION_PROGRESS.md` for the defect inventory and reproduction plan. Three workers own game runtime, sound runtime, and frontend workflows; root owns CPU/cartridge coverage and consolidation. Exact per-file recovery notes are in ignored `.tools/notes/`.
+
+Priority runtime gaps: broken scroll helper argument/return-stack handling, hardware silence and idle SFX activation, music state restoration after SFX, DPCM sample selection. Frontend gaps: save failure aborting compile, one input-listener lifecycle, audio cancellation/rebasing, simultaneous Shift handling, graphics attribute/reference validation.
+
+All listed fixes are pending at this checkpoint. Preserve production-backend tests and record actual outcomes; do not mark phase 40 or earlier phases accepted based solely on passing assembly-string checks. Continue implementation and update this section with final evidence before committing.
+
 # Upstream merge — September 16, 2026
 
 Fast-forwarded main from 4610516 to 6134fa4. Reconciled the pre-merge working tree: upstream already contains the prior implementation, including trainer reset, and adds mapper/bus, math/bitwise, lexer and frontend test work. Retained upstream additions when resolving overlaps. Recovery stash bf34b04798b00a6ecefe1b5dc7cef22244f17e33 (pre-upstream-merge-2026-09-16) is retained; original external fixtures are backed up in .tools/merge-backup-20260916.

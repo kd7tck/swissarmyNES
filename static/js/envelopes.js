@@ -72,11 +72,12 @@ class EnvelopeEditor {
 
     deleteEnvelope() {
         if(this.currentEnvelopeIndex >= 0) {
+            const deletedIndex = this.currentEnvelopeIndex;
             this.envelopes.splice(this.currentEnvelopeIndex, 1);
             this.currentEnvelopeIndex = -1;
             this.renderList();
             this.renderGraph();
-            window.dispatchEvent(new Event('envelopes-updated'));
+            window.dispatchEvent(new CustomEvent('envelopes-updated', {detail: {deletedIndex}}));
         }
     }
 
@@ -199,11 +200,17 @@ class EnvelopeEditor {
 
     loadEnvelopes(data) {
         this.envelopes = data || [];
+        this.currentEnvelopeIndex = -1;
+        for (const id of ['step-value', 'step-dur']) {
+            const input = document.getElementById(id);
+            if (input) input.onchange = null;
+        }
         // Ensure steps are arrays (tuples)
         this.envelopes.forEach(e => {
             if (!e.steps) e.steps = [];
         });
         this.renderList();
+        this.renderGraph();
     }
 }
 

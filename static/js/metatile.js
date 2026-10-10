@@ -131,7 +131,7 @@ class MetatileEditor {
     addMetatile() {
         if (!this.assets) return;
         const newMeta = {
-            name: `Meta ${this.assets.metatiles.length}`,
+            name: `Meta${this.assets.metatiles.length}`,
             tiles: [0, 0, 0, 0], // TopLeft, TopRight, BottomLeft, BottomRight
             attr: 0
         };
@@ -184,6 +184,7 @@ class MetatileEditor {
 
     renameMetatile(newName) {
         if (!this.assets || this.currentMetatileIndex < 0) return;
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(newName)) { alert('Metatile names must be valid code identifiers.'); return; }
         this.assets.metatiles[this.currentMetatileIndex].name = newName;
         this.renderList();
     }

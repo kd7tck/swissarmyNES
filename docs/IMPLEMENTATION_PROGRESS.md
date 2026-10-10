@@ -1,6 +1,6 @@
 # GitHub integration verification — October 10, 2026
 
-Full native tests and strict Clippy pass for the saved implementation. Verification repaired BYTE Clamp branch formatting and signed Clamp comparison; eight actual execution cases cover byte, word, signed and nested bounds. Audio tests now use a deterministic fixture power-on state and observe the completed NMI signal after Sound_Update. Current GitHub PR #162 contains the matching source batch and will be consolidated and merged only after all remote checks pass. Fresh WASM/Node verification and remote integration are in progress; broader browser/device acceptance remains tracked separately.
+Full native tests, strict Clippy, formatting, fresh WASM and all 48 Node tests pass. Verification repaired BYTE Clamp branch formatting and signed Clamp comparison; eight actual execution cases cover byte, word, signed and nested bounds. Audio tests use a deterministic fixture power-on state and observe the completed NMI signal after Sound_Update while Main remains active. Saved source commit `7ff84ad` is reconciled with the matching GitHub branch. [PR #162](https://github.com/kd7tck/swissarmyNES/pull/162) is the authoritative publication/CI/merge record; broader browser/device acceptance remains tracked separately.
 
 # Latest saved checkpoint — October 9, 2026
 

@@ -2,9 +2,9 @@
 
 User authorized committing/pushing all saved source changes, consolidating the matching GitHub integration branch, and merging PR #162 only after all GitHub checks pass. This supersedes prior pause/no-commit instructions. Development branch: `codex/nes-platform-completion-20261010`; GitHub main fetched at `355cb1e`, integration branch at `234944f`.
 
-Windows browser authentication is complete through GCM and GitHub CLI as kd7tck. Full native workspace/all-target tests and strict Clippy passed locally after fixing byte/signed Clamp code generation and deterministic/completed-NMI audio regression observation. Fresh WASM and the complete Node matrix are in progress; logs and per-file recovery state are under ignored `.tools/notes/github-merge-2026-10-10.md` and `.tools/github-merge-*.log`.
+Windows browser authentication is complete through GCM and GitHub CLI as kd7tck. Full native workspace/all-target tests, strict Clippy, formatting, fresh WASM and all 48 Node tests passed locally. Byte/signed Clamp code generation and deterministic/completed-NMI audio observation were repaired. Saved source commit `7ff84ad` is reconciled with the matching remote branch; the NMI fixture keeps Main active without sharing its counter with a FOR loop. Source-only checks passed. Recovery state is under ignored `.tools/notes/github-merge-2026-10-10.md` and `.tools/github-merge-*.log`.
 
-Next: finish current local checks, verify source-only staging, commit saved work, reconcile the remote branch while retaining its meaningful additions, rerun affected/integrated checks, push to the existing PR branch, wait for all native host/WASM GitHub checks, merge, and verify the final main run. Actual browser presentation/audio/physical controller signoff remains separate from CI; do not claim full phase acceptance from the merge alone.
+For authoritative publication, CI and merge status, inspect [PR #162](https://github.com/kd7tck/swissarmyNES/pull/162) and the per-file recovery note; historical pauses below do not apply. Publication requires every native-host/WASM GitHub check to pass before merge, followed by final-main verification. Actual browser presentation/audio/physical controller signoff remains separate from CI; do not claim full phase acceptance from the merge alone.
 
 # Credit-low checkpoint — October 9, 2026 (World/demo/core repair saved)
 

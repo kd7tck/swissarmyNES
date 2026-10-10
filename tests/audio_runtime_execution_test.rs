@@ -410,7 +410,7 @@ fn generated_nmi_advances_music_envelopes_each_real_frame() {
     track.arpeggio_env = Some(0);
     track.vol_env = Some(1);
     assets.audio_tracks.push(track);
-    let source = "DIM ticks AS BYTE\nSUB Main()\nSound.Play(0)\nPOKE($2000, $80)\nEND SUB\nINTERRUPT NMI()\nLET ticks = ticks + 1\nEND INTERRUPT";
+    let source = "DIM ticks AS BYTE\nSUB Main()\nSound.Play(0)\nPOKE($2000, $80)\nDO\nWAIT_VBLANK\nLOOP WHILE 1\nEND SUB\nINTERRUPT NMI()\nLET ticks = ticks + 1\nEND INTERRUPT";
     let (rom, _) = compile_source(Some(source.into()), None, Some(assets)).unwrap();
     let mut deck = ControlDeck::with_config(Config {
         ram_state: RamState::AllZeros,

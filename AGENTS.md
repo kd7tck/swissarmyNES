@@ -53,7 +53,7 @@ This document serves as the primary instruction manual for AI agents working on 
 ### Authorized GitHub integration — October 10, 2026
 
 - User authorized commit/push/PR #162 consolidation/merge after every GitHub check passes. Browser authentication completed. Prior pauses are historical. Current branch `codex/nes-platform-completion-20261010`; resume state and per-file notes in `.tools/notes/github-merge-2026-10-10.md`.
-- Native tests and strict Clippy pass after Clamp and audio-fixture fixes. Finish fresh WASM/Node checks, integrate current remote source branch, then submit and wait for GitHub checks before merging. Preserve source-only policy and honest manual-device/browser acceptance limits.
+- Full native tests, strict Clippy, formatting, fresh WASM and 48 Node tests pass after Clamp and audio-fixture fixes. The remote integration branch is reconciled with saved source commit `7ff84ad`. Read PR #162 for current publication/check/merge state; preserve source-only policy and honest manual-device/browser acceptance limits.
 
 ### Latest saved credit-low checkpoint — October 9, 2026
 

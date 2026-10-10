@@ -19,6 +19,14 @@ class WorldEditor {
         window.addEventListener('chr-changed', () => this.invalidateAll());
         window.addEventListener('nametable-changed', (e) => this.invalidateMap(e.detail.index));
         window.addEventListener('metatile-changed', () => this.invalidateAll());
+        window.addEventListener('nametables-changed', e => {
+            const deleted = e.detail?.deletedIndex;
+            if (deleted !== undefined) {
+                if (this.selectedNametableIndex === deleted) this.selectedNametableIndex = -1;
+                else if (this.selectedNametableIndex > deleted) this.selectedNametableIndex--;
+            }
+            this.renderMapList(); this.invalidateAll();
+        });
 
         this.init();
     }
@@ -38,8 +46,18 @@ class WorldEditor {
 
         const header = document.createElement('div');
         header.style.padding = '10px';
-        header.innerHTML = '<h3>World Maps</h3><p style="font-size: 12px; color: #888;">Select a map to paint on the grid.</p>';
+        header.innerHTML = '<h3>World Maps</h3><p style="font-size: 12px; color: #888;">Select a map to paint on the grid. Use World.Load(column, row) in code to enter a map; empty cells return false.</p>';
         sidebar.appendChild(header);
+        const dimensions = document.createElement('div');
+        this.widthInput = document.createElement('input');
+        this.heightInput = document.createElement('input');
+        for (const [name, input] of [['Width', this.widthInput], ['Height', this.heightInput]]) {
+            input.type = 'number'; input.min = 1; input.max = 255; input.value = 8; input.style.width = '55px';
+            const label = document.createElement('label'); label.textContent = name + ': '; label.appendChild(input); dimensions.appendChild(label);
+        }
+        const resize = document.createElement('button'); resize.textContent = 'Resize';
+        resize.onclick = () => this.resizeWorld(Number(this.widthInput.value), Number(this.heightInput.value));
+        dimensions.appendChild(resize); sidebar.appendChild(dimensions);
 
         this.mapList = document.createElement('ul');
         this.mapList.className = 'map-list';
@@ -73,6 +91,7 @@ class WorldEditor {
 
     onProjectLoaded(assets) {
         this.assets = assets;
+        this.selectedNametableIndex = -1;
         if (!this.assets.world) {
             this.assets.world = {
                 width: 8,
@@ -81,6 +100,8 @@ class WorldEditor {
             };
         }
         this.world = this.assets.world;
+        if (this.widthInput) this.widthInput.value = this.world.width;
+        if (this.heightInput) this.heightInput.value = this.world.height;
 
         // Validation
         const size = this.world.width * this.world.height;
@@ -99,6 +120,25 @@ class WorldEditor {
         this.invalidateAll();
         this.renderMapList();
         this.render();
+    }
+
+    resizeWorld(width, height) {
+        if (!this.world) return false;
+        if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 255 || height > 255 || 4 + width * height * 5 > 16384) {
+            alert('World dimensions must be 1–255 and its directory must fit 3276 cells.');
+            return false;
+        }
+        const data = Array(width * height).fill(-1);
+        // Resize by coordinates, so row strides do not scramble existing adjacency.
+        for (let y = 0; y < Math.min(height, this.world.height); y++) {
+            for (let x = 0; x < Math.min(width, this.world.width); x++) data[y * width + x] = this.world.data[y * this.world.width + x];
+        }
+        Object.assign(this.world, {width, height, data});
+        this.canvas.width = width * this.mapWidth * this.scale;
+        this.canvas.height = height * this.mapHeight * this.scale;
+        this.widthInput.value = width; this.heightInput.value = height;
+        this.invalidateAll();
+        return true;
     }
 
     renderMapList() {

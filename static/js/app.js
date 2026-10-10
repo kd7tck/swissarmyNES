@@ -72,28 +72,41 @@ document.addEventListener('DOMContentLoaded', () => {
     // Compilation Logic
     let compileRevision = 0;
     codeEditor?.addEventListener('input', () => { compileRevision++; });
-    async function performCompile(download = true) {
+    async function performCompile(download = true, options = {}) {
         if (!codeEditor) return;
+        // Reserve the result before autosaving so edits during the save invalidate it.
+        const revision = ++compileRevision;
+        const projectName = window.projectManager?.currentProject || null;
 
         // Save project first to ensure files on disk are up to date
         if (window.projectManager) {
             try {
-                await window.projectManager.saveCurrentProject(true);
+                if (await window.projectManager.saveCurrentProject(true) === false) return;
             } catch (e) {
                 console.error("Auto-save failed:", e);
                 alert("Auto-save failed: " + e.message);
                 return; // Stop compilation if save fails
             }
         }
+        if (revision !== compileRevision || projectName !== (window.projectManager?.currentProject || null)) return;
 
         const source = codeEditor.value;
-        const assets = window.projectManager ? window.projectManager.assets : null;
-        const projectName = window.projectManager ? window.projectManager.currentProject : null;
-        const revision = ++compileRevision;
+        // A project compile reads the asset snapshot just persisted by autosave.
+        // Live component arrays may have been replaced since the project loaded.
+        let assets = projectName ? null : (window.projectManager?.assets || null);
+        const preview = options.previewTrackId !== undefined;
+        if (preview) {
+            const trackId = options.previewTrackId;
+            if (!Number.isInteger(trackId) || trackId < 0 || trackId >= (window.audioTracker?.tracks.length || 0)) {
+                alert('Choose an existing music track.');
+                return;
+            }
+            assets = {chr_bank: [], palettes: [], nametables: [], ...window.audioTracker.getData()};
+        }
 
         const payload = {
-            source: projectName ? null : source, // Use editor content only if no project
-            project_name: projectName,
+            source: preview ? `SUB Main()\nSound.Play(${options.previewTrackId})\nPPU.Ctrl($80)\nDO\nWAIT_VBLANK\nLOOP WHILE 1\nEND SUB` : projectName ? null : source,
+            project_name: preview ? null : projectName,
             assets: assets
         };
 
@@ -151,9 +164,11 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 // Error: Show message
                 const text = await response.text();
+                if (revision !== compileRevision || projectName !== (window.projectManager?.currentProject || null)) return;
                 alert('Compilation Failed:\n' + text);
             }
         } catch (err) {
+            if (revision !== compileRevision || projectName !== (window.projectManager?.currentProject || null)) return;
             console.error(err);
             alert('Network Error: ' + err.message);
         }
@@ -165,5 +180,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Bind Emulator Request
-    window.addEventListener('request-compile-and-run', () => performCompile(false));
+    window.addEventListener('request-compile-and-run', event => performCompile(false, event.detail || {}));
 });

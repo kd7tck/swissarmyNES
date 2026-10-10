@@ -11,6 +11,7 @@ class SwissEditor {
         this.emulator = null; // Store emulator instance
         this.emulatorRunning = false;
         this.audioContext = null;
+        this.audioSources = new Set();
         this.nextStartTime = 0;
         this.volume = 0.5;
         this.scale = 2; // 1, 2, or 3 (Full)
@@ -26,6 +27,8 @@ class SwissEditor {
         this.compiledProject = null;
         this.activeLine = -1;
         this.breakpoints = new Set(); // Set of line numbers (1-based)
+        this.breakpointFiles = new Map();
+        this.observedSources = new Map();
 
         // Memory Viewer State
         this.memoryViewerOpen = false;
@@ -45,6 +48,7 @@ class SwissEditor {
         this.keyboardState = new Array(8).fill(false);
         this.gamepadState = new Array(8).fill(false);
         this.lastSentState = new Array(8).fill(false);
+        this.pressedKeys = new Set();
 
         this.init();
     }
@@ -56,9 +60,14 @@ class SwissEditor {
         this.editor.addEventListener('input', () => { this.update(); this.syncBreakpoints(); this.clearDebugHighlight(); this.hideAddressTooltip(); });
         this.editor.addEventListener('scroll', () => this.syncScroll());
         this.editor.addEventListener('keydown', (e) => this.handleKey(e));
+        // Global input handlers belong to the editor, not each reopening of the overlay.
+        document.addEventListener('keydown', (e) => this.handleEmulatorInput(e, true));
+        document.addEventListener('keyup', (e) => this.handleEmulatorInput(e, false));
         window.addEventListener('project-loaded', () => {
             this.sourceMap = { version: 1, sources: {}, entries: [] };
             this.breakpoints.clear();
+            this.breakpointFiles.clear();
+            this.observedSources.clear();
             this.syncBreakpoints();
             this.clearDebugHighlight();
             this.update();
@@ -144,6 +153,10 @@ class SwissEditor {
     }
 
     update() {
+        const file = window.projectManager?.currentFile || 'main.swiss';
+        if (!this.breakpointFiles.has(file)) this.breakpointFiles.set(file, new Set());
+        this.breakpoints = this.breakpointFiles.get(file);
+        this.observedSources.set(file, this.editor.value);
         const text = this.editor.value;
         this.updateLineNumbers(text);
         this.updateHighlighting(text);
@@ -183,17 +196,17 @@ class SwissEditor {
         if (this.compiledProject !== (window.projectManager?.currentProject || null)) return [];
         const file = window.projectManager?.currentFile || 'main.swiss';
         if (this.sourceMap?.version !== 1 || this.sourceMap.sources?.[file] !== this.editor.value) return [];
-        return this.sourceMap.entries.filter(entry => entry.file === file && entry.kind === 'instruction');
+        return (this.sourceMap.entries || []).filter(entry => entry.file === file && entry.kind === 'instruction');
     }
 
     showAddressTooltip(line, x, y) {
         const entry = this.mappedEntries().find(entry => entry.line === line);
-        if (entry) {
-            this.tooltip.innerText = `Bank ${entry.bank}: $${entry.cpu_start.toString(16).toUpperCase().padStart(4, '0')}`;
-            this.tooltip.style.left = (x + 10) + 'px';
-            this.tooltip.style.top = (y + 10) + 'px';
-            this.tooltip.style.display = 'block';
-        }
+        this.tooltip.innerText = entry
+            ? `Bank ${entry.bank}: $${entry.cpu_start.toString(16).toUpperCase().padStart(4, '0')}`
+            : 'No executable address';
+        this.tooltip.style.left = (x + 10) + 'px';
+        this.tooltip.style.top = (y + 10) + 'px';
+        this.tooltip.style.display = 'block';
     }
     hideAddressTooltip() {
         if (this.tooltip) this.tooltip.style.display = 'none';
@@ -219,10 +232,16 @@ class SwissEditor {
     syncBreakpoints() {
         if (!this.emulator) return;
         this.emulator.clear_breakpoints();
-        const entries = this.mappedEntries();
-        for (const line of this.breakpoints) {
-            const entry = entries.find(entry => entry.line === line);
-            if (entry) this.emulator.add_breakpoint(entry.bank, entry.cpu_start);
+        if (this.compiledProject !== (window.projectManager?.currentProject || null) || this.sourceMap?.version !== 1) return;
+        // Keep included-file breakpoints armed when the explorer changes selection.
+        // Edited snapshots are excluded until a new ROM/map pair is compiled.
+        for (const [file, lines] of this.breakpointFiles) {
+            if (this.observedSources.get(file) !== this.sourceMap.sources?.[file]) continue;
+            for (const line of lines) {
+                const entries = (this.sourceMap.entries || []).filter(entry => entry.file === file && entry.line === line && entry.kind === 'instruction');
+                // A source line may expand into more than one bank/range.
+                for (const entry of entries) this.emulator.add_breakpoint(entry.bank, entry.cpu_start);
+            }
         }
     }
     updateHighlighting(text) {
@@ -283,7 +302,7 @@ class SwissEditor {
             .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
-    async runEmulator() {
+    async runEmulator(options = {}) {
         console.log("Starting emulator...");
         if (!this.wasmLoaded) {
             try {
@@ -310,29 +329,30 @@ class SwissEditor {
         }
 
         // Request compilation from app.js
-        const event = new CustomEvent('request-compile-and-run');
+        const event = new CustomEvent('request-compile-and-run', {detail: options});
         window.dispatchEvent(event);
     }
 
     startEmulatorWithRom(romData, sourceMap) {
         if (!this.EmulatorClass) return;
 
-        // Init Audio
-        if (!this.audioContext) {
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        if (this.audioContext.state === 'suspended') {
-            this.audioContext.resume();
-        }
-
         try {
             if (!this.emulator) this.emulator = new this.EmulatorClass();
             this.emulator.load_rom(romData);
             this.cancelFrame();
+            this.releaseInputs();
+            this.stopAudio();
             this.sourceMap = sourceMap;
             this.compiledProject = window.projectManager?.currentProject || null;
-            this.emulator.set_sample_rate(this.audioContext.sampleRate);
-            this.nextStartTime = this.audioContext.currentTime;
+            // Audio is optional: an unavailable audio device must not prevent video/debugging.
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!this.audioContext && AudioContext) this.audioContext = new AudioContext();
+                if (this.audioContext) {
+                    this.emulator.set_sample_rate(this.audioContext.sampleRate);
+                    this.resumeAudio();
+                }
+            } catch (e) { console.warn('Audio unavailable:', e); }
 
             // Attach PPU Viewer
             if(this.ppuViewer.attach) this.ppuViewer.attach(this.emulator);
@@ -341,6 +361,7 @@ class SwissEditor {
             this.keyboardState.fill(false);
             this.gamepadState.fill(false);
             this.lastSentState.fill(false);
+            this.pressedKeys.clear();
 
             this.createEmulatorOverlay();
 
@@ -384,7 +405,7 @@ class SwissEditor {
 
             const btnReset = document.createElement('button');
             btnReset.innerText = 'Reset';
-            btnReset.onclick = () => { if(this.emulator) this.emulator.reset(); };
+            btnReset.onclick = () => this.resetEmulator();
 
             const btn1x = document.createElement('button');
             btn1x.innerText = '1x';
@@ -426,9 +447,9 @@ class SwissEditor {
                 this.emulatorRunning = false;
                 this.cancelFrame();
                 this.releaseInputs();
+                this.stopAudio();
                 overlay.style.display = 'none';
-                this.cancelFrame();
-             if(this.audioContext) this.audioContext.suspend();
+                this.suspendAudio();
                 this.clearDebugHighlight();
                 if(this.ppuViewer.hide) this.ppuViewer.hide();
             };
@@ -462,6 +483,7 @@ class SwissEditor {
             memViewer.style.overflowY = 'auto';
             memViewer.style.border = '1px solid #444';
             memViewer.innerHTML = '<div style="text-align:center">RAM Viewer ($0000-$07FF)</div><div id="mem-content"></div>';
+            memViewer.addEventListener('scroll', () => this.updateMemoryView());
 
             mainArea.appendChild(canvas);
             mainArea.appendChild(memViewer);
@@ -477,9 +499,6 @@ class SwissEditor {
         this.imageData = this.ctx.createImageData(256, 240);
         this.setScale(this.scale);
 
-        // Bind keys
-        document.addEventListener('keydown', (e) => this.handleEmulatorInput(e, true));
-        document.addEventListener('keyup', (e) => this.handleEmulatorInput(e, false));
     }
 
     toggleMemoryViewer() {
@@ -500,7 +519,7 @@ class SwissEditor {
         const content = document.getElementById('mem-content');
         if (!content) return;
 
-        let html = '<table style="width:100%; border-collapse:collapse;">';
+        let html = '<table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse;">';
         // Header
         html += '<tr><th style="color:#aaa">Addr</th>';
         for(let i=0; i<16; i++) {
@@ -513,8 +532,16 @@ class SwissEditor {
         // Let's safe guard size
         const limit = Math.min(this.memorySize, wram.length);
 
-        for (let r = 0; r < limit; r += 16) {
-            html += `<tr><td style="color:#fe9">${r.toString(16).toUpperCase().padStart(4,'0')}</td>`;
+        const viewer = document.getElementById('memory-viewer');
+        const rowHeight = 18;
+        const totalRows = Math.ceil(limit / 16);
+        const visibleRows = Math.min(totalRows, Math.ceil((viewer?.clientHeight || 480) / rowHeight) + 4);
+        const firstRow = Math.max(0, Math.min(totalRows - visibleRows, Math.floor((viewer?.scrollTop || 0) / rowHeight) - 2));
+        // Fixed-height spacers preserve full RAM scrolling while formatting only
+        // visible rows, even when a breakpoint causes an immediate refresh.
+        if (firstRow) html += `<tr style="height:${firstRow * rowHeight}px"><td colspan="18"></td></tr>`;
+        for (let r = firstRow * 16; r < Math.min(limit, (firstRow + visibleRows) * 16); r += 16) {
+            html += `<tr style="height:${rowHeight}px;line-height:${rowHeight}px"><td style="color:#fe9">${r.toString(16).toUpperCase().padStart(4,'0')}</td>`;
             let ascii = '';
             for (let c = 0; c < 16; c++) {
                 if (r + c < limit) {
@@ -527,22 +554,68 @@ class SwissEditor {
             }
             html += `<td style="color:#aaa">${this.escapeHtml(ascii)}</td></tr>`;
         }
+        const remainingRows = totalRows - firstRow - visibleRows;
+        if (remainingRows > 0) html += `<tr style="height:${remainingRows * rowHeight}px"><td colspan="18"></td></tr>`;
         html += '</table>';
         content.innerHTML = html;
     }
 
     togglePause() {
+        if (!this.emulator) return;
         this.emulatorRunning = !this.emulatorRunning;
         this.updatePlayPauseButton();
         if (this.emulatorRunning) {
-             if(this.audioContext && this.audioContext.state === 'suspended') this.audioContext.resume();
+             this.resumeAudio();
              this.lastFrameTime = null;
              this.frameDebt = 0;
              this.scheduleFrame();
         } else {
              this.cancelFrame();
-             if(this.audioContext) this.audioContext.suspend();
+             this.releaseInputs();
+             this.stopAudio();
+             this.suspendAudio();
+             if (this.memoryViewerOpen) this.updateMemoryView();
+             if (this.ppuViewer.isVisible) this.ppuViewer.update();
         }
+    }
+
+    resetEmulator() {
+        if (!this.emulator) return;
+        this.cancelFrame();
+        this.releaseInputs();
+        this.stopAudio();
+        this.emulator.reset();
+        this.lastSentState.fill(false);
+        this.clearDebugHighlight();
+        this.renderVideo();
+        if (this.memoryViewerOpen) this.updateMemoryView();
+        if (this.ppuViewer.isVisible) this.ppuViewer.update();
+        this.scheduleFrame();
+    }
+
+    resumeAudio() {
+        if (this.audioContext?.state === 'suspended') {
+            Promise.resolve(this.audioContext.resume()).catch(e => console.warn('Audio resume failed:', e));
+        }
+    }
+
+    suspendAudio() {
+        if (this.audioContext?.state === 'running') {
+            Promise.resolve(this.audioContext.suspend()).catch(e => console.warn('Audio suspend failed:', e));
+        }
+    }
+
+    stopAudio() {
+        // Scheduled sources outlive a frame; discard them at every execution boundary.
+        for (const {source, gain} of this.audioSources || []) {
+            source.onended = null;
+            try { source.stop(); } catch (_) { /* It may already have ended. */ }
+            source.disconnect();
+            gain.disconnect();
+        }
+        this.audioSources?.clear();
+        this.nextStartTime = this.audioContext?.currentTime || 0;
+        this.emulator?.clear_audio_samples?.();
     }
 
     updatePlayPauseButton() {
@@ -565,7 +638,8 @@ class SwissEditor {
     }
 
     handleEmulatorInput(e, pressed) {
-        if (document.getElementById('emulator-overlay').style.display === 'none' || !this.emulator) return;
+        const overlay = document.getElementById('emulator-overlay');
+        if (!overlay || overlay.style.display === 'none' || !this.emulator) return;
 
         let btn = -1;
         switch(e.code) {
@@ -582,7 +656,11 @@ class SwissEditor {
 
         if (btn !== -1) {
             e.preventDefault();
-            this.keyboardState[btn] = pressed;
+            if (pressed) this.pressedKeys.add(e.code);
+            else this.pressedKeys.delete(e.code);
+            this.keyboardState[btn] = btn === 2
+                ? this.pressedKeys.has('ShiftLeft') || this.pressedKeys.has('ShiftRight')
+                : pressed;
             this.syncInputs();
         }
     }
@@ -608,7 +686,7 @@ class SwissEditor {
 
         const b = gp.buttons;
         const axes = gp.axes;
-        const PRESSED = (btn) => btn && (typeof btn === 'object' ? btn.pressed : btn > 0.5);
+        const PRESSED = (btn) => Boolean(btn && (typeof btn === 'object' ? btn.pressed : btn > 0.5));
 
         // Map to NES: A, B, Sel, Start, Up, Down, Left, Right
         // A=0, B=1 or 2, Sel=8, Start=9
@@ -634,6 +712,7 @@ class SwissEditor {
     }
 
     releaseInputs() {
+        this.pressedKeys?.clear();
         this.keyboardState.fill(false);
         this.gamepadState.fill(false);
         this.syncInputs();
@@ -652,16 +731,17 @@ class SwissEditor {
 
     getDebugState() {
         if (!this.emulator) return null;
+        let s;
         try {
-            const s = this.emulator.get_cpu_state();
-            const memory = this.getWRAM();
-            const current_prg_bank = memory[0x07F0]; // We put current_prg_bank at $07F0
+            s = this.emulator.get_cpu_state();
+            const offset = this.emulator.prg_offset(s.pc);
             const res = {
-                pc: s.pc, sp: s.sp, acc: s.acc, x: s.x, y: s.y, status: s.status, cycles: s.cycles, bank: current_prg_bank
+                pc: s.pc, sp: s.sp, acc: s.acc, x: s.x, y: s.y, status: s.status, cycles: s.cycles,
+                bank: offset == null || offset < 0 ? null : Math.floor(offset / 16384)
             };
-            s.free();
             return res;
         } catch(e) { return null; }
+        finally { s?.free?.(); }
     }
 
     getWRAM() {
@@ -675,6 +755,7 @@ class SwissEditor {
 
     updateDebugInfo(pc) {
         const offset = this.emulator?.prg_offset(pc);
+        if (offset == null || offset < 0) { this.clearDebugHighlight(); this.activeLine = -1; return; }
         const entry = this.mappedEntries().find(entry =>
             entry.bank === Math.floor(offset / 16384) && pc >= entry.cpu_start && pc < entry.cpu_end);
         if (entry) {
@@ -763,6 +844,9 @@ class SwissEditor {
             if (breakpointHit) {
                 this.emulatorRunning = false;
                 this.cancelFrame();
+                this.releaseInputs();
+                this.stopAudio();
+                this.suspendAudio();
                 this.updatePlayPauseButton();
                 // Force update views on break
                 if (this.memoryViewerOpen) this.updateMemoryView();
@@ -770,46 +854,12 @@ class SwissEditor {
                 console.log("Breakpoint Hit!");
             }
 
-            // Render Video
-            const pixelsPtr = this.emulator.get_pixels();
-            const len = this.emulator.get_pixels_len();
-
-            if (this.wasmMemory) {
-                const pixels = new Uint8Array(this.wasmMemory.buffer, pixelsPtr, len);
-
-                // Copy to ImageData
-                if (len === 256 * 240 * 4) {
-                    this.imageData.data.set(pixels);
-                } else if (len === 256 * 240) {
-                     // 8-bit palette - grayscale fallback
-                     for (let i = 0; i < len; i++) {
-                         const val = pixels[i];
-                         const off = i * 4;
-                         this.imageData.data[off] = val;     // R
-                         this.imageData.data[off+1] = val;   // G
-                         this.imageData.data[off+2] = val;   // B
-                         this.imageData.data[off+3] = 255;   // A
-                     }
-                } else {
-                    if (len === 184320) {
-                        for (let i = 0; i < 256*240; i++) {
-                             const off = i * 4;
-                             const src = i * 3;
-                             this.imageData.data[off] = pixels[src];
-                             this.imageData.data[off+1] = pixels[src+1];
-                             this.imageData.data[off+2] = pixels[src+2];
-                             this.imageData.data[off+3] = 255;
-                        }
-                    }
-                }
-
-                this.ctx.putImageData(this.imageData, 0, 0);
-            }
+            this.renderVideo();
 
             // Audio
             const audioPtr = this.emulator.get_audio_samples();
             const audioLen = this.emulator.get_audio_samples_len();
-            if (audioLen > 0 && this.wasmMemory && this.audioContext && this.audioContext.state === 'running') {
+            if (this.emulatorRunning && audioLen > 0 && this.wasmMemory && this.audioContext && this.audioContext.state === 'running') {
                  const samples = new Float32Array(this.wasmMemory.buffer, audioPtr, audioLen);
 
                  // Play audio
@@ -824,21 +874,43 @@ class SwissEditor {
 
                  source.connect(gain);
                  gain.connect(this.audioContext.destination);
+                 const scheduled = {source, gain};
+                 this.audioSources.add(scheduled);
+                 source.onended = () => {
+                     source.disconnect();
+                     gain.disconnect();
+                     this.audioSources.delete(scheduled);
+                 };
 
                  if (this.nextStartTime < this.audioContext.currentTime) {
                      this.nextStartTime = this.audioContext.currentTime;
                  }
                  source.start(this.nextStartTime);
                  this.nextStartTime += buffer.duration;
-
-                 this.emulator.clear_audio_samples();
             }
+            // A suspended/missing device must not accumulate seconds of stale samples.
+            this.emulator.clear_audio_samples?.();
 
             this.scheduleFrame();
         } catch (e) {
             console.error(e);
             this.emulatorRunning = false;
+            this.cancelFrame();
+            this.releaseInputs();
+            this.stopAudio();
+            this.suspendAudio();
+            this.updatePlayPauseButton();
         }
+    }
+
+    renderVideo() {
+        if (!this.emulator || !this.wasmMemory || !this.imageData || !this.ctx) return;
+        const ptr = this.emulator.get_pixels();
+        const len = this.emulator.get_pixels_len();
+        const required = 256 * 240 * 4;
+        if (len !== required || ptr < 0 || ptr + len > this.wasmMemory.buffer.byteLength) return;
+        this.imageData.data.set(new Uint8Array(this.wasmMemory.buffer, ptr, len));
+        this.ctx.putImageData(this.imageData, 0, 0);
     }
 }
 

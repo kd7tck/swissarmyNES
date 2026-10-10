@@ -8,3 +8,4 @@ pub mod parser;
 pub mod preprocessor;
 pub mod source_map;
 pub mod symbol_table;
+pub mod world;

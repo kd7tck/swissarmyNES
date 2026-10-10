@@ -44,20 +44,21 @@ impl CodeGenerator {
         // scroll and RNG state intentionally remains visible after a handler.
         let action = if restore { "Restore" } else { "Save" };
         let label = format!("{action}_{event}_Scratch");
-        self.emit(format!("  LDX #{}", if restore { 27 } else { 0 }));
         self.emit(format!("{label}:"));
-        self.emit("  LDY InterruptScratchAddresses,X".into());
+        // Direct zero-page accesses recover over 600 CPU cycles compared with
+        // two indexed loops, leaving room for active audio and seam uploads.
+        let mut addresses: Vec<u8> = (0..16).chain(0x14..=0x17).chain(0xf0..=0xf7).collect();
         if restore {
-            self.emit("  PLA".into());
-            self.emit("  STA $0000,Y".into());
-            self.emit("  DEX".into());
-            self.emit(format!("  BPL {label}"));
-        } else {
-            self.emit("  LDA $0000,Y".into());
-            self.emit("  PHA".into());
-            self.emit("  INX".into());
-            self.emit("  CPX #28".into());
-            self.emit(format!("  BNE {label}"));
+            addresses.reverse();
+        }
+        for address in addresses {
+            if restore {
+                self.emit("  PLA".into());
+                self.emit(format!("  STA ${address:02X}"));
+            } else {
+                self.emit(format!("  LDA ${address:02X}"));
+                self.emit("  PHA".into());
+            }
         }
     }
     fn collect_interrupt_bindings(
@@ -225,6 +226,7 @@ impl CodeGenerator {
         self.emit("  RTS".to_string());
         self.generate_trampolines(program);
 
+        let runtime_start = self.output.len();
         self.generate_sound_engine();
         self.generate_math_helpers();
         self.generate_string_helpers();
@@ -236,6 +238,10 @@ impl CodeGenerator {
         self.generate_pool_helpers();
         self.generate_collision_helpers();
         self.generate_scroll_helpers();
+        for line in crate::compiler::world::runtime_assembly() {
+            self.emit(line);
+        }
+        self.retain_referenced_runtime(runtime_start);
         self.generate_user_data(program)?;
         self.generate_data_tables(program)?;
         self.generate_vectors(program)?;
@@ -263,6 +269,88 @@ impl CodeGenerator {
             string_literals: HashMap::new(),
             select_stack_depth: 0,
         }
+    }
+
+    /// Keep runtime instructions reachable from guest/startup assembly and
+    /// transitive helper references. The fixed bank also contains audio/assets,
+    /// so emitting every unused helper can overlap the first data segment.
+    /// Symbolic operands (including inline ASM addresses) count as roots; data
+    /// directives stay intact. The assembler computes final addresses afterward.
+    fn retain_referenced_runtime(&mut self, start: usize) {
+        use std::collections::{HashSet, VecDeque};
+        let labels: HashMap<String, usize> = self.output[start..]
+            .iter()
+            .enumerate()
+            .filter_map(|(offset, line)| {
+                line.trim()
+                    .strip_suffix(':')
+                    .map(|label| (label.to_string(), start + offset))
+            })
+            .collect();
+        let references = |line: &str| -> Vec<usize> {
+            line.split(';')
+                .next()
+                .unwrap_or("")
+                .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
+                .filter_map(|word| labels.get(word).copied())
+                .collect()
+        };
+        let mut queue = VecDeque::new();
+        for line in self.output[..start]
+            .iter()
+            .chain(self.banks.values().flatten())
+        {
+            queue.extend(references(line));
+        }
+        // String literals are interspersed with helpers and must survive even
+        // when their address is consumed through an indirect data-table entry.
+        for (index, line) in self.output.iter().enumerate().skip(start) {
+            let op = line.split_whitespace().next().unwrap_or("");
+            if op.eq_ignore_ascii_case("DB") || op.eq_ignore_ascii_case("WORD") {
+                queue.push_back(index);
+                queue.extend(references(line));
+                if index > start && self.output[index - 1].trim().ends_with(':') {
+                    queue.push_back(index - 1);
+                }
+            }
+        }
+        let mut reachable = HashSet::new();
+        while let Some(index) = queue.pop_front() {
+            if index >= self.output.len() || !reachable.insert(index) {
+                continue;
+            }
+            let line = self.output[index].split(';').next().unwrap_or("").trim();
+            let op = line.split_whitespace().next().unwrap_or("").to_uppercase();
+            queue.extend(references(line));
+            if !matches!(op.as_str(), "RTS" | "RTI" | "JMP") {
+                queue.push_back(index + 1);
+            }
+        }
+        let removed_bytes: u16 = self
+            .output
+            .iter()
+            .enumerate()
+            .skip(start)
+            .filter(|(index, line)| {
+                !reachable.contains(index)
+                    && !line.trim().is_empty()
+                    && !line.trim().starts_with(';')
+                    && !line.trim().starts_with('.')
+                    && !line.trim().ends_with(':')
+            })
+            .map(|(_, line)| self.estimate_size(line.trim()))
+            .sum();
+        let mut index = 0;
+        self.output.retain(|line| {
+            let keep = index < start
+                || reachable.contains(&index)
+                || line.trim().is_empty()
+                || line.trim().starts_with(';')
+                || line.trim().starts_with('.');
+            index += 1;
+            keep
+        });
+        self.set_pc(self.get_pc().wrapping_sub(removed_bytes));
     }
 
     fn emit(&mut self, code: String) {
@@ -584,6 +672,8 @@ impl CodeGenerator {
         self.output
             .push(format!("  LDA ${:04X}", VBLANK_BUFFER_START));
         self.emit("  BEQ SkipVBlankBuffer".to_string());
+        self.emit("  CMP #2".to_string());
+        self.emit("  BEQ VBlankBufferAttributes".to_string());
         self.emit("  LDA $2002".to_string());
         self.output
             .push(format!("  LDA ${:04X}", VBLANK_BUFFER_START + 2));
@@ -594,6 +684,7 @@ impl CodeGenerator {
         // Check Type ($0441)
         self.output
             .push(format!("  LDA ${:04X}", VBLANK_BUFFER_START + 1));
+        self.emit("  AND #1".to_string());
         self.emit("  BNE VBlankBufferRow".to_string());
 
         // Type 0: Column (Inc 32, Len 30)
@@ -625,14 +716,56 @@ impl CodeGenerator {
         self.emit("  BNE VBlankBufferRowLoop".to_string());
 
         self.emit("VBlankBufferDone:".to_string());
+        // A palette seam follows on the next NMI. Splitting the work keeps
+        // uploads bounded; callers wait for the flag to become zero before revealing it.
+        self.emit(format!("  LDA ${:04X}", VBLANK_BUFFER_START + 1));
+        self.emit("  BPL VBlankBufferComplete".to_string());
+        self.emit("  LDA #2".to_string());
+        self.emit("  BNE VBlankBufferSetFlag".to_string());
+
+        self.emit("VBlankBufferAttributes:".to_string());
+        self.emit("  LDA $2002".to_string());
+        self.emit("  LDA $F8".to_string());
+        self.emit("  AND #$FB".to_string());
+        self.emit("  STA $2000".to_string());
+        self.emit("  LDX #0".to_string());
+        self.emit(format!("  LDA ${:04X}", VBLANK_BUFFER_START + 1));
+        self.emit("  AND #1".to_string());
+        self.emit("  BEQ VBlankBufferAttributeColumn".to_string());
+        self.emit(format!("  LDA ${:04X}", VBLANK_BUFFER_START + 36));
+        self.emit("  STA $2006".to_string());
+        self.emit(format!("  LDA ${:04X}", VBLANK_BUFFER_START + 37));
+        self.emit("  STA $2006".to_string());
+        self.emit("VBlankBufferAttributeRowLoop:".to_string());
+        self.emit(format!("  LDA ${:04X},X", VBLANK_BUFFER_START + 38));
+        self.emit("  STA $2007".to_string());
+        self.emit("  INX".to_string());
+        self.emit("  CPX #8".to_string());
+        self.emit("  BNE VBlankBufferAttributeRowLoop".to_string());
+        self.emit("  JMP VBlankBufferComplete".to_string());
+        self.emit("VBlankBufferAttributeColumn:".to_string());
+        self.emit(format!("  LDA ${:04X}", VBLANK_BUFFER_START + 36));
+        self.emit("  STA $2006".to_string());
+        self.emit(format!("  LDA ${:04X}", VBLANK_BUFFER_START + 37));
+        self.emit("  STA $2006".to_string());
+        self.emit(format!("  LDA ${:04X},X", VBLANK_BUFFER_START + 38));
+        self.emit("  STA $2007".to_string());
+        self.emit(format!("  LDA ${:04X}", VBLANK_BUFFER_START + 37));
+        self.emit("  CLC".to_string());
+        self.emit("  ADC #8".to_string());
+        self.emit(format!("  STA ${:04X}", VBLANK_BUFFER_START + 37));
+        self.emit("  INX".to_string());
+        self.emit("  CPX #8".to_string());
+        self.emit("  BNE VBlankBufferAttributeColumn".to_string());
+
+        self.emit("VBlankBufferComplete:".to_string());
+        self.emit("  LDA #0".to_string());
+        self.emit("VBlankBufferSetFlag:".to_string());
+        self.emit(format!("  STA ${:04X}", VBLANK_BUFFER_START));
         self.emit("  LDA $F8".to_string());
         self.emit("  STA $2000".to_string());
-        self.emit("  LDA #0".to_string());
-        self.output
-            .push(format!("  STA ${:04X}", VBLANK_BUFFER_START));
         self.emit("SkipVBlankBuffer:".to_string());
 
-        self.emit("  JSR Sound_Update".to_string());
         self.emit("  LDA $07F4".to_string());
         self.emit("  ORA $07F5".to_string());
         self.emit("  BEQ SkipNMI".to_string());
@@ -644,6 +777,15 @@ impl CodeGenerator {
         self.emit("  STA $2005".to_string());
         self.emit("  LDA $E1".to_string());
         self.emit("  STA $2005".to_string());
+
+        // Complete all PPU duties before audio. APU writes may occur during
+        // visible scanlines; deferring them keeps a busy sound engine from
+        // pushing the final scroll writes beyond the short VBlank interval.
+        self.emit("  JSR Sound_Update".to_string());
+
+        // Publish a completed frame so WAIT_VBLANK need not race the handler's
+        // status reads, which clear the hardware VBlank flag before main resumes.
+        self.emit("  INC $FD".to_string());
 
         self.generate_interrupt_scratch("NMI", true);
         // Mark even a handler with no bank calls: an interrupted writer can
@@ -706,12 +848,6 @@ impl CodeGenerator {
         self.emit("  LDA InterruptTargetHigh,X".to_string());
         self.emit("  STA $01".to_string());
         self.emit("  JMP ($0000)".to_string());
-        // The sparse table avoids saving persistent application state and
-        // keeps both interrupt wrappers small enough for fixed-bank code.
-        self.emit("InterruptScratchAddresses:".into());
-        for address in (0..16).chain(0x14..=0x17).chain(0xf0..=0xf7) {
-            self.emit(format!("  DB ${address:02X}"));
-        }
         for (table, prefix) in [("InterruptTargetLow", '<'), ("InterruptTargetHigh", '>')] {
             self.emit(format!("{table}:"));
             self.emit("  DB 0".to_string());
@@ -760,6 +896,15 @@ impl CodeGenerator {
             .push("; --- Sound Engine (Phase 25a) ---".to_string());
 
         self.emit("Sound_Init:".to_string());
+        // Clearing software state alone leaves APU length counters and DMC DAC audible.
+        self.emit("  LDA #0".to_string());
+        self.emit("  STA $4015".to_string());
+        self.emit("  STA $4008".to_string());
+        self.emit("  STA $4011".to_string());
+        self.emit("  LDA #$30".to_string());
+        self.emit("  STA $4000".to_string());
+        self.emit("  STA $4004".to_string());
+        self.emit("  STA $400C".to_string());
         self.emit("  LDA #$0F".to_string());
         self.emit("  STA $4015".to_string());
         self.emit("  LDX #$00".to_string());
@@ -808,6 +953,11 @@ impl CodeGenerator {
         self.emit("  BCS SndPlay_PriorityOK".to_string());
         self.emit("  JMP SndPlayEnd".to_string());
         self.emit("SndPlay_PriorityOK:".to_string());
+        // NMI updates must not consume a half-written channel record.
+        self.emit("  PHA".to_string());
+        self.emit("  LDA #0".to_string());
+        self.emit(format!("  STA ${SOUND_RAM_START:04X}, X"));
+        self.emit("  PLA".to_string());
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x05));
 
@@ -853,8 +1003,11 @@ impl CodeGenerator {
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x15));
 
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x12));
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x16));
+        // Music has no duty envelope. Force the initial timer-high write even for high=0.
+        self.emit("  LDA #$FF".to_string());
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x13));
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x12));
 
         self.emit("  LDA $F0".to_string());
         self.emit("  CLC".to_string());
@@ -866,9 +1019,6 @@ impl CodeGenerator {
 
         self.emit("  LDA #$01".to_string());
         self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START));
-        self.emit("  LDA #$01".to_string());
-        self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 1));
         self.emit("  LDA $F0".to_string());
         self.output
@@ -876,6 +1026,8 @@ impl CodeGenerator {
         self.emit("  LDA $F1".to_string());
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 3));
+        self.emit("  LDA #1".to_string());
+        self.emit(format!("  STA ${SOUND_RAM_START:04X}, X"));
         self.emit("SndPlayEnd:".to_string());
         self.emit("  RTS".to_string());
 
@@ -917,6 +1069,32 @@ impl CodeGenerator {
         self.emit("  BCS SFXPlay_Apply".to_string());
         self.emit("  RTS".to_string());
         self.emit("SFXPlay_Apply:".to_string());
+        // The last ten bytes of each channel preserve the interrupted music note.
+        // Replacing an effect retains this backup rather than backing up the effect.
+        self.emit("  PHA".to_string());
+        self.emit(format!("  LDA ${SOUND_RAM_START:04X}, X"));
+        self.emit("  PHA".to_string());
+        self.emit("  LDA #0".to_string());
+        self.emit(format!("  STA ${SOUND_RAM_START:04X}, X"));
+        self.emit("  PLA".to_string());
+        self.emit("  CMP #1".to_string());
+        self.emit("  BNE SFXPlay_NoMusicBackup".to_string());
+        self.emit("  LDA #1".to_string());
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x16));
+        for (backup, live) in [1, 2, 3, 4, 5, 6, 9, 13, 17].into_iter().enumerate() {
+            self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + live));
+            self.emit(format!(
+                "  STA ${:04X}, X",
+                SOUND_RAM_START + 0x17 + backup as u16
+            ));
+        }
+        self.emit("  JMP SFXPlay_BackupReady".to_string());
+        self.emit("SFXPlay_NoMusicBackup:".to_string());
+        self.emit("  CMP #0".to_string());
+        self.emit("  BNE SFXPlay_BackupReady".to_string());
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x16));
+        self.emit("SFXPlay_BackupReady:".to_string());
+        self.emit("  PLA".to_string());
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x05));
 
@@ -935,6 +1113,18 @@ impl CodeGenerator {
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x13));
 
+        self.emit("  LDY #5".to_string());
+        self.emit("  LDA ($F0), Y".to_string());
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0D));
+
+        // Macro pitch offsets start from note 48, matching the editor preview.
+        self.emit("  LDA #48".to_string());
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x11));
+        self.emit("  LDA #$3F".to_string());
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x04));
+        self.emit("  LDA #$FF".to_string());
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x12));
+
         self.emit("  LDA #0".to_string());
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x07));
@@ -950,12 +1140,11 @@ impl CodeGenerator {
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x14));
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x15));
-
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0D));
-        self.emit("  LDA #$FF".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0D));
+        for offset in [0x0e, 0x0f, 0x10] {
+            self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + offset));
+        }
+        self.emit("  LDA #2".to_string());
+        self.emit(format!("  STA ${SOUND_RAM_START:04X}, X"));
         self.emit("  RTS".to_string());
 
         self.emit("Sound_Update:".to_string());
@@ -978,6 +1167,9 @@ impl CodeGenerator {
         self.emit("  JSR SndPitchUpdate".to_string());
         self.emit("  JSR SndDutyUpdate".to_string());
         self.emit("  JSR SndArpUpdate".to_string());
+        self.emit("  JSR SndCalcPeriod".to_string());
+        self.emit("  JSR SndWriteControl".to_string());
+        self.emit("  JSR SndEffectComplete".to_string());
         self.emit("SoundChannelNext:".to_string());
         self.emit("  TXA".to_string());
         self.emit("  CLC".to_string());
@@ -1023,6 +1215,11 @@ impl CodeGenerator {
         self.emit("  BNE SndActive".to_string());
         self.emit("  RTS".to_string());
         self.emit("SndActive:".to_string());
+        // Macro effects are advanced by their envelopes, not the music note pointer.
+        self.emit("  CMP #2".to_string());
+        self.emit("  BNE SndMusicActive".to_string());
+        self.emit("  RTS".to_string());
+        self.emit("SndMusicActive:".to_string());
         self.output
             .push(format!("  DEC ${:04X}, X", SOUND_RAM_START + 1));
         self.emit("  BEQ SndTimerExpired".to_string());
@@ -1059,19 +1256,22 @@ impl CodeGenerator {
         self.emit("SilenceP1:".to_string());
         self.emit("  LDA #$30".to_string());
         self.emit("  STA $4000".to_string());
-        self.emit("  JMP SndChEnd".to_string());
+        self.emit("  JMP SndSilenceAdvance".to_string());
         self.emit("SilenceP2:".to_string());
         self.emit("  LDA #$30".to_string());
         self.emit("  STA $4004".to_string());
-        self.emit("  JMP SndChEnd".to_string());
+        self.emit("  JMP SndSilenceAdvance".to_string());
         self.emit("SilenceTri:".to_string());
         self.emit("  LDA #$80".to_string());
         self.emit("  STA $4008".to_string());
-        self.emit("  JMP SndChEnd".to_string());
+        self.emit("  JMP SndSilenceAdvance".to_string());
         self.emit("SilenceDMC:".to_string());
         self.emit("  LDA #$0F".to_string());
         self.emit("  STA $4015".to_string());
-        self.emit("  JMP SndChEnd".to_string());
+        self.emit("SndSilenceAdvance:".to_string());
+        self.emit(format!("  LDA ${SOUND_RAM_START:04X}, X"));
+        self.emit("  BEQ SndChEnd".to_string());
+        self.emit("  JMP SndAdvance".to_string());
 
         self.emit("SndNextNote:".to_string());
         self.output
@@ -1088,112 +1288,31 @@ impl CodeGenerator {
         self.output
             .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x11));
 
-        self.emit("  CLC".to_string());
-        self.output
-            .push(format!("  ADC ${:04X}, X", SOUND_RAM_START + 0x10));
-
-        self.emit("  ASL".to_string());
-        self.emit("  TAY".to_string());
-        self.emit("  LDA $D000, Y".to_string());
-        self.emit("  STA $F6".to_string());
-        self.emit("  LDA $D001, Y".to_string());
-        self.emit("  STA $F7".to_string());
-
-        self.emit("  LDA $F6".to_string());
-        self.emit("  CLC".to_string());
-        self.output
-            .push(format!("  ADC ${:04X}, X", SOUND_RAM_START + 0x0C));
-        self.emit("  STA $F6".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x0C));
-        self.emit("  BPL SndPitchPos".to_string());
-        self.emit("  LDA $F7".to_string());
-        self.emit("  ADC #$FF".to_string());
-        self.emit("  STA $F7".to_string());
-        self.emit("  JMP SndPitchDone".to_string());
-        self.emit("SndPitchPos:".to_string());
-        self.emit("  LDA $F7".to_string());
-        self.emit("  ADC #0".to_string());
-        self.emit("  STA $F7".to_string());
-        self.emit("SndPitchDone:".to_string());
-
-        self.emit("  LDA #0".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x07));
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x08));
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0A));
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0B));
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0C));
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0E));
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0F));
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x14));
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x15));
-
-        self.emit("  CPX #$00".to_string());
-        self.emit("  BEQ PlayP1".to_string());
-        self.emit("  CPX #$20".to_string());
-        self.emit("  BEQ PlayP2".to_string());
-        self.emit("  CPX #$40".to_string());
-        self.emit("  BEQ PlayTri".to_string());
         self.emit("  CPX #$60".to_string());
-        self.emit("  BEQ PlayDMC".to_string());
+        self.emit("  BNE SndTonalNote".to_string());
+        self.emit("  JMP PlayDMC".to_string());
+        self.emit("SndTonalNote:".to_string());
+        // Envelope values belong to a note; discard the previous note's offsets.
+        self.emit("  LDA #0".to_string());
+        for offset in [7, 8, 10, 11, 12, 14, 15, 16, 20, 21] {
+            self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + offset));
+        }
+        self.emit("  LDA #$FF".to_string());
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 18));
         self.emit("  JMP SndAdvance".to_string());
         self.emit("SndPlaySilence:".to_string());
-        self.emit("  CPX #$00".to_string());
-        self.emit("  BEQ SilenceP1".to_string());
-        self.emit("  CPX #$20".to_string());
-        self.emit("  BEQ SilenceP2".to_string());
-        self.emit("  CPX #$40".to_string());
-        self.emit("  BEQ SilenceTri".to_string());
-        self.emit("  CPX #$60".to_string());
-        self.emit("  BEQ SilenceDMC".to_string());
-        self.emit("  JMP SndAdvance".to_string());
-
-        self.emit("PlayP1:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x04));
-        self.emit("  STA $4000".to_string());
-        self.emit("  LDA $F6".to_string());
-        self.emit("  STA $4002".to_string());
-        self.emit("  LDA $F7".to_string());
-        self.emit("  STA $4003".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x12));
-        self.emit("  JMP SndAdvance".to_string());
-
-        self.emit("PlayP2:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x04));
-        self.emit("  STA $4004".to_string());
-        self.emit("  LDA $F6".to_string());
-        self.emit("  STA $4006".to_string());
-        self.emit("  LDA $F7".to_string());
-        self.emit("  STA $4007".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x12));
-        self.emit("  JMP SndAdvance".to_string());
-
-        self.emit("PlayTri:".to_string());
         self.emit("  LDA #$FF".to_string());
-        self.emit("  STA $4008".to_string());
-        self.emit("  LDA $F6".to_string());
-        self.emit("  STA $400A".to_string());
-        self.emit("  LDA $F7".to_string());
-        self.emit("  STA $400B".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x12));
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 17));
+        self.emit("  CPX #$60".to_string());
+        self.emit("  BNE SndRestAdvance".to_string());
+        self.emit("  LDA #$0F".to_string());
+        self.emit("  STA $4015".to_string());
+        self.emit("SndRestAdvance:".to_string());
         self.emit("  JMP SndAdvance".to_string());
 
         self.emit("PlayDMC:".to_string());
-        self.emit("  LDA $F6".to_string());
+        // DMC pitch is a sample ID, not a period-table index; instrument is its rate.
+        self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x11));
         self.emit("  ASL".to_string());
         self.emit("  TAY".to_string());
         self.emit("  LDA $D480, Y".to_string());
@@ -1201,9 +1320,11 @@ impl CodeGenerator {
         self.emit("  INY".to_string());
         self.emit("  LDA $D480, Y".to_string());
         self.emit("  STA $4013".to_string());
-        self.emit("  LDA $F7".to_string());
+        self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x04));
         self.emit("  AND #$0F".to_string());
         self.emit("  STA $4010".to_string());
+        self.emit("  LDA #$0F".to_string());
+        self.emit("  STA $4015".to_string());
         self.emit("  LDA #$1F".to_string());
         self.emit("  STA $4015".to_string());
 
@@ -1221,403 +1342,187 @@ impl CodeGenerator {
         self.emit("SndChEnd:".to_string());
         self.emit("  RTS".to_string());
 
-        self.emit("SndEnvUpdate:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x06));
-        self.emit("  CMP #$FF".to_string());
-        self.emit("  BNE SndEnvProcess".to_string());
-        self.emit("  RTS".to_string());
-        self.emit("SndEnvProcess:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x08));
-        self.emit("  BEQ SndEnvNextStep".to_string());
-        self.output
-            .push(format!("  DEC ${:04X}, X", SOUND_RAM_START + 0x08));
-        self.emit("  JMP SndEnvUpdate_Done".to_string());
-        self.emit("SndEnvNextStep:".to_string());
+        // Shared envelope timing: one frame is one update; loops add no idle frame.
+        for (name, id, index, timer, value) in [
+            ("SndEnv", 6, 7, 8, None),
+            ("SndPitch", 9, 10, 11, Some(12)),
+            ("SndDuty", 19, 20, 21, None),
+            ("SndArp", 13, 14, 15, Some(16)),
+        ] {
+            self.emit(format!("{name}Update:"));
+            self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + id));
+            self.emit("  CMP #$FF".into());
+            self.emit(format!("  BEQ {name}Return"));
+            self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + timer));
+            self.emit(format!("  BEQ {name}NextStep"));
+            self.emit(format!("  DEC ${:04X}, X", SOUND_RAM_START + timer));
+            self.emit(format!("  BNE {name}Return"));
+            self.emit(format!("{name}NextStep:"));
+            self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + id));
+            self.emit("  ASL".into());
+            self.emit("  TAY".into());
+            self.emit(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
+            self.emit("  STA $F0".into());
+            self.emit(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
+            self.emit("  STA $F1".into());
+            self.emit("  LDY #0".into());
+            self.emit("  LDA ($F0), Y".into());
+            self.emit("  STA $F5".into()); // Preserve loop index during address calculation.
+            self.emit("  INC $F0".into());
+            self.emit(format!("  BNE {name}HeaderAdvanced"));
+            self.emit("  INC $F1".into());
+            self.emit(format!("{name}HeaderAdvanced:"));
+            self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + index));
+            self.emit("  ASL".into());
+            self.emit("  CLC".into());
+            self.emit("  ADC $F0".into());
+            self.emit("  STA $F0".into());
+            self.emit(format!("  BCC {name}StepAddressed"));
+            self.emit("  INC $F1".into());
+            self.emit(format!("{name}StepAddressed:"));
+            self.emit("  LDA ($F0), Y".into());
+            self.emit("  STA $F3".into());
+            self.emit("  INY".into());
+            self.emit("  LDA ($F0), Y".into());
+            self.emit(format!("  BNE {name}Apply"));
+            self.emit("  LDA $F5".into());
+            self.emit("  CMP #$FF".into());
+            self.emit(format!("  BEQ {name}Finished"));
+            self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + index));
+            self.emit(format!("  JMP {name}NextStep"));
+            self.emit(format!("{name}Finished:"));
+            // Music holds a finite envelope's last value and restarts on each note.
+            // Effects mark exhaustion so the longest sequence decides completion.
+            self.emit(format!("  LDA ${SOUND_RAM_START:04X}, X"));
+            self.emit("  CMP #2".into());
+            self.emit(format!("  BNE {name}Return"));
+            self.emit("  LDA #$FF".into());
+            self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + id));
+            self.emit("  RTS".into());
+            self.emit(format!("{name}Apply:"));
+            self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + timer));
+            self.emit(format!("  INC ${:04X}, X", SOUND_RAM_START + index));
+            if let Some(offset) = value {
+                self.emit("  LDA $F3".into());
+                self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + offset));
+            } else if name == "SndEnv" {
+                self.emit("  LDA $F3".into());
+                self.emit("  AND #$0F".into());
+                self.emit("  STA $F3".into());
+                self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + 4));
+                self.emit("  AND #$F0".into());
+                self.emit("  ORA $F3".into());
+                self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 4));
+            } else {
+                self.emit("  LDA $F3".into());
+                for _ in 0..6 {
+                    self.emit("  ASL".into());
+                }
+                self.emit("  STA $F3".into());
+                self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + 4));
+                self.emit("  AND #$3F".into());
+                self.emit("  ORA $F3".into());
+                self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 4));
+            }
+            self.emit(format!("{name}Return:"));
+            self.emit("  RTS".into());
+        }
 
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x06));
-        self.emit("  ASL".to_string());
-        self.emit("  TAY".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
-        self.emit("  STA $F0".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
-        self.emit("  STA $F1".to_string());
+        self.emit("SndEffectComplete:".into());
+        self.emit(format!("  LDA ${SOUND_RAM_START:04X}, X"));
+        self.emit("  CMP #2".into());
+        self.emit("  BNE SndEffectReturn".into());
+        self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + 6));
+        for offset in [9, 13, 19] {
+            self.emit(format!("  AND ${:04X}, X", SOUND_RAM_START + offset));
+        }
+        self.emit("  CMP #$FF".into());
+        self.emit("  BNE SndEffectReturn".into());
+        self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + 22));
+        self.emit("  BNE SndEffectRestoreMusic".into());
+        self.emit(format!("  STA ${SOUND_RAM_START:04X}, X"));
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 5));
+        self.emit("  LDA #$FF".into());
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 17));
+        self.emit("  JMP SndWriteControl".into());
+        self.emit("SndEffectRestoreMusic:".into());
+        for (backup, live) in [0, 1, 2, 3, 4, 5, 6, 9, 13, 17].into_iter().enumerate() {
+            self.emit(format!(
+                "  LDA ${:04X}, X",
+                SOUND_RAM_START + 22 + backup as u16
+            ));
+            self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + live));
+        }
+        self.emit("  LDA #0".into());
+        for offset in [7, 8, 10, 11, 12, 14, 15, 16, 20, 21, 22] {
+            self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + offset));
+        }
+        self.emit("  LDA #$FF".into());
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 19));
+        self.emit(format!("  STA ${:04X}, X", SOUND_RAM_START + 18));
+        self.emit("  JSR SndCalcPeriod".into());
+        self.emit("  JMP SndWriteControl".into());
+        self.emit("SndEffectReturn:".into());
+        self.emit("  RTS".into());
 
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x07));
-        self.emit("  STA $F2".to_string());
-
-        self.emit("  LDA $F0".to_string());
-        self.emit("  CLC".to_string());
-        self.emit("  ADC #1".to_string());
-        self.emit("  STA $F0".to_string());
-        self.emit("  BCC SndEnvPtr1".to_string());
-        self.emit("  INC $F1".to_string());
-        self.emit("SndEnvPtr1:".to_string());
-
-        self.emit("  LDA $F2".to_string());
-        self.emit("  ASL".to_string());
-        self.emit("  CLC".to_string());
-        self.emit("  ADC $F0".to_string());
-        self.emit("  STA $F0".to_string());
-        self.emit("  BCC SndEnvPtr2".to_string());
-        self.emit("  INC $F1".to_string());
-        self.emit("SndEnvPtr2:".to_string());
-
-        self.emit("  LDY #0".to_string());
-        self.emit("  LDA ($F0), Y".to_string());
-        self.emit("  STA $F3".to_string());
-        self.emit("  INY".to_string());
-        self.emit("  LDA ($F0), Y".to_string());
-        self.emit("  STA $F4".to_string());
-
-        self.emit("  LDA $F4".to_string());
-        self.emit("  BNE SndEnvApply".to_string());
-
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x06));
-        self.emit("  ASL".to_string());
-        self.emit("  TAY".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
-        self.emit("  STA $F0".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
-        self.emit("  STA $F1".to_string());
-        self.emit("  LDY #0".to_string());
-        self.emit("  LDA ($F0), Y".to_string());
-        self.emit("  CMP #$FF".to_string());
-        self.emit("  BEQ SndEnvHold".to_string());
-
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x07));
-        self.emit("  LDA #1".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x08));
-        self.emit("  JMP SndEnvUpdate_Done".to_string());
-        self.emit("SndEnvHold:".to_string());
-        self.emit("  JMP SndEnvUpdate_Done".to_string());
-
-        self.emit("SndEnvApply:".to_string());
-        self.emit("  LDA $F4".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x08));
-        self.output
-            .push(format!("  INC ${:04X}, X", SOUND_RAM_START + 0x07));
-
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x04));
-        self.emit("  AND #$F0".to_string());
-        self.emit("  ORA $F3".to_string());
-        self.emit("  STA $F5".to_string());
-
-        self.emit("  CPX #$00".to_string());
-        self.emit("  BEQ SndEnvVolP1".to_string());
-        self.emit("  CPX #$20".to_string());
-        self.emit("  BEQ SndEnvVolP2".to_string());
-        self.emit("  CPX #$60".to_string());
-        self.emit("  BEQ SndEnvVolDMC".to_string());
-        self.emit("  CPX #$40".to_string());
-        self.emit("  BEQ SndEnvVolTri".to_string());
-        self.emit("  JMP SndEnvUpdate_Done".to_string());
-
-        self.emit("SndEnvVolP1:".to_string());
-        self.emit("  LDA $F5".to_string());
-        self.emit("  STA $4000".to_string());
-        self.emit("  JMP SndEnvUpdate_Done".to_string());
-        self.emit("SndEnvVolP2:".to_string());
-        self.emit("  LDA $F5".to_string());
-        self.emit("  STA $4004".to_string());
-        self.emit("  JMP SndEnvUpdate_Done".to_string());
-        self.emit("SndEnvVolDMC:".to_string());
-        self.emit("  JMP SndEnvUpdate_Done".to_string());
-        self.emit("SndEnvVolTri:".to_string());
-        self.emit("  LDA $F3".to_string());
-        self.emit("  BEQ SndEnvTriOff".to_string());
-        self.emit("  LDA #$FF".to_string());
-        self.emit("  STA $4008".to_string());
-        self.emit("  JMP SndEnvUpdate_Done".to_string());
-        self.emit("SndEnvTriOff:".to_string());
-        self.emit("  LDA #$00".to_string());
-        self.emit("  STA $4008".to_string());
-        self.emit("SndEnvUpdate_Done:".to_string());
-        self.emit("  RTS".to_string());
-
-        self.emit("SndPitchUpdate:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x09));
-        self.emit("  CMP #$FF".to_string());
-        self.emit("  BNE SndPitchProcess".to_string());
-        self.emit("  RTS".to_string());
-        self.emit("SndPitchProcess:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x0B));
-        self.emit("  BEQ SndPitchNextStep".to_string());
-        self.output
-            .push(format!("  DEC ${:04X}, X", SOUND_RAM_START + 0x0B));
-        self.emit("  RTS".to_string());
-        self.emit("SndPitchNextStep:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x09));
-        self.emit("  ASL".to_string());
-        self.emit("  TAY".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
-        self.emit("  STA $F0".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
-        self.emit("  STA $F1".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x0A));
-        self.emit("  STA $F2".to_string());
-        self.emit("  LDA $F0".to_string());
-        self.emit("  CLC".to_string());
-        self.emit("  ADC #1".to_string());
-        self.emit("  STA $F0".to_string());
-        self.emit("  BCC SndPitchPtr1".to_string());
-        self.emit("  INC $F1".to_string());
-        self.emit("SndPitchPtr1:".to_string());
-        self.emit("  LDA $F2".to_string());
-        self.emit("  ASL".to_string());
-        self.emit("  CLC".to_string());
-        self.emit("  ADC $F0".to_string());
-        self.emit("  STA $F0".to_string());
-        self.emit("  BCC SndPitchPtr2".to_string());
-        self.emit("  INC $F1".to_string());
-        self.emit("SndPitchPtr2:".to_string());
-        self.emit("  LDY #0".to_string());
-        self.emit("  LDA ($F0), Y".to_string());
-        self.emit("  STA $F3".to_string());
-        self.emit("  INY".to_string());
-        self.emit("  LDA ($F0), Y".to_string());
-        self.emit("  STA $F4".to_string());
-        self.emit("  LDA $F4".to_string());
-        self.emit("  BNE SndPitchApply".to_string());
-
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x09));
-        self.emit("  ASL".to_string());
-        self.emit("  TAY".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
-        self.emit("  STA $F0".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
-        self.emit("  STA $F1".to_string());
-        self.emit("  LDY #0".to_string());
-        self.emit("  LDA ($F0), Y".to_string());
-        self.emit("  CMP #$FF".to_string());
-        self.emit("  BEQ SndPitchHold".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0A));
-        self.emit("  LDA #1".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0B));
-        self.emit("  RTS".to_string());
-        self.emit("SndPitchHold:".to_string());
-        self.emit("  RTS".to_string());
-        self.emit("SndPitchApply:".to_string());
-        self.emit("  LDA $F4".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0B));
-        self.output
-            .push(format!("  INC ${:04X}, X", SOUND_RAM_START + 0x0A));
-        self.emit("  LDA $F3".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0C));
-        self.emit("  RTS".to_string());
-
-        self.emit("SndDutyUpdate:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x13));
-        self.emit("  CMP #$FF".to_string());
-        self.emit("  BNE SndDutyProcess".to_string());
-        self.emit("  RTS".to_string());
-        self.emit("SndDutyProcess:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x15));
-        self.emit("  BEQ SndDutyNextStep".to_string());
-        self.output
-            .push(format!("  DEC ${:04X}, X", SOUND_RAM_START + 0x15));
-        self.emit("  RTS".to_string());
-        self.emit("SndDutyNextStep:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x13));
-        self.emit("  ASL".to_string());
-        self.emit("  TAY".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
-        self.emit("  STA $F0".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
-        self.emit("  STA $F1".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x14));
-        self.emit("  STA $F2".to_string());
-        self.emit("  LDA $F0".to_string());
-        self.emit("  CLC".to_string());
-        self.emit("  ADC #1".to_string());
-        self.emit("  STA $F0".to_string());
-        self.emit("  BCC SndDutyPtr1".to_string());
-        self.emit("  INC $F1".to_string());
-        self.emit("SndDutyPtr1:".to_string());
-        self.emit("  LDA $F2".to_string());
-        self.emit("  ASL".to_string());
-        self.emit("  CLC".to_string());
-        self.emit("  ADC $F0".to_string());
-        self.emit("  STA $F0".to_string());
-        self.emit("  BCC SndDutyPtr2".to_string());
-        self.emit("  INC $F1".to_string());
-        self.emit("SndDutyPtr2:".to_string());
-        self.emit("  LDY #0".to_string());
-        self.emit("  LDA ($F0), Y".to_string());
-        self.emit("  STA $F3".to_string());
-        self.emit("  INY".to_string());
-        self.emit("  LDA ($F0), Y".to_string());
-        self.emit("  STA $F4".to_string());
-        self.emit("  LDA $F4".to_string());
-        self.emit("  BNE SndDutyApply".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x13));
-        self.emit("  ASL".to_string());
-        self.emit("  TAY".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
-        self.emit("  STA $F0".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
-        self.emit("  STA $F1".to_string());
-        self.emit("  LDY #0".to_string());
-        self.emit("  LDA ($F0), Y".to_string());
-        self.emit("  CMP #$FF".to_string());
-        self.emit("  BEQ SndDutyHold".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x14));
-        self.emit("  LDA #1".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x15));
-        self.emit("  RTS".to_string());
-        self.emit("SndDutyHold:".to_string());
-        self.emit("  RTS".to_string());
-        self.emit("SndDutyApply:".to_string());
-        self.emit("  LDA $F4".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x15));
-        self.output
-            .push(format!("  INC ${:04X}, X", SOUND_RAM_START + 0x14));
-        self.emit("  LDA $F3".to_string());
-        self.emit("  ROR".to_string());
-        self.emit("  ROR".to_string());
-        self.emit("  ROR".to_string());
-        self.emit("  AND #$C0".to_string());
-        self.emit("  STA $F3".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x04));
-        self.emit("  AND #$3F".to_string());
-        self.emit("  ORA $F3".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x04));
-        self.emit("  RTS".to_string());
-
-        self.emit("SndArpUpdate:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x0D));
-        self.emit("  CMP #$FF".to_string());
-        self.emit("  BNE SndArpProcess".to_string());
-        self.emit("  RTS".to_string());
-        self.emit("SndArpProcess:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x0F));
-        self.emit("  BEQ SndArpNextStep".to_string());
-        self.output
-            .push(format!("  DEC ${:04X}, X", SOUND_RAM_START + 0x0F));
-        self.emit("  RTS".to_string());
-        self.emit("SndArpNextStep:".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x0D));
-        self.emit("  ASL".to_string());
-        self.emit("  TAY".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
-        self.emit("  STA $F0".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
-        self.emit("  STA $F1".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x0E));
-        self.emit("  STA $F2".to_string());
-        self.emit("  LDA $F0".to_string());
-        self.emit("  CLC".to_string());
-        self.emit("  ADC #1".to_string());
-        self.emit("  STA $F0".to_string());
-        self.emit("  BCC SndArpPtr1".to_string());
-        self.emit("  INC $F1".to_string());
-        self.emit("SndArpPtr1:".to_string());
-        self.emit("  LDA $F2".to_string());
-        self.emit("  ASL".to_string());
-        self.emit("  CLC".to_string());
-        self.emit("  ADC $F0".to_string());
-        self.emit("  STA $F0".to_string());
-        self.emit("  BCC SndArpPtr2".to_string());
-        self.emit("  INC $F1".to_string());
-        self.emit("SndArpPtr2:".to_string());
-        self.emit("  LDY #0".to_string());
-        self.emit("  LDA ($F0), Y".to_string());
-        self.emit("  STA $F3".to_string());
-        self.emit("  INY".to_string());
-        self.emit("  LDA ($F0), Y".to_string());
-        self.emit("  STA $F4".to_string());
-        self.emit("  LDA $F4".to_string());
-        self.emit("  BNE SndArpApply".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x0D));
-        self.emit("  ASL".to_string());
-        self.emit("  TAY".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 1));
-        self.emit("  STA $F0".to_string());
-        self.output
-            .push(format!("  LDA ${:04X}, Y", ENVELOPE_TABLE_ADDR + 2));
-        self.emit("  STA $F1".to_string());
-        self.emit("  LDY #0".to_string());
-        self.emit("  LDA ($F0), Y".to_string());
-        self.emit("  CMP #$FF".to_string());
-        self.emit("  BEQ SndArpHold".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0E));
-        self.emit("  LDA #1".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0F));
-        self.emit("  RTS".to_string());
-        self.emit("SndArpHold:".to_string());
-        self.emit("  RTS".to_string());
-        self.emit("SndArpApply:".to_string());
-        self.emit("  LDA $F4".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x0F));
-        self.output
-            .push(format!("  INC ${:04X}, X", SOUND_RAM_START + 0x0E));
-        self.emit("  LDA $F3".to_string());
-        self.output
-            .push(format!("  STA ${:04X}, X", SOUND_RAM_START + 0x10));
-        self.emit("  RTS".to_string());
+        self.emit("SndWriteControl:".into());
+        self.emit("  CPX #$60".into());
+        self.emit("  BEQ SndControlReturn".into());
+        self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + 17));
+        self.emit("  CMP #$FF".into());
+        self.emit("  BEQ SndControlSilence".into());
+        self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + 4));
+        self.emit("  CPX #$40".into());
+        self.emit("  BNE SndControlWrite".into());
+        self.emit("  AND #$0F".into());
+        self.emit("  BEQ SndControlWrite".into());
+        self.emit("  LDA #$FF".into());
+        self.emit("  BNE SndControlWrite".into());
+        self.emit("SndControlSilence:".into());
+        self.emit("  LDA #$30".into());
+        self.emit("  CPX #$40".into());
+        self.emit("  BNE SndControlWrite".into());
+        self.emit("  LDA #0".into());
+        self.emit("SndControlWrite:".into());
+        self.emit("  CPX #0".into());
+        self.emit("  BEQ SndControlP1".into());
+        self.emit("  CPX #$20".into());
+        self.emit("  BEQ SndControlP2".into());
+        self.emit("  STA $4008".into());
+        self.emit("  RTS".into());
+        self.emit("SndControlP1:".into());
+        self.emit("  STA $4000".into());
+        self.emit("  RTS".into());
+        self.emit("SndControlP2:".into());
+        self.emit("  STA $4004".into());
+        self.emit("SndControlReturn:".into());
+        self.emit("  RTS".into());
         self.emit("SndCalcPeriod:".to_string());
         self.emit("  CPX #$60".to_string());
         self.emit("  BEQ SndCalcRet".to_string());
 
         self.output
             .push(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x11)); // BasePitch
+        self.emit("  CMP #$FF".to_string());
+        self.emit("  BEQ SndCalcRet".to_string());
         self.emit("  CLC".to_string());
         self.output
             .push(format!("  ADC ${:04X}, X", SOUND_RAM_START + 0x10)); // ArpOffset
 
-        self.emit("  BPL SndCalcPos".to_string());
+        // Signed offsets may overflow an eight-bit signed sum (95 + 127).
+        // Carry distinguishes negative underflow without misclassifying high notes.
+        self.emit("  STA $F3".to_string());
+        self.emit(format!("  LDA ${:04X}, X", SOUND_RAM_START + 0x10));
+        self.emit("  BPL SndCalcPositiveOffset".to_string());
+        self.emit("  BCS SndCalcPos".to_string());
         self.emit("  LDA #0".to_string());
+        self.emit("  JMP SndCalcLookup".to_string());
+        self.emit("SndCalcPositiveOffset:".to_string());
+        self.emit("  BCC SndCalcPos".to_string());
+        self.emit("  LDA #95".to_string());
+        self.emit("  JMP SndCalcLookup".to_string());
         self.emit("SndCalcPos:".to_string());
+        self.emit("  LDA $F3".to_string());
         self.emit("  CMP #96".to_string());
         self.emit("  BCC SndCalcLookup".to_string());
         self.emit("  LDA #95".to_string());
@@ -2046,20 +1951,10 @@ impl CodeGenerator {
         self.emit("  TAX".to_string()); // X = 0
 
         self.emit("Anim_LoadFrame:".to_string());
-        // Calculate Offset: 2 + Index * 3
-        // A*3 = A*2 + A.
+        // Preserve the high byte when a three-byte frame crosses a page.
         self.emit("  TXA".to_string());
-        self.emit("  STA $06".to_string()); // Temp Index
-        self.emit("  ASL".to_string());
-        self.emit("  CLC".to_string());
-        self.emit("  ADC $06".to_string());
-        self.emit("  ADC #2".to_string());
-        self.emit("  TAY".to_string()); // Y = Offset to Frame Start (MetaPtr)
-
-        // We need Offset to Duration = FrameStart + 2
-        // So Y = Y + 2
-        self.emit("  INY".to_string());
-        self.emit("  INY".to_string());
+        self.emit("  JSR Runtime_Anim_FramePointer".to_string());
+        self.emit("  LDY #4".to_string()); // Two header bytes plus two pointer bytes.
 
         // Read Duration
         self.emit("  LDA ($04), Y".to_string());
@@ -2091,13 +1986,8 @@ impl CodeGenerator {
         self.emit("  INY".to_string()); // Y=2
         self.emit("  LDA ($02), Y".to_string()); // A = Index
 
-        // Calc Offset: 2 + Index * 3
-        self.emit("  STA $06".to_string());
-        self.emit("  ASL".to_string());
-        self.emit("  CLC".to_string());
-        self.emit("  ADC $06".to_string());
-        self.emit("  ADC #2".to_string());
-        self.emit("  TAY".to_string()); // Y = Offset
+        self.emit("  JSR Runtime_Anim_FramePointer".to_string());
+        self.emit("  LDY #2".to_string()); // Skip the animation header.
 
         // Read MetaPtr
         self.emit("  LDA ($04), Y".to_string());
@@ -2110,6 +2000,29 @@ impl CodeGenerator {
         self.emit("  JSR Runtime_SpriteDraw".to_string());
         self.emit("  RTS".to_string());
 
+        // Add A*3 to the animation pointer using 16-bit arithmetic. Metadata stores
+        // up to 255 frames; indexing it solely with Y truncated frame 84 onward.
+        self.emit("Runtime_Anim_FramePointer:".to_string());
+        self.emit("  STA $06".to_string());
+        self.emit("  LDY #0".to_string());
+        self.emit("  STY $07".to_string());
+        self.emit("  ASL".to_string());
+        self.emit("  ROL $07".to_string());
+        self.emit("  CLC".to_string());
+        self.emit("  ADC $06".to_string());
+        self.emit("  STA $06".to_string());
+        self.emit("  LDA $07".to_string());
+        self.emit("  ADC #0".to_string());
+        self.emit("  STA $07".to_string());
+        self.emit("  LDA $04".to_string());
+        self.emit("  CLC".to_string());
+        self.emit("  ADC $06".to_string());
+        self.emit("  STA $04".to_string());
+        self.emit("  LDA $05".to_string());
+        self.emit("  ADC $07".to_string());
+        self.emit("  STA $05".to_string());
+        self.emit("  RTS".to_string());
+
         self.emit("".to_string());
     }
 
@@ -2119,6 +2032,18 @@ impl CodeGenerator {
         self.emit("Runtime_Collision_Rect:".to_string());
         self.emit("  TSX".to_string());
 
+        // Empty rectangles never overlap, even when their origin lies inside another box.
+        for (low, high) in [
+            (0x010e, 0x010d),
+            (0x010c, 0x010b),
+            (0x0106, 0x0105),
+            (0x0104, 0x0103),
+        ] {
+            self.emit(format!("  LDA ${low:04X},X"));
+            self.emit(format!("  ORA ${high:04X},X"));
+            self.emit("  BEQ Collision_Rect_Fail".to_string());
+        }
+
         // Check 1: x1 < x2 + w2
         self.emit("  CLC".to_string());
         self.emit("  LDA $010A, X".to_string()); // X2_Low
@@ -2127,6 +2052,8 @@ impl CodeGenerator {
         self.emit("  LDA $0109, X".to_string()); // X2_High
         self.emit("  ADC $0105, X".to_string()); // W2_High
         self.emit("  STA $01".to_string());
+        // A carry represents an endpoint beyond every unsigned 16-bit position.
+        self.emit("  BCS Collision_Rect_Check2".to_string());
 
         self.emit("  LDA $0112, X".to_string()); // X1_Low
         self.emit("  CMP $00".to_string());
@@ -2135,6 +2062,7 @@ impl CodeGenerator {
         self.emit("  BCS Collision_Rect_Fail".to_string());
 
         // Check 2: x1 + w1 > x2
+        self.emit("Collision_Rect_Check2:".to_string());
         self.emit("  CLC".to_string());
         self.emit("  LDA $0112, X".to_string()); // X1_Low
         self.emit("  ADC $010E, X".to_string()); // W1_Low
@@ -2142,6 +2070,7 @@ impl CodeGenerator {
         self.emit("  LDA $0111, X".to_string()); // X1_High
         self.emit("  ADC $010D, X".to_string()); // W1_High
         self.emit("  STA $01".to_string());
+        self.emit("  BCS Collision_Rect_Check3".to_string());
 
         self.emit("  LDA $010A, X".to_string()); // X2_Low
         self.emit("  CMP $00".to_string());
@@ -2150,6 +2079,7 @@ impl CodeGenerator {
         self.emit("  BCS Collision_Rect_Fail".to_string());
 
         // Check 3: y1 < y2 + h2
+        self.emit("Collision_Rect_Check3:".to_string());
         self.emit("  CLC".to_string());
         self.emit("  LDA $0108, X".to_string()); // Y2_Low
         self.emit("  ADC $0104, X".to_string()); // H2_Low
@@ -2157,6 +2087,7 @@ impl CodeGenerator {
         self.emit("  LDA $0107, X".to_string()); // Y2_High
         self.emit("  ADC $0103, X".to_string()); // H2_High
         self.emit("  STA $01".to_string());
+        self.emit("  BCS Collision_Rect_Check4".to_string());
 
         self.emit("  LDA $0110, X".to_string()); // Y1_Low
         self.emit("  CMP $00".to_string());
@@ -2165,6 +2096,7 @@ impl CodeGenerator {
         self.emit("  BCS Collision_Rect_Fail".to_string());
 
         // Check 4: y1 + h1 > y2
+        self.emit("Collision_Rect_Check4:".to_string());
         self.emit("  CLC".to_string());
         self.emit("  LDA $0110, X".to_string()); // Y1_Low
         self.emit("  ADC $010C, X".to_string()); // H1_Low
@@ -2172,6 +2104,7 @@ impl CodeGenerator {
         self.emit("  LDA $010F, X".to_string()); // Y1_High
         self.emit("  ADC $010B, X".to_string()); // H1_High
         self.emit("  STA $01".to_string());
+        self.emit("  BCS Collision_Rect_True".to_string());
 
         self.emit("  LDA $0108, X".to_string()); // Y2_Low
         self.emit("  CMP $00".to_string());
@@ -2179,6 +2112,7 @@ impl CodeGenerator {
         self.emit("  SBC $01".to_string());
         self.emit("  BCS Collision_Rect_Fail".to_string());
 
+        self.emit("Collision_Rect_True:".to_string());
         self.emit("  LDA #$FF".to_string());
         self.emit("  LDX #0".to_string());
         self.emit("  RTS".to_string());
@@ -2204,6 +2138,7 @@ impl CodeGenerator {
         self.emit("  LDA $0109, X".to_string()); // RX_H
         self.emit("  ADC $0105, X".to_string()); // RW_H
         self.emit("  STA $01".to_string());
+        self.emit("  BCS Collision_Point_Check3".to_string());
 
         self.emit("  LDA $010E, X".to_string()); // PX_L
         self.emit("  CMP $00".to_string());
@@ -2212,6 +2147,7 @@ impl CodeGenerator {
         self.emit("  BCS Collision_Point_Fail".to_string());
 
         // Check 3: py >= ry
+        self.emit("Collision_Point_Check3:".to_string());
         self.emit("  LDA $010C, X".to_string()); // PY_L
         self.emit("  CMP $0108, X".to_string()); // RY_L
         self.emit("  LDA $010B, X".to_string()); // PY_H
@@ -2226,6 +2162,7 @@ impl CodeGenerator {
         self.emit("  LDA $0107, X".to_string()); // RY_H
         self.emit("  ADC $0103, X".to_string()); // RH_H
         self.emit("  STA $01".to_string());
+        self.emit("  BCS Collision_Point_True".to_string());
 
         self.emit("  LDA $010C, X".to_string()); // PY_L
         self.emit("  CMP $00".to_string());
@@ -2233,6 +2170,7 @@ impl CodeGenerator {
         self.emit("  SBC $01".to_string());
         self.emit("  BCS Collision_Point_Fail".to_string());
 
+        self.emit("Collision_Point_True:".to_string());
         self.emit("  LDA #$FF".to_string());
         self.emit("  LDX #0".to_string());
         self.emit("  RTS".to_string());
@@ -2243,6 +2181,14 @@ impl CodeGenerator {
         self.emit("Runtime_Collision_Tile:".to_string());
         self.emit("  TSX".to_string());
         // Args: X (5,6), Y (3,4) (High, Low)
+        // Collision.Tile uses local visible-screen pixels. Reject coordinates
+        // outside 256x240 rather than aliasing the map or its palette attributes.
+        self.emit("  LDA $0105,X".to_string());
+        self.emit("  ORA $0103,X".to_string());
+        self.emit("  BNE Collision_False".to_string());
+        self.emit("  LDA $0104,X".to_string());
+        self.emit("  CMP #240".to_string());
+        self.emit("  BCS Collision_False".to_string());
         self.emit("  LDA $0106, X".to_string()); // X_L
         self.emit("  LSR".to_string());
         self.emit("  LSR".to_string());
@@ -2275,20 +2221,9 @@ impl CodeGenerator {
         self.emit("  ADC #0".to_string());
         self.emit("  STA $03".to_string());
 
-        // Add Base Addr $D500
-        self.emit("  LDA $02".to_string());
-        self.output
-            .push(format!("  ADC #${:02X}", NAMETABLE_ADDR & 0xFF));
-        self.emit("  STA $02".to_string());
-        self.emit("  LDA $03".to_string());
-        self.output
-            .push(format!("  ADC #${:02X}", (NAMETABLE_ADDR >> 8) & 0xFF));
-        self.emit("  STA $03".to_string());
-
-        // Read
-        self.emit("  LDY #0".to_string());
-        self.emit("  LDA ($02), Y".to_string());
-        self.emit("  LDX #0".to_string());
+        // World.Load selects the same map for graphics and collision. The helper
+        // falls back to the first map until a world cell has been loaded.
+        self.emit("  JSR Runtime_World_ReadTile".to_string());
         self.emit("  RTS".to_string());
 
         self.emit("Collision_False:".to_string());
@@ -2298,25 +2233,56 @@ impl CodeGenerator {
         self.emit("".to_string());
     }
 
+    fn generate_scroll_arguments(&mut self, args: &[Expression]) -> Result<(), String> {
+        // Coordinate and optional attribute pointer must survive array address evaluation.
+        let coord_type = self.generate_expression(&args[0])?;
+        self.emit("  PHA".to_string());
+        if coord_type == DataType::Word {
+            self.emit("  TXA".to_string());
+        } else {
+            self.emit("  LDA #0".to_string());
+        }
+        self.emit("  PHA".to_string());
+        if let Some(attributes) = args.get(2) {
+            self.generate_address_expression(attributes)?;
+            self.emit("  LDA $02".to_string());
+            self.emit("  PHA".to_string());
+            self.emit("  LDA $03".to_string());
+            self.emit("  PHA".to_string());
+        }
+        self.generate_address_expression(&args[1])?;
+        self.emit("  LDA $02".to_string());
+        self.emit("  STA $00".to_string());
+        self.emit("  LDA $03".to_string());
+        self.emit("  STA $01".to_string());
+        if args.len() == 3 {
+            self.emit("  PLA".to_string());
+            self.emit("  STA $09".to_string());
+            self.emit("  PLA".to_string());
+            self.emit("  STA $08".to_string());
+        } else {
+            self.emit("  LDA #0".to_string());
+            self.emit("  STA $08".to_string());
+            self.emit("  STA $09".to_string());
+        }
+        self.emit("  PLA".to_string());
+        self.emit("  STA $03".to_string());
+        self.emit("  PLA".to_string());
+        self.emit("  STA $02".to_string());
+        Ok(())
+    }
+
     fn generate_scroll_helpers(&mut self) {
         self.emit("; --- Scroll Helpers ---".to_string());
 
         self.emit("Runtime_Scroll_LoadColumn:".to_string());
 
+        // Arguments are restored before JSR: $00/$01 is data, $02/$03 is X.
+        // A busy upload therefore returns without disturbing the caller's stack.
         // Check Buffer
         self.output
             .push(format!("  LDA ${:04X}", VBLANK_BUFFER_START));
         self.emit("  BNE Scroll_LoadColumn_Done".to_string());
-
-        // Save Data Ptr (A/X) -> $00/$01
-        self.emit("  STA $00".to_string());
-        self.emit("  STX $01".to_string());
-
-        // Pop Virtual X -> $02/$03
-        self.emit("  PLA".to_string());
-        self.emit("  STA $03".to_string()); // High
-        self.emit("  PLA".to_string());
-        self.emit("  STA $02".to_string()); // Low
 
         // Calculate Target High ($05)
         // Base $20 or $24 based on X High Bit 0
@@ -2358,6 +2324,18 @@ impl CodeGenerator {
         self.emit("  CPY #30".to_string());
         self.emit("  BNE Scroll_CopyLoop".to_string());
 
+        // Eight authored attribute bytes cover the entire seam. They are queued
+        // separately so tile and palette uploads each fit inside a VBlank.
+        self.emit("  LDA $05".to_string());
+        self.emit("  ORA #3".to_string());
+        self.emit(format!("  STA ${:04X}", VBLANK_BUFFER_START + 36));
+        self.emit("  LDA $04".to_string());
+        self.emit("  LSR".to_string());
+        self.emit("  LSR".to_string());
+        self.emit("  ORA #$C0".to_string());
+        self.emit(format!("  STA ${:04X}", VBLANK_BUFFER_START + 37));
+        self.emit("  JSR Runtime_Scroll_QueueAttributes".to_string());
+
         // Set Flag
         self.emit("  LDA #1".to_string());
         self.output
@@ -2369,32 +2347,14 @@ impl CodeGenerator {
 
         self.emit("Runtime_Scroll_LoadRow:".to_string());
 
+        // Same register contract as LoadColumn, with Y in $02/$03.
         // Check Buffer
         self.output
             .push(format!("  LDA ${:04X}", VBLANK_BUFFER_START));
         self.emit("  BNE Scroll_LoadRow_Done".to_string());
 
-        // Save Data Ptr (A/X) -> $00/$01
-        self.emit("  STA $00".to_string());
-        self.emit("  STX $01".to_string());
-
-        // Pop Virtual Y -> $02/$03
-        self.emit("  PLA".to_string());
-        self.emit("  STA $03".to_string()); // High
-        self.emit("  PLA".to_string());
-        self.emit("  STA $02".to_string()); // Low
-
-        // Gap Skip: If Y Low >= 240, add 16 to skip attribute area
-        self.emit("  LDA $02".to_string());
-        self.emit("  CMP #$F0".to_string());
-        self.emit("  BCC Scroll_Row_Gap_Skip".to_string());
-        self.emit("  CLC".to_string());
-        self.emit("  ADC #$10".to_string());
-        self.emit("  STA $02".to_string());
-        self.emit("  LDA $03".to_string());
-        self.emit("  ADC #0".to_string());
-        self.emit("  STA $03".to_string());
-        self.emit("Scroll_Row_Gap_Skip:".to_string());
+        // World Y uses 240 visible pixels per screen, not a padded 256-pixel page.
+        self.emit("  JSR Runtime_Scroll_NormalizeY".to_string());
 
         // Calculate Target High ($05)
         // (Y Low / 64) -> High Offset
@@ -2407,8 +2367,8 @@ impl CodeGenerator {
         self.emit("  LSR".to_string());
         self.emit("  STA $06".to_string()); // Temp High Offset
 
-        // Base $20 or $28 based on Y High Bit 0
-        self.emit("  LDA $03".to_string());
+        // Base $20 or $28 based on the normalized vertical screen parity.
+        self.emit("  LDA $07".to_string());
         self.emit("  AND #1".to_string());
         self.emit("  BEQ Scroll_RowBase2000".to_string());
         self.emit("  LDA #$28".to_string());
@@ -2448,12 +2408,68 @@ impl CodeGenerator {
         self.emit("  CPY #32".to_string()); // 32 tiles for row
         self.emit("  BNE Scroll_RowCopyLoop".to_string());
 
+        self.emit("  LDA $05".to_string());
+        self.emit("  AND #$FC".to_string());
+        self.emit("  ORA #3".to_string());
+        self.emit(format!("  STA ${:04X}", VBLANK_BUFFER_START + 36));
+        self.emit("  LDA $02".to_string());
+        self.emit("  LSR".to_string());
+        self.emit("  LSR".to_string());
+        self.emit("  AND #$38".to_string());
+        self.emit("  ORA #$C0".to_string());
+        self.emit(format!("  STA ${:04X}", VBLANK_BUFFER_START + 37));
+        self.emit("  JSR Runtime_Scroll_QueueAttributes".to_string());
+
         // Set Flag
         self.emit("  LDA #1".to_string());
         self.output
             .push(format!("  STA ${:04X}", VBLANK_BUFFER_START));
 
         self.emit("Scroll_LoadRow_Done:".to_string());
+        self.emit("  RTS".to_string());
+
+        self.emit("Runtime_Scroll_QueueAttributes:".to_string());
+        self.emit("  LDA $08".to_string());
+        self.emit("  ORA $09".to_string());
+        self.emit("  BEQ Scroll_QueueAttributes_Done".to_string());
+        self.emit("  LDY #0".to_string());
+        self.emit("Scroll_QueueAttributes_Loop:".to_string());
+        self.emit("  LDA ($08),Y".to_string());
+        self.emit(format!("  STA ${:04X},Y", VBLANK_BUFFER_START + 38));
+        self.emit("  INY".to_string());
+        self.emit("  CPY #8".to_string());
+        self.emit("  BNE Scroll_QueueAttributes_Loop".to_string());
+        self.emit(format!("  LDA ${:04X}", VBLANK_BUFFER_START + 1));
+        self.emit("  ORA #$80".to_string());
+        self.emit(format!("  STA ${:04X}", VBLANK_BUFFER_START + 1));
+        self.emit("Scroll_QueueAttributes_Done:".to_string());
+        self.emit("  RTS".to_string());
+
+        // Reduce an unsigned WORD world coordinate into 0..239 and nametable parity.
+        // Repeated subtraction handles every crossing, including direction changes
+        // and coordinates beyond the first 256-byte page.
+        self.emit("Runtime_Scroll_NormalizeY:".to_string());
+        self.emit("  LDA #0".to_string());
+        self.emit("  STA $07".to_string());
+        self.emit("Scroll_NormalizeY_Loop:".to_string());
+        self.emit("  LDA $03".to_string());
+        self.emit("  BNE Scroll_NormalizeY_Subtract".to_string());
+        self.emit("  LDA $02".to_string());
+        self.emit("  CMP #$F0".to_string());
+        self.emit("  BCC Scroll_Row_Gap_Skip".to_string());
+        self.emit("Scroll_NormalizeY_Subtract:".to_string());
+        self.emit("  LDA $02".to_string());
+        self.emit("  SEC".to_string());
+        self.emit("  SBC #$F0".to_string());
+        self.emit("  STA $02".to_string());
+        self.emit("  LDA $03".to_string());
+        self.emit("  SBC #0".to_string());
+        self.emit("  STA $03".to_string());
+        self.emit("  LDA $07".to_string());
+        self.emit("  EOR #1".to_string());
+        self.emit("  STA $07".to_string());
+        self.emit("  JMP Scroll_NormalizeY_Loop".to_string());
+        self.emit("Scroll_Row_Gap_Skip:".to_string());
         self.emit("  RTS".to_string());
         self.emit("".to_string());
     }
@@ -2492,6 +2508,16 @@ impl CodeGenerator {
         self.emit("  JMP Pool_Spawn_Loop".to_string());
 
         self.emit("Pool_Found:".to_string());
+        // Reused entities must start from the same zeroed state as fresh slots.
+        // Otherwise stale position/velocity fields survive despawn and respawn.
+        self.emit("  LDY #0".to_string());
+        self.emit("  LDA #0".to_string());
+        self.emit("Pool_InitializeSlot:".to_string());
+        self.emit("  STA ($02),Y".to_string());
+        self.emit("  INY".to_string());
+        self.emit("  CPY $06".to_string());
+        self.emit("  BNE Pool_InitializeSlot".to_string());
+        self.emit("  LDY #0".to_string());
         self.emit("  LDA #1".to_string());
         self.emit("  STA ($02), Y".to_string());
         self.emit("  LDA $08".to_string());
@@ -2626,7 +2652,11 @@ impl CodeGenerator {
         self.emit("  CMP #10".to_string());
         self.emit("  BCS Val_Done".to_string()); // Not digit
         self.emit("  PHA".to_string()); // Save digit
-                                        // Result * 10
+                                        // The math helper changes Y; keep the parser cursor on
+                                        // the stack so multi-digit conversions continue through the string.
+        self.emit("  TYA".to_string());
+        self.emit("  PHA".to_string());
+        // Result * 10
         self.emit("  LDA $0A".to_string());
         self.emit("  LDX $0B".to_string());
         self.emit("  STA $00".to_string()); // Mul16 expects args in A/X and $00/$01... wait, Mul16 takes A/X * $00/$01
@@ -2636,6 +2666,8 @@ impl CodeGenerator {
         self.emit("  JSR Math_Mul16".to_string());
         self.emit("  STA $0A".to_string());
         self.emit("  STX $0B".to_string());
+        self.emit("  PLA".to_string());
+        self.emit("  TAY".to_string());
         // Add digit
         self.emit("  PLA".to_string());
         self.emit("  CLC".to_string());
@@ -2688,11 +2720,15 @@ impl CodeGenerator {
         self.emit("Runtime_Str:".to_string());
         self.emit("  STA $0A".to_string()); // Value Low
         self.emit("  STX $0B".to_string()); // Value High
+        self.emit("  STY $0F".to_string()); // Caller marks a signed expression.
         self.emit("  JSR Runtime_GetHeapSlot".to_string());
         self.emit("  STA $02".to_string()); // Ptr Low
         self.emit("  STX $03".to_string()); // Ptr High
         self.emit("  LDY #0".to_string());
-        // Check Sign (assume 16-bit signed if High > $7F)
+        // WORD is unsigned even above 32767; only INT/negated expressions
+        // should render a minus sign. Do not infer signedness from value bits.
+        self.emit("  LDA $0F".to_string());
+        self.emit("  BEQ Str_Pos".to_string());
         self.emit("  LDA $0B".to_string());
         self.emit("  BPL Str_Pos".to_string());
         self.emit("  LDA #$2D".to_string()); // '-'
@@ -2713,13 +2749,18 @@ impl CodeGenerator {
         self.emit("  LDA #0".to_string());
         self.emit("  STA $0C".to_string()); // Digit Count
         self.emit("Str_Loop:".to_string());
+        // Division changes Y. Preserve the output cursor
+        // beneath this iteration's digit so zero and signed values also return
+        // an intact heap pointer and correctly ordered characters.
+        self.emit("  TYA".to_string());
+        self.emit("  PHA".to_string());
         // Divide $0A/$0B by 10
-        self.emit("  LDA $0A".to_string());
-        self.emit("  LDX $0B".to_string());
-        self.emit("  STA $00".to_string()); // Div args
-        self.emit("  STX $01".to_string());
         self.emit("  LDA #10".to_string());
-        self.emit("  LDX #0".to_string());
+        self.emit("  STA $00".to_string()); // Divisor
+        self.emit("  LDA #0".to_string());
+        self.emit("  STA $01".to_string());
+        self.emit("  LDA $0A".to_string()); // Dividend
+        self.emit("  LDX $0B".to_string());
         self.emit("  JSR Math_Div16".to_string());
         // Remainder in $08/$09 (Wait, Div16 puts remainder in $08/$09? No, Div16 returns quotient in A/X. Remainder?)
         // Let's check Math_Div16:
@@ -2736,6 +2777,8 @@ impl CodeGenerator {
         // So $08/$09 IS remainder.
         self.emit("  STA $0A".to_string()); // Update Value
         self.emit("  STX $0B".to_string());
+        self.emit("  PLA".to_string());
+        self.emit("  TAY".to_string());
         self.emit("  LDA $08".to_string()); // Remainder Low (High is 0 for 10)
         self.emit("  PHA".to_string());
         self.emit("  INC $0C".to_string());
@@ -3131,6 +3174,9 @@ impl CodeGenerator {
                     }
                 }
             } else if let TopLevelKind::Metasprite(name, tiles) = &decl.kind {
+                if tiles.len() > 255 {
+                    return Err(format!("Metasprite '{name}' supports at most 255 tiles"));
+                }
                 self.emit(format!("{}:", name));
                 self.emit(format!("  db ${:02X}", tiles.len() as u8));
                 for tile in tiles {
@@ -3144,6 +3190,15 @@ impl CodeGenerator {
                     ));
                 }
             } else if let TopLevelKind::Animation(name, frames, loops) = &decl.kind {
+                // Retain validation for direct codegen callers that bypass semantic analysis.
+                if frames.is_empty()
+                    || frames.len() > 255
+                    || frames.iter().any(|frame| frame.duration == 0)
+                {
+                    return Err(format!(
+                        "Animation '{name}' requires 1..255 frames with durations 1..255"
+                    ));
+                }
                 self.emit(format!("{}:", name));
                 self.output
                     .push(format!("  db ${:02X}", frames.len() as u8));
@@ -3181,7 +3236,7 @@ impl CodeGenerator {
                     } else if i > 0 {
                         line.push_str(", ");
                     }
-                    line.push_str(&format!("${:02X}", val));
+                    line.push_str(&format!("${:02X}", *val as u8));
                 }
                 self.emit(line);
             }
@@ -3377,7 +3432,12 @@ impl CodeGenerator {
         self.emit("  LDY #0".to_string());
         self.emit("  LDA ($02), Y".to_string());
         self.emit("  STA $04".to_string()); // Count
-        self.emit("  INY".to_string()); // Y=1
+                                            // Advance the pointer past the count; each tile is addressed at offsets 0..3.
+                                            // A 64-tile metasprite is 257 bytes, so a single 8-bit Y cursor would wrap its final attribute.
+        self.emit("  INC $02".to_string());
+        self.emit("  BNE SpriteDraw_DataStart".to_string());
+        self.emit("  INC $03".to_string());
+        self.emit("SpriteDraw_DataStart:".to_string());
 
         self.emit("  LDX $19".to_string()); // Load current OAM ptr
 
@@ -3390,6 +3450,7 @@ impl CodeGenerator {
         self.emit("  LDA $1B".to_string());
         self.emit("  CMP #64".to_string());
         self.emit("  BCS SpriteDraw_Full".to_string());
+        self.emit("  LDY #0".to_string());
 
         // Read Rel X
         self.emit("  LDA ($02), Y".to_string());
@@ -3438,15 +3499,18 @@ impl CodeGenerator {
 
         self.emit("  INC $1B".to_string()); // Increment Global Sprite Count
 
+        self.emit("  LDA $02".to_string());
+        self.emit("  CLC".to_string());
+        self.emit("  ADC #4".to_string());
+        self.emit("  STA $02".to_string());
+        self.emit("  BCC SpriteDraw_Next".to_string());
+        self.emit("  INC $03".to_string());
+        self.emit("SpriteDraw_Next:".to_string());
+
         self.emit("  JMP SpriteDraw_Loop".to_string());
 
         self.emit("SpriteDraw_Full:".to_string());
-        // Skip input data (4 bytes per tile) to stay in sync
-        self.emit("  TYA".to_string());
-        self.emit("  CLC".to_string());
-        self.emit("  ADC #4".to_string());
-        self.emit("  TAY".to_string());
-        self.emit("  JMP SpriteDraw_Loop".to_string());
+        // Once OAM is full there is no remaining output to produce.
 
         self.emit("SpriteDraw_Done:".to_string());
         self.emit("  RTS".to_string());
@@ -3461,6 +3525,22 @@ impl CodeGenerator {
         // Addr = $2000 + Y*32 + X
         // Y*32 = (Y << 5)
         self.emit("Runtime_Text_Print:".to_string());
+        // Clip to one visible tile row so strings cannot enter attribute memory.
+        // Printing remains a direct PPU operation; callers must wait for VBlank or disable rendering.
+        self.emit("  LDA $14".to_string());
+        self.emit("  CMP #32".to_string());
+        self.emit("  BCS Text_Return".to_string());
+        self.emit("  LDA $15".to_string());
+        self.emit("  CMP #30".to_string());
+        self.emit("  BCS Text_Return".to_string());
+        self.emit("  LDA #32".to_string());
+        self.emit("  SEC".to_string());
+        self.emit("  SBC $14".to_string());
+        self.emit("  STA $04".to_string());
+        // A caller may have enabled vertical PPUDATA increment; text always advances horizontally.
+        self.emit("  LDA $F8".to_string());
+        self.emit("  AND #$FB".to_string());
+        self.emit("  STA $2000".to_string());
         self.emit("  LDA $2002".to_string()); // Reset latch
 
         // Calc Addr
@@ -3500,9 +3580,14 @@ impl CodeGenerator {
         self.emit("  CLC".to_string());
         self.emit("  ADC $18".to_string()); // Add Offset
         self.emit("  STA $2007".to_string());
+        self.emit("  DEC $04".to_string());
+        self.emit("  BEQ Text_Done".to_string());
         self.emit("  INY".to_string());
         self.emit("  BNE Text_Loop".to_string());
         self.emit("Text_Done:".to_string());
+        self.emit("  LDA $F8".to_string());
+        self.emit("  STA $2000".to_string());
+        self.emit("Text_Return:".to_string());
         self.emit("  RTS".to_string());
         self.emit("".to_string());
     }
@@ -3812,13 +3897,19 @@ impl CodeGenerator {
                     }
                 } else {
                     // Dynamic L-Value (Array or Dynamic Member Access)
+                    let target_type = self.resolve_type(target).ok_or("Unknown target type")?;
+                    let stores_word = matches!(target_type, DataType::Word | DataType::String);
                     // 1. Calculate Value
                     let rtype = self.generate_expression(expr)?;
-                    // Save Value to Stack
-                    if rtype == DataType::Byte || rtype == DataType::Bool || rtype == DataType::Int
-                    {
+                    // The destination owns storage width. A WORD expression
+                    // assigned to BYTE must not overwrite the next element;
+                    // a BYTE assigned to WORD must initialize its high byte.
+                    if !stores_word {
                         self.emit("  PHA".to_string());
                     } else {
+                        if matches!(rtype, DataType::Byte | DataType::Bool) {
+                            self.emit("  LDX #0".to_string());
+                        }
                         self.emit("  PHA".to_string()); // Low
                         self.emit("  TXA".to_string());
                         self.emit("  PHA".to_string()); // High
@@ -3828,8 +3919,7 @@ impl CodeGenerator {
                     self.generate_address_expression(target)?;
 
                     // 3. Restore Value and Store
-                    if rtype == DataType::Byte || rtype == DataType::Bool || rtype == DataType::Int
-                    {
+                    if !stores_word {
                         self.emit("  PLA".to_string());
                         self.emit("  LDY #0".to_string());
                         self.emit("  STA ($02),Y".to_string());
@@ -3848,6 +3938,14 @@ impl CodeGenerator {
             }
             StatementKind::Call(target, args) => {
                 if let Expression::MemberAccess(base, member) = target {
+                    if matches!(&**base, Expression::Identifier(name) if name.eq_ignore_ascii_case("World"))
+                    {
+                        self.generate_expression(&Expression::Call(
+                            Box::new(target.clone()),
+                            args.clone(),
+                        ))?;
+                        return Ok(());
+                    }
                     if let Expression::Identifier(base_name) = &**base {
                         if base_name.eq_ignore_ascii_case("Controller")
                             && member.eq_ignore_ascii_case("Read")
@@ -3937,13 +4035,25 @@ impl CodeGenerator {
                             let dtype = self
                                 .resolve_type(&args[0])
                                 .ok_or("Cannot resolve array type in Pool.Despawn")?;
-                            let stride = if let DataType::Array(inner, _) = dtype {
-                                self.get_type_size(&inner)?
+                            let (stride, count) = if let DataType::Array(inner, count) = dtype {
+                                (self.get_type_size(&inner)?, count)
                             } else {
-                                1
+                                return Err("Pool.Despawn expects an array".into());
                             };
+                            if !(1..=255).contains(&stride) {
+                                return Err("Pool entity size must be 1..255 bytes".into());
+                            }
                             self.emit(format!("  LDA #{}", stride));
                             self.emit("  STA $06".to_string());
+
+                            // Invalid and negative indices are no-ops; compare the
+                            // full unsigned index before writing any neighboring RAM.
+                            let done = self.new_label();
+                            self.emit("  LDA $04".to_string());
+                            self.emit(format!("  CMP #${:02X}", count & 0xff));
+                            self.emit("  LDA $05".to_string());
+                            self.emit(format!("  SBC #${:02X}", (count >> 8) & 0xff));
+                            self.emit(format!("  BCS {done}"));
 
                             // 7. Push Index to Stack (Runtime expects it there)
                             self.emit("  LDA $04".to_string()); // Low
@@ -3952,6 +4062,7 @@ impl CodeGenerator {
                             self.emit("  PHA".to_string());
 
                             self.emit("  JSR Runtime_Pool_Despawn".to_string());
+                            self.emit(format!("{done}:"));
                             return Ok(());
                         } else if base_name.eq_ignore_ascii_case("Animation") {
                             if member.eq_ignore_ascii_case("Play") {
@@ -4019,54 +4130,46 @@ impl CodeGenerator {
                             }
                         } else if base_name.eq_ignore_ascii_case("Scroll") {
                             if member.eq_ignore_ascii_case("Set") {
-                                // Arg 0: X -> $E0
-                                self.generate_expression(&args[0])?;
+                                // Store fine X and preserve horizontal screen parity while Y evaluates.
+                                let x_type = self.generate_expression(&args[0])?;
                                 self.emit("  STA $E0".to_string());
-                                // Arg 1: Y -> $E1
-                                self.generate_expression(&args[1])?;
+                                if x_type == DataType::Word {
+                                    self.emit("  TXA".to_string());
+                                    self.emit("  AND #1".to_string());
+                                } else {
+                                    self.emit("  LDA #0".to_string());
+                                }
+                                self.emit("  PHA".to_string());
+                                let y_type = self.generate_expression(&args[1])?;
+                                self.emit("  STA $02".to_string());
+                                if y_type == DataType::Word {
+                                    self.emit("  STX $03".to_string());
+                                } else {
+                                    self.emit("  LDA #0".to_string());
+                                    self.emit("  STA $03".to_string());
+                                }
+                                self.emit("  JSR Runtime_Scroll_NormalizeY".to_string());
+                                self.emit("  LDA $02".to_string());
                                 self.emit("  STA $E1".to_string());
+                                self.emit("  LDA $07".to_string());
+                                self.emit("  ASL".to_string());
+                                self.emit("  STA $07".to_string());
+                                self.emit("  PLA".to_string());
+                                self.emit("  ORA $07".to_string());
+                                self.emit("  STA $07".to_string());
+                                self.emit("  LDA $F8".to_string());
+                                self.emit("  AND #$FC".to_string());
+                                self.emit("  ORA $07".to_string());
+                                self.emit("  STA $F8".to_string());
+                                self.emit("  STA $2000".to_string());
                                 return Ok(());
                             } else if member.eq_ignore_ascii_case("LoadColumn") {
-                                // Arg 0: X (Value)
-                                let x_type = self.generate_expression(&args[0])?;
-                                // Push to Stack (Low, High)
-                                if x_type == DataType::Byte {
-                                    self.emit("  PHA".to_string()); // Low
-                                    self.emit("  LDA #0".to_string());
-                                    self.emit("  PHA".to_string()); // High
-                                } else {
-                                    self.emit("  PHA".to_string()); // Low
-                                    self.emit("  TXA".to_string());
-                                    self.emit("  PHA".to_string()); // High
-                                }
-
-                                // Arg 1: Array (Address)
-                                self.generate_address_expression(&args[1])?; // $02/$03
-                                self.emit("  LDA $02".to_string());
-                                self.emit("  LDX $03".to_string());
-
+                                self.generate_scroll_arguments(args)?;
                                 self.output
                                     .push("  JSR Runtime_Scroll_LoadColumn".to_string());
                                 return Ok(());
                             } else if member.eq_ignore_ascii_case("LoadRow") {
-                                // Arg 0: Y (Value)
-                                let y_type = self.generate_expression(&args[0])?;
-                                // Push to Stack (Low, High)
-                                if y_type == DataType::Byte {
-                                    self.emit("  PHA".to_string()); // Low
-                                    self.emit("  LDA #0".to_string());
-                                    self.emit("  PHA".to_string()); // High
-                                } else {
-                                    self.emit("  PHA".to_string()); // Low
-                                    self.emit("  TXA".to_string());
-                                    self.emit("  PHA".to_string()); // High
-                                }
-
-                                // Arg 1: Array (Address)
-                                self.generate_address_expression(&args[1])?; // $02/$03
-                                self.emit("  LDA $02".to_string());
-                                self.emit("  LDX $03".to_string());
-
+                                self.generate_scroll_arguments(args)?;
                                 self.emit("  JSR Runtime_Scroll_LoadRow".to_string());
                                 return Ok(());
                             }
@@ -4078,6 +4181,7 @@ impl CodeGenerator {
                                 return Ok(());
                             } else if member.eq_ignore_ascii_case("Mask") {
                                 self.generate_expression(&args[0])?;
+                                self.emit("  STA $F9".to_string()); // Mask shadow for full map transitions.
                                 self.emit("  STA $2001".to_string());
                                 return Ok(());
                             } else if member.eq_ignore_ascii_case("SetScroll") {
@@ -4162,10 +4266,19 @@ impl CodeGenerator {
                                 self.emit(format!("{}:", copy_end));
                                 return Ok(());
                             }
-                        } else if base_name.eq_ignore_ascii_case("Sound")
-                            && member.eq_ignore_ascii_case("Stop")
-                        {
-                            self.emit("  JSR Sound_Init".to_string());
+                        } else if base_name.eq_ignore_ascii_case("Sound") {
+                            if member.eq_ignore_ascii_case("Stop") {
+                                self.emit("  JSR Sound_Init".to_string());
+                            } else if member.eq_ignore_ascii_case("Play") {
+                                let id_type = self.generate_expression(&args[0])?;
+                                let done = self.new_label();
+                                if id_type == DataType::Word {
+                                    self.emit("  CPX #0".to_string());
+                                    self.emit(format!("  BNE {done}"));
+                                }
+                                self.emit("  JSR Sound_Play".to_string());
+                                self.emit(format!("{done}:"));
+                            }
                             return Ok(());
                         }
                     }
@@ -4340,8 +4453,14 @@ impl CodeGenerator {
                 }
             }
             StatementKind::PlaySfx(id_expr) => {
-                self.generate_expression(id_expr)?;
-                self.emit("  JSR Sound_Play".to_string());
+                let id_type = self.generate_expression(id_expr)?;
+                let done = self.new_label();
+                if id_type == DataType::Word {
+                    self.emit("  CPX #0".to_string());
+                    self.emit(format!("  BNE {done}"));
+                }
+                self.emit("  JSR SFX_Play".to_string());
+                self.emit(format!("{done}:"));
             }
             StatementKind::Read(vars) => {
                 for name in vars {
@@ -4400,9 +4519,19 @@ impl CodeGenerator {
             }
             StatementKind::WaitVBlank => {
                 let lbl = self.new_label();
+                let hardware = self.new_label();
+                let done = self.new_label();
+                self.emit("  LDA $F8".to_string());
+                self.emit(format!("  BPL {hardware}"));
+                self.emit("  LDA $FD".to_string());
                 self.emit(format!("{}:", lbl));
+                self.emit("  CMP $FD".to_string());
+                self.emit(format!("  BEQ {lbl}"));
+                self.emit(format!("  JMP {done}"));
+                self.emit(format!("{hardware}:"));
                 self.emit("  BIT $2002".to_string());
-                self.emit(format!("  BPL {}", lbl));
+                self.emit(format!("  BPL {hardware}"));
+                self.emit(format!("{done}:"));
             }
             StatementKind::Randomize(expr) => {
                 self.generate_expression(expr)?;
@@ -4718,6 +4847,14 @@ impl CodeGenerator {
                 if let Some(sym) = self.symbol_table.resolve(name) {
                     if let Some(addr) = sym.address {
                         match sym.data_type {
+                            DataType::Array(_, _) | DataType::Struct(_) => {
+                                // Aggregate arguments denote their storage; loading the first
+                                // byte as a pointer made upload/copy routines read unrelated RAM.
+                                self.emit(format!("  LDA #${:02X}", addr & 0xff));
+                                self.emit("  STA $02".to_string());
+                                self.emit(format!("  LDA #${:02X}", addr >> 8));
+                                self.emit("  STA $03".to_string());
+                            }
                             DataType::Word | DataType::String => {
                                 self.emit(format!("  LDA ${:04X}", addr));
                                 self.emit("  STA $02".to_string());
@@ -4778,6 +4915,44 @@ impl CodeGenerator {
             Expression::Call(callee, args) => {
                 // Controller Logic
                 if let Expression::MemberAccess(base, member) = &**callee {
+                    if matches!(&**base, Expression::Identifier(name) if name.eq_ignore_ascii_case("World"))
+                    {
+                        if args.len() != 2
+                            || (!member.eq_ignore_ascii_case("Load")
+                                && !member.eq_ignore_ascii_case("Tile"))
+                        {
+                            return Err(format!("World.{member} requires 2 numeric arguments"));
+                        }
+                        // Evaluating y may reuse all expression temporaries; stack x.
+                        let x_type = self.generate_expression(&args[0])?;
+                        self.emit("  PHA".into());
+                        if matches!(x_type, DataType::Word | DataType::Int) {
+                            self.emit("  TXA".into());
+                        } else {
+                            self.emit("  LDA #0".into());
+                        }
+                        self.emit("  PHA".into());
+                        let y_type = self.generate_expression(&args[1])?;
+                        self.emit("  STA $02".into());
+                        if matches!(y_type, DataType::Word | DataType::Int) {
+                            self.emit("  STX $03".into());
+                        } else {
+                            self.emit("  LDA #0".into());
+                            self.emit("  STA $03".into());
+                        }
+                        self.emit("  PLA".into());
+                        self.emit("  STA $01".into());
+                        self.emit("  PLA".into());
+                        self.emit("  STA $00".into());
+                        let load = member.eq_ignore_ascii_case("Load");
+                        self.emit(format!(
+                            "  JSR Runtime_World_{}",
+                            if load { "Load" } else { "Tile" }
+                        ));
+                        return Ok(if load { DataType::Bool } else { DataType::Byte });
+                    }
+                }
+                if let Expression::MemberAccess(base, member) = &**callee {
                     if let Expression::Identifier(base_name) = &**base {
                         if base_name.eq_ignore_ascii_case("Pool")
                             && member.eq_ignore_ascii_case("Spawn")
@@ -4790,8 +4965,11 @@ impl CodeGenerator {
                             let (count, stride) = if let DataType::Array(inner, size) = dtype {
                                 (size, self.get_type_size(&inner)?)
                             } else {
-                                (0, 0)
+                                return Err("Pool.Spawn expects an array".into());
                             };
+                            if !(1..=255).contains(&stride) {
+                                return Err("Pool entity size must be 1..255 bytes".into());
+                            }
 
                             self.output
                                 .push(format!("  LDA #${:02X}", (count & 0xFF) as u8));
@@ -5096,6 +5274,9 @@ impl CodeGenerator {
                                 let t_max = self.generate_expression(&args[2])?;
                                 let is_16_max = t_max == DataType::Word || t_max == DataType::Int;
                                 let is_16 = is_16_val || is_16_min || is_16_max;
+                                let is_signed = t_val == DataType::Int
+                                    || t_min == DataType::Int
+                                    || t_max == DataType::Int;
 
                                 if is_16 {
                                     // Pop Max -> $04/$05
@@ -5139,7 +5320,17 @@ impl CodeGenerator {
                                     self.emit("  LDA $03".to_string());
                                     self.emit("  SBC $05".to_string());
                                     let no_max_clamp = self.new_label();
-                                    self.emit(format!("  BCC {}", no_max_clamp));
+                                    if is_signed {
+                                        // Signed order uses N xor V; carry alone would
+                                        // treat a sign-extended negative INT as a large WORD.
+                                        let corrected = self.new_label();
+                                        self.emit(format!("  BVC {}", corrected));
+                                        self.emit("  EOR #$80".to_string());
+                                        self.emit(format!("{}:", corrected));
+                                        self.emit(format!("  BMI {}", no_max_clamp));
+                                    } else {
+                                        self.emit(format!("  BCC {}", no_max_clamp));
+                                    }
                                     self.emit("  LDA $04".to_string());
                                     self.emit("  STA $02".to_string());
                                     self.emit("  LDA $05".to_string());
@@ -5153,7 +5344,15 @@ impl CodeGenerator {
                                     self.emit("  LDA $03".to_string());
                                     self.emit("  SBC $07".to_string());
                                     let no_min_clamp = self.new_label();
-                                    self.emit(format!("  BCS {}", no_min_clamp));
+                                    if is_signed {
+                                        let corrected = self.new_label();
+                                        self.emit(format!("  BVC {}", corrected));
+                                        self.emit("  EOR #$80".to_string());
+                                        self.emit(format!("{}:", corrected));
+                                        self.emit(format!("  BPL {}", no_min_clamp));
+                                    } else {
+                                        self.emit(format!("  BCS {}", no_min_clamp));
+                                    }
                                     self.emit("  LDA $06".to_string());
                                     self.emit("  STA $02".to_string());
                                     self.emit("  LDA $07".to_string());
@@ -5174,7 +5373,7 @@ impl CodeGenerator {
                                     self.emit("  CMP $01".to_string());
                                     let no_max_clamp = self.new_label();
                                     self.emit(format!("  BCC {}", no_max_clamp));
-                                    self.emit("  BEQ {}".to_string() + &no_max_clamp);
+                                    self.emit(format!("  BEQ {}", no_max_clamp));
                                     self.emit("  LDA $01".to_string());
                                     self.emit(format!("{}:", no_max_clamp));
 
@@ -5570,7 +5769,8 @@ impl CodeGenerator {
                         self.emit("  JSR Runtime_Chr".to_string());
                         return Ok(DataType::String);
                     } else if name.eq_ignore_ascii_case("STR") {
-                        self.generate_expression(&args[0])?;
+                        let dtype = self.generate_expression(&args[0])?;
+                        self.emit(format!("  LDY #{}", u8::from(dtype == DataType::Int)));
                         self.emit("  JSR Runtime_Str".to_string());
                         return Ok(DataType::String);
                     } else if name.eq_ignore_ascii_case("LEFT") {
@@ -5769,9 +5969,18 @@ impl CodeGenerator {
                         .ok_or("Cannot resolve array element type")?;
                     self.emit("  LDY #0".to_string());
                     match rtype {
-                        DataType::Byte | DataType::Bool | DataType::Int => {
+                        DataType::Byte | DataType::Bool | DataType::Enum(_) => {
                             self.emit("  LDA ($02),Y".to_string());
                             self.emit("  LDX #0".to_string());
+                        }
+                        DataType::Int => {
+                            self.emit("  LDA ($02),Y".to_string());
+                            self.emit("  LDX #0".to_string());
+                            self.emit("  CMP #$80".to_string());
+                            let positive = self.new_label();
+                            self.emit(format!("  BCC {}", positive));
+                            self.emit("  LDX #$FF".to_string());
+                            self.emit(format!("{}:", positive));
                         }
                         DataType::Word | DataType::String => {
                             self.emit("  LDA ($02),Y".to_string());

@@ -7,6 +7,8 @@ This document outlines the step-by-step path to achieving that vision, broken do
 
 **Implementation handoff:** [Detailed instructions through phase 40](docs/DEVELOPER_HANDOFF_THROUGH_PHASE_40.md) expand this roadmap into ordered repairs, per-phase tests, and completion gates. See the [baseline audit](docs/BASELINE_AUDIT.md) for verified findings. This planning addition does not mark any further phase complete or change the roadmap's scope.
 
+**October 9 implementation:** production runtime and frontend repairs, battery partitions, exact debugger cycles, helper reachability, and supplemental CPU execution coverage are described in [runtime contracts](docs/RUNTIME_CONTRACTS.md). Historical phase headings remain subject to the [acceptance worksheet](docs/PHASE_40_ACCEPTANCE_CHECKLIST.md), including actual host/browser/audio/controller evidence.
+
 ---
 Before starting, Read AGENTS.MD and adhrere to it in a strict manner.
 

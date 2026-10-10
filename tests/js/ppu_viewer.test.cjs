@@ -2,6 +2,42 @@ const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const {domFixture} = require('./dom_fixture.cjs');
+
+test('PPU viewer stays hidden, validates buffer bounds and uses memory after growth', () => {
+    const f = domFixture();
+    f.load('static/js/ppu_viewer.js', ['PpuViewer']);
+    const viewer = new f.context.PpuViewer();
+    assert.equal(viewer.container.style.display, 'none');
+    assert.equal(viewer.isVisible, false);
+    viewer.show(); viewer.hide();
+    assert.equal(f.frames.size, 0);
+    viewer.emulator = {update_pattern_tables() {}, get_pattern_tables: () => 0, get_pattern_tables_len: () => 256 * 128 * 4};
+    viewer.drawPatternTables(); // Missing memory must be safe.
+    f.window.wasmMemory = {buffer: new ArrayBuffer(256 * 128 * 4)};
+    viewer.drawPatternTables();
+    f.window.wasmMemory.buffer = new ArrayBuffer(256 * 128 * 4 + 16);
+    new Uint8Array(f.window.wasmMemory.buffer)[0] = 77;
+    viewer.drawPatternTables();
+    assert.equal(viewer.patternCanvas.lastImage.data[0], 77);
+    viewer.emulator.get_pattern_tables = () => 17;
+    assert.throws(() => viewer.drawPatternTables(), /Invalid pattern buffer bounds/);
+    viewer.emulator.get_pattern_tables_len = () => 4;
+    assert.throws(() => viewer.drawPatternTables(), /Invalid pattern buffer length/);
+});
+
+test('nametable viewport wraps horizontal and vertical seams without a second loop', () => {
+    const f = domFixture();
+    f.load('static/js/ppu_viewer.js', ['PpuViewer']);
+    const viewer = new f.context.PpuViewer();
+    f.window.wasmMemory = {buffer: new ArrayBuffer(512 * 480 * 4)};
+    viewer.emulator = {update_nametables() {}, get_nametables: () => 0, get_nametables_len: () => 512 * 480 * 4, viewport_position: () => [400, 300]};
+    const rectangles = [];
+    viewer.nametableCanvas.context.strokeRect = (...rect) => rectangles.push(rect);
+    viewer.currentTab = 'Nametables'; viewer.show();
+    assert.deepEqual(rectangles, [[400, 300, 256, 240], [400, -180, 256, 240], [-112, 300, 256, 240], [-112, -180, 256, 240]]);
+    assert.equal(f.frames.size, 0);
+});
 
 test('palette viewer consumes all 32 colors in two rows', () => {
     const bytes = Uint8Array.from({length: 128}, (_, i) => i);
@@ -43,6 +79,7 @@ test('OAM entry formatting pads tile hex and attr binary correctly', () => {
     const formatted = context.Viewer.formatOamEntries(memory);
     assert.match(formatted, /Sprite 0: X=20 Y=10 Tile=\$0A Attr=00000011/);
     assert.match(formatted, /color:#555/); // Offscreen sprite highlighted dim
+    assert.match(formatted, /Top=11 Palette=3 Priority=front Flip=--/);
 });
 
 test('OAM entry formatting handles empty or null input gracefully', () => {

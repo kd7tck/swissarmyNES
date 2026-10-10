@@ -121,5 +121,7 @@ fn test_codegen_for_statement() {
 
     // Loop logic verification
     assert!(code_str.contains("STA $05C0")); // Init i
-    assert!(code_str.contains("CMP $00")); // Compare with Limit (temp)
+                                             // Integer bounds promote the comparison to WORD; unused runtime CMP
+                                             // instructions are no longer present after helper reachability pruning.
+    assert!(code_str.contains("SBC $00")); // Compare low byte with the limit.
 }

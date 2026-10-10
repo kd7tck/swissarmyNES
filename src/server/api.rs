@@ -176,13 +176,9 @@ pub fn compile_source(
             });
         }
 
-        if let Some(world) = &assets.world {
-            program.declarations.push(TopLevel {
-                kind: TopLevelKind::World(world.width, world.height, world.data.clone()),
-                source_file: "main.swiss".to_string(),
-                line: 0,
-            });
-        }
+        // World cells and complete map images are placed in switchable banks by
+        // the world packer. Duplicating their metadata here would consume the
+        // limited fixed bank and needlessly cap otherwise valid worlds.
     }
 
     // 3. Analysis
@@ -196,12 +192,13 @@ pub fn compile_source(
 
     // Create CodeGenerator
     let mut codegen = CodeGenerator::new(symbol_table);
-    let (asm_lines, _) = codegen
+    let (mut asm_lines, _) = codegen
         .generate_banks(&program)
         .map_err(|e| format!("Codegen Error: {:?}", e))?;
     // KEEP
     // 5. Assembler
     let assembler = Assembler::new();
+    crate::compiler::world::append_assets(&mut asm_lines, resolved_assets.as_ref())?;
 
     let chr_data = resolved_assets.as_ref().map(|a| a.chr_bank.as_slice());
 

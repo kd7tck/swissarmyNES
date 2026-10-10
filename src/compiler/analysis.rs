@@ -270,7 +270,12 @@ impl SemanticAnalyzer {
                         self.errors.push(e);
                     }
                 }
-                TopLevelKind::Metasprite(name, _) => {
+                TopLevelKind::Metasprite(name, tiles) => {
+                    // The count occupies one byte; silently truncating it loses authored tiles.
+                    if tiles.len() > 255 {
+                        self.errors
+                            .push(format!("Metasprite '{}' supports at most 255 tiles", name));
+                    }
                     if let Err(e) = self.symbol_table.define_metasprite(name.clone()) {
                         self.errors.push(e);
                     }
@@ -306,7 +311,19 @@ impl SemanticAnalyzer {
                     self.symbol_table.exit_scope();
                 }
                 TopLevelKind::Animation(name, frames, _) => {
+                    // Count and duration are encoded as bytes. A zero duration would
+                    // underflow the runtime timer and hold a frame for 256 updates.
+                    if frames.is_empty() || frames.len() > 255 {
+                        self.errors
+                            .push(format!("Animation '{}' requires 1..255 frames", name));
+                    }
                     for frame in frames {
+                        if frame.duration == 0 {
+                            self.errors.push(format!(
+                                "Animation '{}' frame duration must be 1..255",
+                                name
+                            ));
+                        }
                         if let Some(sym) = self.symbol_table.resolve(&frame.metasprite) {
                             if sym.kind != SymbolKind::Metasprite {
                                 self.errors.push(format!(
@@ -409,6 +426,16 @@ impl SemanticAnalyzer {
                 self.analyze_expression(expr);
             }
             StatementKind::Call(target, args) => {
+                if let Expression::MemberAccess(base, _) = target {
+                    if matches!(&**base, Expression::Identifier(name) if name.eq_ignore_ascii_case("World"))
+                    {
+                        self.analyze_expression(&Expression::Call(
+                            Box::new(target.clone()),
+                            args.clone(),
+                        ));
+                        return;
+                    }
+                }
                 // Check for Member Access Call (Controller, Text)
                 if let Expression::MemberAccess(base, member) = target {
                     if let Expression::Identifier(base_name) = &**base {
@@ -658,41 +685,51 @@ impl SemanticAnalyzer {
                                 }
                                 return;
                             } else if member.eq_ignore_ascii_case("LoadColumn") {
-                                if args.len() != 2 {
+                                if !(2..=3).contains(&args.len()) {
                                     self.errors.push(
-                                        "Scroll.LoadColumn expects 2 arguments (x, array)"
+                                        "Scroll.LoadColumn expects 2 or 3 arguments (x, tiles, optional attributes)"
                                             .to_string(),
                                     );
                                 } else {
                                     self.analyze_expression(&args[0]);
                                     self.analyze_expression(&args[1]);
-                                    if let Some(DataType::Array(_, _)) = self.resolve_type(&args[1])
+                                    if !matches!(self.resolve_type(&args[1]), Some(DataType::Array(inner, size)) if *inner == DataType::Byte && size >= 30)
                                     {
-                                        // OK
-                                    } else {
                                         self.errors.push(
-                                            "Scroll.LoadColumn expects an array as 2nd argument"
+                                            "Scroll.LoadColumn expects a BYTE array with at least 30 tiles"
                                                 .to_string(),
                                         );
+                                    }
+                                    if let Some(attributes) = args.get(2) {
+                                        self.analyze_expression(attributes);
+                                        if !matches!(self.resolve_type(attributes), Some(DataType::Array(inner, size)) if *inner == DataType::Byte && size >= 8)
+                                        {
+                                            self.errors.push("Scroll.LoadColumn attributes require a BYTE array with at least 8 entries".to_string());
+                                        }
                                     }
                                 }
                                 return;
                             } else if member.eq_ignore_ascii_case("LoadRow") {
-                                if args.len() != 2 {
+                                if !(2..=3).contains(&args.len()) {
                                     self.errors.push(
-                                        "Scroll.LoadRow expects 2 arguments (y, array)".to_string(),
+                                        "Scroll.LoadRow expects 2 or 3 arguments (y, tiles, optional attributes)".to_string(),
                                     );
                                 } else {
                                     self.analyze_expression(&args[0]);
                                     self.analyze_expression(&args[1]);
-                                    if let Some(DataType::Array(_, _)) = self.resolve_type(&args[1])
+                                    if !matches!(self.resolve_type(&args[1]), Some(DataType::Array(inner, size)) if *inner == DataType::Byte && size >= 32)
                                     {
-                                        // OK
-                                    } else {
                                         self.errors.push(
-                                            "Scroll.LoadRow expects an array as 2nd argument"
+                                            "Scroll.LoadRow expects a BYTE array with at least 32 tiles"
                                                 .to_string(),
                                         );
+                                    }
+                                    if let Some(attributes) = args.get(2) {
+                                        self.analyze_expression(attributes);
+                                        if !matches!(self.resolve_type(attributes), Some(DataType::Array(inner, size)) if *inner == DataType::Byte && size >= 8)
+                                        {
+                                            self.errors.push("Scroll.LoadRow attributes require a BYTE array with at least 8 entries".to_string());
+                                        }
                                     }
                                 }
                                 return;
@@ -768,9 +805,27 @@ impl SemanticAnalyzer {
                                         .push("Sound.Stop expects 0 arguments".to_string());
                                 }
                                 return;
+                            } else if member.eq_ignore_ascii_case("Play") {
+                                if args.len() != 1 {
+                                    self.errors
+                                        .push("Sound.Play expects 1 argument (track ID)".into());
+                                }
+                                for arg in args {
+                                    self.analyze_expression(arg);
+                                    if !matches!(
+                                        self.resolve_type(arg),
+                                        Some(DataType::Byte | DataType::Int | DataType::Word)
+                                    ) {
+                                        self.errors
+                                            .push("Sound.Play track ID must be numeric".into());
+                                    }
+                                }
+                                return;
                             } else {
-                                self.errors
-                                    .push(format!("Unknown Sound command '{}' (Stop)", member));
+                                self.errors.push(format!(
+                                    "Unknown Sound command '{}' (Play, Stop)",
+                                    member
+                                ));
                                 return;
                             }
                         }
@@ -864,6 +919,12 @@ impl SemanticAnalyzer {
             }
             StatementKind::PlaySfx(id) => {
                 self.analyze_expression(id);
+                if !matches!(
+                    self.resolve_type(id),
+                    Some(DataType::Byte | DataType::Int | DataType::Word)
+                ) {
+                    self.errors.push("PLAY_SFX ID must be numeric".into());
+                }
             }
             StatementKind::Print(args) => {
                 for arg in args {
@@ -1282,6 +1343,34 @@ impl SemanticAnalyzer {
                     }
                 }
 
+                if let Expression::MemberAccess(base, member) = &**callee {
+                    if matches!(&**base, Expression::Identifier(name) if name.eq_ignore_ascii_case("World"))
+                    {
+                        if !member.eq_ignore_ascii_case("Load")
+                            && !member.eq_ignore_ascii_case("Tile")
+                        {
+                            self.errors
+                                .push(format!("Unknown World command '{member}'"));
+                        } else if args.len() != 2 {
+                            self.errors
+                                .push(format!("World.{member} expects 2 arguments (x, y)"));
+                        } else {
+                            for argument in args {
+                                self.analyze_expression(argument);
+                                if !matches!(
+                                    self.resolve_type(argument),
+                                    Some(DataType::Byte | DataType::Word | DataType::Int)
+                                ) {
+                                    self.errors.push(format!(
+                                        "World.{member} coordinates must be numeric"
+                                    ));
+                                }
+                            }
+                        }
+                        return;
+                    }
+                }
+
                 // Check if it's Array Access or Function Call
                 self.analyze_expression(callee);
 
@@ -1435,6 +1524,18 @@ impl SemanticAnalyzer {
                             if member.eq_ignore_ascii_case("Tile") {
                                 return Some(DataType::Byte);
                             }
+                        }
+                    }
+                }
+
+                if let Expression::MemberAccess(base, member) = &**callee {
+                    if matches!(&**base, Expression::Identifier(name) if name.eq_ignore_ascii_case("World"))
+                    {
+                        if member.eq_ignore_ascii_case("Load") {
+                            return Some(DataType::Bool);
+                        }
+                        if member.eq_ignore_ascii_case("Tile") {
+                            return Some(DataType::Byte);
                         }
                     }
                 }

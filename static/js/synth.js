@@ -14,6 +14,7 @@ class SynthEngine {
         this.timer = null;
         this.sfx = null;
         this.stepIndex = 0;
+        this.lastDuty = null;
         this.samplesPerFrame = 0;
         this.nextStepTime = 0;
 
@@ -64,6 +65,10 @@ class SynthEngine {
 
     play(sfx) {
         this.stop();
+        if (!Number.isInteger(sfx.channel) || sfx.channel < 0 || sfx.channel > 2) {
+            throw new Error('SFX macros support Pulse 1, Pulse 2, and Triangle.');
+        }
+        this.lastDuty = null;
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
         this.sfx = sfx;
@@ -117,6 +122,7 @@ class SynthEngine {
             this.timer = null;
         }
         if (this.osc) {
+            this.osc.onended = null;
             this.osc.stop();
             this.osc.disconnect();
             this.osc = null;
@@ -137,30 +143,23 @@ class SynthEngine {
 
         const sfx = this.sfx;
         const now = this.ctx.currentTime;
+        const sequenceLength = Math.max(sfx.vol_sequence.length, sfx.pitch_sequence.length, sfx.duty_sequence.length, (sfx.arpeggio_sequence || []).length);
 
         // Lookahead
         while (this.nextStepTime < now + 0.1) {
+            if ((!sfx.does_loop || sequenceLength === 0) && this.stepIndex >= sequenceLength) {
+                this.finishPreview(this.nextStepTime);
+                return;
+            }
             // Get Envelope Values
             // Vol
             const volLen = sfx.vol_sequence.length;
-            let vol = 0;
+            let vol = 15;
             if (volLen > 0) {
                 const idx = (sfx.does_loop && this.stepIndex >= volLen)
                     ? this.stepIndex % volLen
                     : Math.min(this.stepIndex, volLen - 1);
                 vol = sfx.vol_sequence[idx];
-            }
-            // If sequence ended and no loop, and we are past end, silence?
-            // The NES engine holds the last value if no loop terminator, or 0 if 0-terminated.
-            // Our editor data model doesn't explicitly store the terminator byte, we assume array end.
-            // Usually, vol envelope ends with 0.
-            if (!sfx.does_loop && this.stepIndex >= volLen) {
-                 vol = 0; // Default to silence at end of vol envelope
-                 if (this.stepIndex > Math.max(sfx.pitch_sequence.length, sfx.duty_sequence.length) + 10) {
-                     // Auto-stop after some padding
-                     this.stop();
-                     return;
-                 }
             }
 
             // Pitch
@@ -191,31 +190,15 @@ class SynthEngine {
             this.gainNode.gain.setValueAtTime(vol / 15.0, time);
 
             // Pitch & Duty
-            // Base pitch? SFX are usually relative pitch sweeps.
-            // We need a base note. Let's assume Middle C equivalent or some fixed frequency.
-            // NES periods are inverse freq.
-            // Let's use 440Hz as base.
-            // Pitch shift is usually semitones or raw period units.
-            // In NES engine, it's raw period units (subtracted).
-            // -1 Period unit is Higher frequency.
-            // Approx: F = 111860.8 / (Period + 1).
-            // Let's assume a base period of 200 (~556Hz).
-            // Shift is added to period.
-            // NewPeriod = Base - (pitchShift * 4) // Scaling for effect
-
-            // Actually, sfx.pitch_sequence is i8. Positive adds to period (lower pitch), Negative subtracts (higher).
-            // Let's accumulate pitch if it's a sweep?
-            // The NES engine accumulates: `ADC $0A` (Current Pitch) + `ADC $F0` (Envelope Val).
-            // So it IS a relative delta applied every frame.
-            // We need to track current period.
-            if (this.stepIndex === 0) {
-                this.currentPeriod = 200; // Start Period
-            }
-            this.currentPeriod = Math.max(10, Math.min(2000, this.currentPeriod + pitchShift));
-
-            // Convert Period to Freq
-            // Freq = CPU / (16 * (P + 1))
-            const freq = 1789773 / (16 * (this.currentPeriod + 1));
+            // Match the runtime's note-48 base, semitone arpeggio, and signed timer
+            // offset. Each sequence step is relative to the base rather than cumulative.
+            const arpeggio = sfx.arpeggio_sequence || [];
+            const arpIndex = sfx.does_loop ? this.stepIndex % arpeggio.length : Math.min(this.stepIndex, arpeggio.length - 1);
+            const note = Math.max(0, Math.min(95, 48 + (arpeggio[arpIndex] || 0)));
+            const divisor = sfx.channel === 2 ? 32 : 16;
+            const basePeriod = SynthEngine.notePeriod(note);
+            this.currentPeriod = Math.max(0, Math.min(2047, basePeriod + pitchShift));
+            const freq = 1789773 / (divisor * (this.currentPeriod + 1));
 
             if (this.osc) {
                 this.osc.frequency.setValueAtTime(freq, time);
@@ -250,8 +233,43 @@ class SynthEngine {
         this.timer = setTimeout(() => this.scheduleNextStep(), 20);
     }
 
+    finishPreview(time) {
+        this.isPlaying = false;
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = null;
+        const source = this.osc || this.noiseNode;
+        const gain = this.gainNode;
+        if (!source) return;
+        // Lookahead has already queued future steps. Stop at their end rather than
+        // disconnecting now, which would silence every short preview immediately.
+        source.onended = () => {
+            source.disconnect();
+            gain.disconnect();
+            if (this.osc === source) this.osc = null;
+            if (this.noiseNode === source) this.noiseNode = null;
+            if (this.gainNode === gain) this.gainNode = null;
+        };
+        source.stop(time);
+    }
+
     getAnalyser() {
         return this.analyser;
+    }
+
+    static notePeriod(note) {
+        // The compiler emits this same NTSC timer table at $D000. Matching integer
+        // timers keeps the authoring preview faithful to encoded semitone steps.
+        const periods = [
+            0x6AE, 0x64E, 0x5F4, 0x59E, 0x54D, 0x501, 0x4B8, 0x474, 0x432, 0x3F4, 0x3B8, 0x380,
+            0x357, 0x327, 0x2FA, 0x2CF, 0x2A6, 0x280, 0x25C, 0x23A, 0x219, 0x1FA, 0x1DC, 0x1C0,
+            0x1AB, 0x193, 0x17D, 0x167, 0x153, 0x140, 0x12E, 0x11D, 0x10C, 0x0FD, 0x0EE, 0x0E0,
+            0x0D5, 0x0C9, 0x0BE, 0x0B3, 0x0A9, 0x0A0, 0x097, 0x08E, 0x086, 0x07E, 0x077, 0x070,
+            0x06A, 0x064, 0x05F, 0x059, 0x054, 0x050, 0x04B, 0x047, 0x043, 0x03F, 0x03B, 0x038,
+            0x035, 0x032, 0x02F, 0x02C, 0x02A, 0x028, 0x025, 0x023, 0x021, 0x01F, 0x01D, 0x01C,
+            0x01A, 0x019, 0x017, 0x016, 0x015, 0x014, 0x012, 0x011, 0x010, 0x00F, 0x00E, 0x00E,
+            0x00D, 0x00C, 0x00B, 0x00B, 0x00A, 0x00A, 0x009, 0x008, 0x008, 0x007, 0x007, 0x007
+        ];
+        return periods[Math.max(0, Math.min(95, note))];
     }
 }
 

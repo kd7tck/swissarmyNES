@@ -44,12 +44,30 @@ class MapEditor {
         this.lblNametable.textContent = 'Nametable 0';
         controls.appendChild(this.lblNametable);
 
+        this.mapSelect = document.createElement('select');
+        this.mapSelect.title = 'Select map to edit';
+        this.mapSelect.onchange = e => { this.currentNametableIndex = Number(e.target.value); this.render(); };
+        controls.appendChild(this.mapSelect);
+        this.mapName = document.createElement('input');
+        this.mapName.type = 'text'; this.mapName.title = 'Map name';
+        this.mapName.onchange = e => {
+            const map = this.assets?.nametables[this.currentNametableIndex];
+            if (!map || !e.target.value.trim()) return;
+            map.name = e.target.value.trim(); this.renderMapChoices();
+            window.dispatchEvent(new Event('nametables-changed'));
+        };
+        controls.appendChild(this.mapName);
+
         // Add Nametable Button
         const btnAdd = document.createElement('button');
         btnAdd.textContent = '+';
         btnAdd.title = "Add Nametable";
         btnAdd.onclick = () => this.addNametable();
         controls.appendChild(btnAdd);
+        const btnDelete = document.createElement('button');
+        btnDelete.textContent = 'Delete'; btnDelete.title = 'Delete selected map and clear its world cells';
+        btnDelete.onclick = () => this.deleteNametable();
+        controls.appendChild(btnDelete);
 
         // Separator
         const sep1 = document.createElement('span');
@@ -217,6 +235,7 @@ class MapEditor {
         }
 
         this.currentNametableIndex = 0;
+        this.renderMapChoices();
         this.render();
     }
 
@@ -235,7 +254,32 @@ class MapEditor {
         });
 
         this.currentNametableIndex = this.assets.nametables.length - 1;
+        this.renderMapChoices();
         this.render();
+        window.dispatchEvent(new Event('nametables-changed'));
+    }
+
+    renderMapChoices() {
+        if (!this.mapSelect) return;
+        this.mapSelect.innerHTML = '';
+        for (const [index, map] of (this.assets?.nametables || []).entries()) {
+            const option = document.createElement('option'); option.value = index; option.textContent = map.name || `Map ${index}`;
+            this.mapSelect.appendChild(option);
+        }
+        this.mapSelect.value = this.currentNametableIndex;
+        if (this.mapName) this.mapName.value = this.assets?.nametables[this.currentNametableIndex]?.name || '';
+    }
+
+    deleteNametable() {
+        if (!this.assets?.nametables[this.currentNametableIndex] || !confirm('Delete this map and clear every world cell using it?')) return;
+        const deletedIndex = this.currentNametableIndex;
+        this.assets.nametables.splice(deletedIndex, 1);
+        // World references are indices; preserve all other map identities when reindexing.
+        if (this.assets.world) this.assets.world.data = this.assets.world.data.map(index => index === deletedIndex ? -1 : index > deletedIndex ? index - 1 : index);
+        if (!this.assets.nametables.length) this.addNametable();
+        this.currentNametableIndex = Math.min(deletedIndex, this.assets.nametables.length - 1);
+        this.renderMapChoices(); this.render();
+        window.dispatchEvent(new CustomEvent('nametables-changed', {detail: {deletedIndex}}));
     }
 
     handlePick() {
@@ -272,7 +316,7 @@ class MapEditor {
             if (idx < nt.data.length) {
                 const tileVal = nt.data[idx];
                 if (window.chrEditor) {
-                    window.chrEditor.selectTile(tileVal);
+                    window.chrEditor.setTile(tileVal);
                 }
             }
         }
@@ -426,6 +470,7 @@ class MapEditor {
 
     updateMetatileInstances(metatileIndex) {
         if (!this.assets || !this.assets.nametables) return;
+        if (metatileIndex < 0) { this.render(); this.notifyChange(); return; }
 
         let changed = false;
         const meta = this.assets.metatiles[metatileIndex];
@@ -484,6 +529,10 @@ class MapEditor {
         if (!this.assets || !this.assets.nametables || this.assets.nametables.length === 0) return;
 
         const nt = this.assets.nametables[this.currentNametableIndex];
+        if (!nt) return;
+        if (this.mapSelect) this.mapSelect.value = this.currentNametableIndex;
+        if (this.mapName) this.mapName.value = nt.name || '';
+        if (this.lblNametable) this.lblNametable.textContent = `Map ${this.currentNametableIndex}`;
         const chrBank = this.assets.chr_bank;
 
         // Precompute palettes

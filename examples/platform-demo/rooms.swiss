@@ -1,0 +1,10 @@
+SUB LoadRoom()
+    ' Bulk room/font writes happen with both rendering and NMI disabled.
+    PPU.Ctrl($10)
+    PPU.Mask(0)
+    loaded = World.Load(room, 0)
+    Text.Print(1, 1, "PLATFORM DEMO")
+    Text.Print(1, 3, "ARROWS MOVE A SFX B ROOM")
+    PPU.Mask($1E)
+    PPU.Ctrl($90)
+END SUB

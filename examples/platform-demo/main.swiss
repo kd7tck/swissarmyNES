@@ -1,0 +1,96 @@
+' Generated assets are installed by: node examples/platform-demo/install.mjs
+INCLUDE "rooms.swiss"
+
+TYPE Entity
+    active AS BYTE
+    x AS BYTE
+    y AS BYTE
+END TYPE
+
+DIM hero_x AS WORD = 32
+DIM hero_y AS WORD = 128
+DIM room AS BYTE
+DIM loaded AS BYTE
+DIM sound_hits AS BYTE
+DIM frame_count AS WORD
+DIM blocked AS BYTE
+DIM hero_anim AS AnimState
+DIM entity_ids(10) AS BYTE
+DIM entities(10) AS Entity
+DIM full_pool AS WORD
+DIM reused_pool AS WORD
+DIM floor_row(32) AS BYTE
+DIM floor_attrs(8) AS BYTE
+DIM i AS BYTE
+
+SUB Main()
+    PPU.Ctrl($10)
+    PPU.Mask(0)
+    LoadRoom()
+    Animation.Play(hero_anim, Walk)
+    Sound.Play(0)
+    FOR i = 0 TO 9
+        entity_ids(i) = Pool.Spawn(entities)
+    NEXT i
+    full_pool = Pool.Spawn(entities)
+    Pool.Despawn(entities, 5)
+    reused_pool = Pool.Spawn(entities)
+    FOR i = 0 TO 31
+        floor_row(i) = 1
+    NEXT i
+    FOR i = 0 TO 7
+        floor_attrs(i) = 0
+    NEXT i
+
+    DO
+        WAIT_VBLANK
+        Controller.Read()
+        blocked = 0
+        IF Controller.IsPressed(Button.A) THEN
+            PLAY_SFX(0)
+            sound_hits = sound_hits + 1
+        END IF
+        IF Controller.IsPressed(Button.B) THEN
+            room = 1 - room
+            hero_x = 32
+            hero_y = 128
+            LoadRoom()
+        END IF
+        IF Controller.IsHeld(Button.Up) AND hero_y > 16 THEN
+            hero_y = hero_y - 1
+        END IF
+        IF Controller.IsHeld(Button.Down) AND hero_y < 208 THEN
+            hero_y = hero_y + 1
+        END IF
+        IF Controller.IsHeld(Button.Right) THEN
+            IF hero_x < 240 THEN
+                IF Collision.Tile(hero_x + 16, hero_y) = 0 AND Collision.Tile(hero_x + 16, hero_y + 31) = 0 THEN
+                    hero_x = hero_x + 1
+                ELSE
+                    blocked = 1
+                END IF
+            ELSE
+                IF room = 0 THEN
+                    room = 1
+                    hero_x = 8
+                    LoadRoom()
+                END IF
+            END IF
+        END IF
+        IF Controller.IsHeld(Button.Left) AND hero_x > 0 THEN
+            IF Collision.Tile(hero_x - 1, hero_y) = 0 AND Collision.Tile(hero_x - 1, hero_y + 31) = 0 THEN
+                hero_x = hero_x - 1
+            ELSE
+                blocked = 1
+            END IF
+        END IF
+        Animation.Update(hero_anim)
+        Sprite.Clear()
+        Animation.Draw(hero_x, hero_y, hero_anim)
+        Scroll.Set(0, 0)
+        IF BITAND(frame_count, 31) = 0 THEN
+            Scroll.LoadRow(232, floor_row, floor_attrs)
+        END IF
+        frame_count = frame_count + 1
+    LOOP WHILE 1
+END SUB

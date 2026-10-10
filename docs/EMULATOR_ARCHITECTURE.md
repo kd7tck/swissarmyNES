@@ -14,12 +14,12 @@ Bus routing and mirroring (P39-06) is tested and verified in `emulator/tests/bus
 
 This is not complete architecture acceptance. In particular:
 
-- The backend's default RAM allocation must be reconciled with explicit NES 2.0 absence and RAM/NVRAM declarations; metadata decoding alone does not prove allocation semantics.
+- The loader now rejects backend allocations that disagree with explicit NES 2.0 declarations. Declared volatile/battery partitions, native/WASM snapshot/restore, and hard-reset preservation are covered by dedicated tests; mapper geometries that cannot represent those declarations still need explicit support rather than invented defaults.
 - Partial-bank exponent layouts are rejected with a clear geometry error. Additional geometry support needs mapper-aware handling.
-- Hard reset is a fresh cartridge boot: original trainer bytes are reapplied through the CPU bus after RAM reset. A regression verifies all 512 bytes and subsequent ROM execution, including retention after a failed replacement load.
-- Timing, reserved bits, input-device metadata, submapper behavior, and ambiguous legacy headers require further acceptance tests.
-- The roadmap's named mapper operations and recording-mapper IRQ/bus integration remain to implement. Current routing still uses the upstream MapRead/MapWrite implementation.
-- Canonical CPU trace comparison now passes all 8,991 records in native and generated browser WASM. Supplemental CPU/interrupt coverage is still incomplete.
+- Hard reset reinitializes volatile state, retains declared PRG/CHR battery regions, and reapplies original trainer bytes. Battery restoration validates length transactionally; storage/ROM identity remain the caller's responsibility. See [runtime contracts](RUNTIME_CONTRACTS.md).
+- Reserved header garbage, timing, NROM submapper/expansion/geometry restrictions, and failed-load retention have integrated tests. Unsupported capabilities are rejected explicitly; nonzero NROM submappers, NROM four-screen, nonstandard expansion devices and mixed CHR storage are not supported.
+- Named mapper accessors use the production CPU/PPU bus. Actual MMC3 rendering asserts a mapper IRQ, its query adds no cycles, and guest acknowledgement clears the signal. `step_irq` is a compatibility query: the core already clocks the mapper. The source patch corrects MMC3 four-screen $3000 mirrors, verified through actual CPU PPUDATA reads and writes.
+- Canonical CPU trace comparison passes all 8,991 records in native and generated browser WASM. Supplemental tests now classify all encodings, exhaustively verify binary ADC/SBC, and exercise JAM/reset and addressing/cycle edges; broader interrupt/bus coverage remains tracked by the acceptance worksheet.
 
 Do not mark phase 39 or 40 complete based on the focused cartridge and debugger tests.
 
@@ -30,4 +30,6 @@ Compiler mapper writes: generated PRG switching uses 07F0 as desired bank and 07
 Dynamic interrupt binding uses one-byte selectors at 07F8 (NMI) and 07F9 (IRQ). Zero keeps the startup pointer. Nonzero indexes resolve immutable fixed-bank low/high ROM address tables; banked SUB handlers use generated trampolines. ON accepts zero-argument routines and publishes its selector in one store, avoiding torn pointers when interrupted or when rebinding from a handler.
 
 
-Interrupt temporary storage now comprises 00-0F, 14-17 and F0-F7, saved through a sparse ROM address table, plus 07F1 and CPU registers. Persistent controller/text/sprite/scroll/RNG state is deliberately not rolled back. Idle audio channels are skipped during Sound_Update. An idle NMI including DMA measures 1774 CPU cycles in native execution; active workloads still need a vblank budget and fixed-bank code space remains tight.
+Interrupt temporary storage comprises 00-0F, 14-17 and F0-F7, saved directly on the stack, plus 07F1 and CPU registers. Persistent controller/text/sprite/scroll/RNG state is not rolled back. Idle audio channels are skipped. Idle NMI including DMA measures 1136 CPU cycles. Under three looping tonal effects plus DMC, built-in PPU writes finish at 964–1324 cycles, before the 2273-cycle NTSC vblank deadline; full handler completion is 4294–5204 cycles, within a frame. User handlers must budget their own PPU work. Runtime reachability pruning retains called helpers while freeing fixed-bank capacity.
+
+The backend's event signals are thread-local. Rejected loads restore IRQ/NMI/DMA mask, halt/dummy state and OAM address completely. Simultaneously executing independent emulator instances remains unsupported; the browser owns one active instance.

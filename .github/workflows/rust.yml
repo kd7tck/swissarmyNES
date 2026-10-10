@@ -32,7 +32,7 @@ jobs:
       - name: Tests
         run: cargo +1.98.0 test --workspace --all-targets --locked
       - name: Frontend regressions
-        run: node --test tests/js/editor.test.cjs tests/js/ppu_viewer.test.cjs
+        run: node scripts/verify.mjs --frontend
       - name: Clippy
         run: cargo +1.98.0 clippy --workspace --all-targets --locked -- -D warnings
   wasm:

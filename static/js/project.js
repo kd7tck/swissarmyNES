@@ -7,6 +7,8 @@ class ProjectManager {
         this.currentProject = null;
         this.currentFile = null;
         this.assets = null; // Store project assets here
+        this.loadRevision = 0;
+        this.fileLoadRevision = 0;
 
         this.init();
     }
@@ -69,26 +71,45 @@ class ProjectManager {
     }
 
     async loadProject(name) {
+        const revision = ++this.loadRevision;
         try {
             const response = await fetch(`/api/projects/${name}`);
             if (!response.ok) throw new Error('Failed to load project');
 
             const project = await response.json();
 
+            // Gather the explorer and source before publishing the project. A delayed
+            // response must never pair the previous editor text with a new project's assets.
+            const [filesResponse, mainResponse] = await Promise.all([
+                fetch(`/api/projects/${name}/files`),
+                fetch(`/api/projects/${name}/files/main.swiss`)
+            ]);
+            if (!filesResponse.ok || !mainResponse.ok) throw new Error('Failed to load project files');
+            const [files, source] = await Promise.all([filesResponse.json(), mainResponse.text()]);
+            if (revision !== this.loadRevision) return false;
+
             this.currentProject = name;
+            this.currentFile = 'main.swiss';
+            this.fileLoadRevision++;
             this.assets = project.assets || { chr_bank: [], palettes: [], nametables: [] };
 
             // Show file explorer
             const explorer = document.getElementById('file-explorer');
             if (explorer) explorer.style.display = 'block';
 
-            await this.refreshFiles();
-
-            // Load main.swiss by default
-            await this.loadFile('main.swiss');
+            this.renderFileList(files);
+            const editor = document.getElementById('code-editor');
+            if (editor) {
+                editor.value = source;
+                editor.dispatchEvent(new Event('input'));
+            }
 
             // Update UI title or status
             document.getElementById('current-project-name').textContent = name;
+
+            // Graphics listeners publish the new palette/CHR before sprite previews
+            // ask those editors for their rendered bank.
+            window.dispatchEvent(new CustomEvent('project-loaded', { detail: { assets: this.assets } }));
 
             // Load Audio Tracks
             if (window.audioTracker) {
@@ -105,21 +126,22 @@ class ProjectManager {
                 window.spriteEditor.loadData(this.assets || {});
             }
 
-            // Dispatch an event to let other components know the project loaded
-            window.dispatchEvent(new CustomEvent('project-loaded', { detail: { assets: this.assets } }));
+            return true;
 
         } catch (err) {
-            alert('Error loading project: ' + err.message);
+            if (revision === this.loadRevision) alert('Error loading project: ' + err.message);
+            return false;
         }
     }
 
     async refreshFiles() {
         if (!this.currentProject) return;
+        const projectName = this.currentProject;
         try {
-            const response = await fetch(`/api/projects/${this.currentProject}/files`);
+            const response = await fetch(`/api/projects/${projectName}/files`);
             if (!response.ok) throw new Error('Failed to list files');
             const files = await response.json();
-            this.renderFileList(files);
+            if (projectName === this.currentProject) this.renderFileList(files);
         } catch (err) {
             console.error(err);
         }
@@ -142,10 +164,16 @@ class ProjectManager {
 
     async loadFile(filename) {
         if (!this.currentProject) return;
+        const projectName = this.currentProject;
+        const revision = ++this.fileLoadRevision;
         try {
-            const response = await fetch(`/api/projects/${this.currentProject}/files/${filename}`);
+            // Switching files preserves the edited source, including included modules.
+            if (this.currentFile && this.currentFile !== filename && !await this.saveCurrentProject(true)) return false;
+            if (projectName !== this.currentProject || revision !== this.fileLoadRevision) return false;
+            const response = await fetch(`/api/projects/${projectName}/files/${filename}`);
             if (!response.ok) throw new Error('Failed to load file');
             const content = await response.text();
+            if (projectName !== this.currentProject || revision !== this.fileLoadRevision) return false;
             this.currentFile = filename;
 
             const editor = document.getElementById('code-editor');
@@ -159,9 +187,11 @@ class ProjectManager {
                 if (li.textContent === filename) li.classList.add('active');
                 else li.classList.remove('active');
             });
+            return true;
 
         } catch (err) {
-            alert('Error loading file: ' + err.message);
+            if (projectName === this.currentProject && revision === this.fileLoadRevision) alert('Error loading file: ' + err.message);
+            return false;
         }
     }
 
@@ -192,16 +222,35 @@ class ProjectManager {
     async saveCurrentProject(silent = false) {
         if (!this.currentProject) {
             if (!silent) alert("No project loaded!");
-            return;
+            return true; // The standalone editor compiles its source directly.
         }
 
         const editor = document.getElementById('code-editor');
         const source = editor.value;
+        const projectName = this.currentProject;
+        const filename = this.currentFile;
+        // Snapshot all editor data before the first await; a project switch during a
+        // save must not write the newly loaded assets into the previous project.
+        const assets = JSON.parse(JSON.stringify(this.assets || {}));
+        if (window.audioTracker) Object.assign(assets, window.audioTracker.getData());
+        if (window.sfxEditor) assets.sound_effects = window.sfxEditor.getData();
+        if (window.worldEditor) assets.world = window.worldEditor.getData();
+        if (window.spriteEditor) Object.assign(assets, window.spriteEditor.getData());
+        const payload = JSON.stringify({ assets });
+
+        // Serialize writes so an older, slower autosave cannot overwrite a newer
+        // compile request's source or asset snapshot on disk.
+        const previous = this.saveQueue || Promise.resolve();
+        this.saveQueue = previous.then(() => this.saveSnapshot(projectName, filename, source, payload, silent));
+        return this.saveQueue;
+    }
+
+    async saveSnapshot(projectName, filename, source, payload, silent) {
 
         // 1. Save Current File
-        if (this.currentFile) {
+        if (filename) {
             try {
-                const response = await fetch(`/api/projects/${this.currentProject}/files/${this.currentFile}`, {
+                const response = await fetch(`/api/projects/${projectName}/files/${filename}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content: source })
@@ -209,53 +258,26 @@ class ProjectManager {
                 if (!response.ok) throw new Error('Failed to save file');
             } catch (err) {
                 alert('Error saving file: ' + err.message);
-                return;
+                return false;
             }
         }
 
-        // 2. Save Assets
-        // Collect Audio Data
-        if (window.audioTracker) {
-             const audioData = window.audioTracker.getData();
-             this.assets.audio_tracks = audioData.audio_tracks;
-             this.assets.samples = audioData.samples;
-             this.assets.envelopes = audioData.envelopes;
-        }
-
-        // Collect SFX Data
-        if (window.sfxEditor) {
-            this.assets.sound_effects = window.sfxEditor.getData();
-        }
-
-        // Collect World Data
-        if (window.worldEditor) {
-            this.assets.world = window.worldEditor.getData();
-        }
-
-        // Collect Sprite Data
-        if (window.spriteEditor) {
-            const spriteData = window.spriteEditor.getData();
-            this.assets.metasprites = spriteData.metasprites;
-            this.assets.animations = spriteData.animations;
-        }
-
-        const payload = {
-            assets: this.assets
-        };
-
+        // 2. Save the asset snapshot to the same project as the source.
         try {
             // We use save_project just for assets now
-            const response = await fetch(`/api/projects/${this.currentProject}`, {
+            const response = await fetch(`/api/projects/${projectName}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: payload
             });
 
             if (!response.ok) throw new Error('Failed to save assets');
 
             if (!silent) alert('Project saved!');
+            return true;
         } catch (err) {
             alert('Error saving project assets: ' + err.message);
+            return false;
         }
     }
 }

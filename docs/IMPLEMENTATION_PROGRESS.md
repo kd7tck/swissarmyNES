@@ -1,3 +1,34 @@
+# GitHub integration verification — October 10, 2026
+
+Full native tests and strict Clippy pass for the saved implementation. Verification repaired BYTE Clamp branch formatting and signed Clamp comparison; eight actual execution cases cover byte, word, signed and nested bounds. Audio tests now use a deterministic fixture power-on state and observe the completed NMI signal after Sound_Update. Current GitHub PR #162 contains the matching source batch and will be consolidated and merged only after all remote checks pass. Fresh WASM/Node verification and remote integration are in progress; broader browser/device acceptance remains tracked separately.
+
+# Latest saved checkpoint — October 9, 2026
+
+World integration, editable full-platform demo, PPU/audio timing, pool safety and emulator/core acceptance repairs now have targeted passing evidence. Root music/DPCM authoring adds seven passing tests. User requested another pause before final verification/commit. The first section of [IMPLEMENTATION_RESUME.md](IMPLEMENTATION_RESUME.md) records exact results, the known Clippy error, obsolete full-suite/WASM logs, sandbox-blocked browser attempts, and the next release steps. Nothing has been committed; source-only policy remains active.
+
+# Credit-low checkpoint — October 9, 2026
+
+User requested a checkpoint and pause before final integration. Implemented audio/frontend/runtime/CPU/battery fixes and their targeted passing tests are preserved uncommitted. The first section of [IMPLEMENTATION_RESUME.md](IMPLEMENTATION_RESUME.md) records exact results, pending World integration, latest game timing/collision edits, earlier full-suite failure, and the successful WASM compilation whose bindings/tests still need regeneration. The source-only delivery policy remains active; phases 1–40 are not yet fully accepted.
+
+# Completion audit and development plan — October 9, 2026
+
+Resumed from clean `main` at `bd42af4`. The phase acceptance worksheet remains the release gate: historical completion headings and assembly-string assertions are not runtime acceptance.
+
+The current source audit identified these defects for reproduction and repair:
+
+| Area | Finding | Reproduction / acceptance work |
+|---|---|---|
+| Scroll upload runtime (`src/compiler/codegen.rs`) | Buffer availability checks overwrite the data pointer; upload helpers consume the JSR return address as coordinates; the busy path can leave stack arguments behind. | Execute column/row uploads through production ROMs, assert return/SP integrity, queue contents, and behavior when the buffer is already busy. |
+| Sound runtime (`src/compiler/codegen.rs`) | `Sound.Stop` calls initialization that clears software state but does not explicitly silence tonal hardware; SFX does not activate idle channels; music interruption has no saved state for resumption. | Execute compiled sound/SFX programs, inspect channel state and APU-visible behavior, verify lower/equal/higher priority and restoration. |
+| DPCM runtime | Sample selection appears to use period-table output instead of the DPCM sample index. | Compile multiple distinguishable samples and assert the hardware address/length/rate writes during production execution. |
+| Project save/compile (`static/js/project.js`, `app.js`) | Save failures are swallowed, allowing compile to use stale persisted source/assets. | Mock a failed save, ensure compile is not issued, then verify the successful save/compile flow. |
+| Emulator lifecycle/input (`static/js/editor.js`) | Repeated ROM sessions can register duplicate keyboard listeners; queued audio and scheduling state survive some pause/reset/reload paths; simultaneous Shift keys can release Select early. | Repeated-session, audio cancellation, and mixed-key/device workflow regressions. |
+| Graphics authoring | Sprite palette selection includes flip attribute bits; PNG dimensions and linked tile/metatile consistency need explicit validation. | Assert palette masking, conversion rejection without mutation, and persisted reference consistency. |
+
+These are audit findings, not completed fixes. Record each reproduction result and final test result below as the work lands. Parallel work owns separate runtime, audio, and frontend sections; root owns supplemental CPU/cartridge coverage, integration checks, and release documentation.
+
+Recovery notes: ignored `.tools/notes/completion-2026-10-09.md` and the companion agent notes record every edited file. Generated WASM, downloaded fixtures, logs, and build outputs remain excluded from commits. Native host-matrix CI, actual browser/audio observations, and physical gamepad evidence require their own results before final signoff.
+
 # Dev Loop 7 — Runtime Shift Count Normalization, September 16, 2026
 
 - Normalized `BITSHL` and `BITSHR` runtime counts with `AND #$1F` before dispatching to the 6502 shift helpers.

@@ -1,0 +1,16 @@
+# Integrated NES Game Studio
+
+The platform covers complete NES game production using Rust, vanilla browser code, current asset formats and the production core. Each increment needs a playable ROM and behavioral evidence. October 11 cleanup and a local checkpoint commit are authorized; no push requested.
+
+Implemented: connected flow, entities, game variables, ordered scene events and saved controller assertions. [Current verification/next slice](IMPLEMENTATION_RESUME.md) · [usage/schema](GAME_STUDIO.md).
+
+1. **Connected project and scene workflow.** Design brief, visual scene graph, maps, scene music/SFX, reusable player behavior, generated inspectable code, editable starters, preview and bounded emulator smoke tests. Preserve custom source and legacy projects.
+2. **Entities and reusable behaviors.** Implemented: animation-backed definitions, scene placement, decoration/pickup/door/patrol presets, shared RAM slots and RAM/OAM estimates/limits. Remaining: enemy combat, spawners, configurable components/hitboxes, persistent collection and ROM/scanline profiling. Presets generate ordinary source with custom-code integration.
+3. **Events and game systems.** Implemented: persistent WORD variables, entry/update/pressed/held/timer rules, AND comparisons, ordered set/add/subtract/scene/music/SFX actions, visit latches, bounded arithmetic and variable assertions. Remaining: reusable event groups/functions, dialog, quests, inventories, checkpoints, richer win/lose flows and save data. Keep explicit priorities and custom SwissBASIC extensions with source provenance.
+4. **Art and world production.** Tile/metatile/animation workflows, reusable asset library, collision layers, map connections, scrolling/cameras, palette consistency and asset-reference repair.
+5. **Music and SFX production.** Song sections/ordering, channel/instrument routing, reusable envelopes, music/SFX arbitration, DPCM import, event-triggered playback and production-core preview.
+6. **Testing and profiling.** Saved controller scripts, scene/state assertions, visual captures, deterministic replay, regression suites, CPU/vblank/ROM/RAM/OAM budgets and diagnostics linked to authored content.
+7. **Production usability.** Onboarding, searchable reference/examples, undo/history, import/export, project packaging, release checks and offline installation. Make common workflows fast while keeping advanced code and hardware control available.
+8. **Original 1980s ROM import and recovery (later).** Import NES/Famicom cartridge games into full editable projects, preserve their original hardware/engine, rebuild untouched games exactly, recover verified code/art/maps/music/SFX into Studio and test edited outputs on independent emulators. [Detailed recovery plan](ROM_IMPORT_ROADMAP.md) defines staged coverage, uncertainty and compatibility gates.
+
+The first increment is the scene workflow. A title → gameplay → alternate room flow must persist, compile, display and transition using the existing mapper/world/audio/runtime. No-code presets generate ordinary source that developers can inspect. Advanced game systems and a full visual programming language remain later increments, with their own runtime acceptance gates.

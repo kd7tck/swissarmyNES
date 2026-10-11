@@ -25,4 +25,7 @@ cargo test --test platform_demo_execution_test --locked --offline
 cargo test --test nmi_workload_execution_test --locked --offline -- --nocapture
 ```
 
-These tests provide native emulator evidence. Audible output, physical controllers and actual browser presentation still require browser/device observations.
+Native tests and [October browser observations](../../docs/BROWSER_ACCEPTANCE_2026-10-10.md)
+cover rendering, controls/debugger presentation and user-confirmed audible output.
+Physical controllers and audio fidelity still need separate device evidence. Current
+setup/checkpoint commands are in the [root README](../../README.md).

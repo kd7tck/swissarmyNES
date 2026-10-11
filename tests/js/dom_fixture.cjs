@@ -24,6 +24,7 @@ function domFixture(ids = [], globals = {}) {
                 toggle: name => this.classes.has(name) ? this.classes.delete(name) : this.classes.add(name)
             };
             this.draws = [];
+            this.attributes = new Map();
             this.context = new Proxy({
                 fillRect: (...args) => this.draws.push({color: this.context.fillStyle, args}),
                 createImageData: (w, h) => ({data: new Uint8ClampedArray(w * h * 4)}),
@@ -45,11 +46,14 @@ function domFixture(ids = [], globals = {}) {
         querySelectorAll() { return []; }
         getContext() { return this.context; }
         getBoundingClientRect() { return {left: 0, top: 0, width: this.width, height: this.height}; }
+        setAttribute(name, value) { this.attributes.set(name, String(value)); }
+        getAttribute(name) { return this.attributes.get(name) ?? null; }
     }
     const document = new Element();
     document.body = new Element('body');
     document.getElementById = id => elements.get(id) || null;
     document.createElement = tag => new Element(tag);
+    document.createElementNS = (_, tag) => new Element(tag);
     const window = {
         location: {hash: ''},
         addEventListener(type, fn) { const group = listeners.get(type) || []; group.push(fn); listeners.set(type, group); },

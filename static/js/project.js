@@ -7,6 +7,7 @@ class ProjectManager {
         this.currentProject = null;
         this.currentFile = null;
         this.assets = null; // Store project assets here
+        this.design = null;
         this.loadRevision = 0;
         this.fileLoadRevision = 0;
 
@@ -92,6 +93,7 @@ class ProjectManager {
             this.currentFile = 'main.swiss';
             this.fileLoadRevision++;
             this.assets = project.assets || { chr_bank: [], palettes: [], nametables: [] };
+            this.design = project.metadata?.design || null;
 
             // Show file explorer
             const explorer = document.getElementById('file-explorer');
@@ -101,6 +103,7 @@ class ProjectManager {
             const editor = document.getElementById('code-editor');
             if (editor) {
                 editor.value = source;
+                editor.readOnly = false;
                 editor.dispatchEvent(new Event('input'));
             }
 
@@ -125,6 +128,8 @@ class ProjectManager {
             if (window.spriteEditor) {
                 window.spriteEditor.loadData(this.assets || {});
             }
+            // Studio reads live editors only after every component owns the new project.
+            window.dispatchEvent(new CustomEvent('project-ready', {detail:{name,design:this.design}}));
 
             return true;
 
@@ -179,6 +184,7 @@ class ProjectManager {
             const editor = document.getElementById('code-editor');
             if (editor) {
                 editor.value = content;
+                editor.readOnly = filename === 'game_flow.swiss' && !!this.design;
                 editor.dispatchEvent(new Event('input'));
             }
 
@@ -228,7 +234,7 @@ class ProjectManager {
         const editor = document.getElementById('code-editor');
         const source = editor.value;
         const projectName = this.currentProject;
-        const filename = this.currentFile;
+        const filename = this.currentFile === 'game_flow.swiss' && this.design ? null : this.currentFile;
         // Snapshot all editor data before the first await; a project switch during a
         // save must not write the newly loaded assets into the previous project.
         const assets = JSON.parse(JSON.stringify(this.assets || {}));
@@ -236,13 +242,16 @@ class ProjectManager {
         if (window.sfxEditor) assets.sound_effects = window.sfxEditor.getData();
         if (window.worldEditor) assets.world = window.worldEditor.getData();
         if (window.spriteEditor) Object.assign(assets, window.spriteEditor.getData());
-        const payload = JSON.stringify({ assets });
+        const design = window.gameStudio?.getData() || this.design;
+        const payload = JSON.stringify({ assets, ...(design ? {design} : {}) });
 
         // Serialize writes so an older, slower autosave cannot overwrite a newer
         // compile request's source or asset snapshot on disk.
         const previous = this.saveQueue || Promise.resolve();
         this.saveQueue = previous.then(() => this.saveSnapshot(projectName, filename, source, payload, silent));
-        return this.saveQueue;
+        const saved = await this.saveQueue;
+        if (saved && projectName === this.currentProject) this.design = design ? JSON.parse(JSON.stringify(design)) : null;
+        return saved;
     }
 
     async saveSnapshot(projectName, filename, source, payload, silent) {
@@ -255,8 +264,12 @@ class ProjectManager {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content: source })
                 });
-                if (!response.ok) throw new Error('Failed to save file');
+                if (!response.ok) {
+                    const message = typeof response.text === 'function' ? await response.text() : '';
+                    throw new Error(message || 'Failed to save file');
+                }
             } catch (err) {
+                this.lastSaveError = {project:projectName,message:err.message};
                 alert('Error saving file: ' + err.message);
                 return false;
             }
@@ -271,11 +284,16 @@ class ProjectManager {
                 body: payload
             });
 
-            if (!response.ok) throw new Error('Failed to save assets');
+            if (!response.ok) {
+                const message = typeof response.text === 'function' ? await response.text() : '';
+                throw new Error(message || 'Failed to save assets');
+            }
 
+            this.lastSaveError = null;
             if (!silent) alert('Project saved!');
             return true;
         } catch (err) {
+            this.lastSaveError = {project:projectName,message:err.message};
             alert('Error saving project assets: ' + err.message);
             return false;
         }

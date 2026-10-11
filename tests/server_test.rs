@@ -71,6 +71,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn unversioned_ide_assets_require_revalidation_even_on_not_modified() {
+        let app = server::app();
+        for uri in ["/", "/js/editor.js", "/js/ppu_viewer.js", "/css/style.css"] {
+            let response = app
+                .clone()
+                .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            assert_eq!(
+                response.headers().get("cache-control"),
+                Some(&axum::http::HeaderValue::from_static("no-cache")),
+                "{uri} must not stay stale after an IDE update"
+            );
+
+            let modified = response.headers().get("last-modified").unwrap().clone();
+            let cached = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(uri)
+                        .header("if-modified-since", modified)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(cached.status(), StatusCode::NOT_MODIFIED, "{uri}");
+            assert_eq!(
+                cached.headers().get("cache-control"),
+                Some(&axum::http::HeaderValue::from_static("no-cache")),
+                "{uri} must retain revalidation on a cached response"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn test_project_api() {
         let app = server::app();
 

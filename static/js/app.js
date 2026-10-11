@@ -22,7 +22,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 view.classList.remove('active');
             }
         });
+        if (targetId === 'studio') window.dispatchEvent(new CustomEvent('studio-opened'));
     }
+    window.addEventListener('navigate-to', event => navigateTo(event.detail));
 
     // Handle clicks
     navItems.forEach(item => {
@@ -49,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.SpriteEditor) {
         window.spriteEditor = new window.SpriteEditor();
     }
+    if (window.GameStudio) window.gameStudio = new window.GameStudio();
 
     // Handle initial load based on hash
     const initialHash = window.location.hash.replace('#', '');
@@ -72,6 +75,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Compilation Logic
     let compileRevision = 0;
     codeEditor?.addEventListener('input', () => { compileRevision++; });
+    window.addEventListener('project-loaded', () => { compileRevision++; });
+    window.addEventListener('emulator-run-invalidated', () => { compileRevision++; });
+    window.addEventListener('game-design-changed', () => { compileRevision++; });
     async function performCompile(download = true, options = {}) {
         if (!codeEditor) return;
         // Reserve the result before autosaving so edits during the save invalidate it.
@@ -105,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const payload = {
-            source: preview ? `SUB Main()\nSound.Play(${options.previewTrackId})\nPPU.Ctrl($80)\nDO\nWAIT_VBLANK\nLOOP WHILE 1\nEND SUB` : projectName ? null : source,
+            source: preview ? `SUB Main()\nSound.Play(${options.previewTrackId})\nPPU.Ctrl($80)\nDO\nWAIT_VBLANK\nLOOP WHILE 1\nEND SUB` : options.sourceOverride ?? (projectName ? null : source),
             project_name: preview ? null : projectName,
             assets: assets
         };

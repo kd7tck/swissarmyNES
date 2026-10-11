@@ -16,7 +16,8 @@ class PpuViewer {
         this.container.style.height = '600px';
         this.container.style.backgroundColor = '#1e1e1e';
         this.container.style.border = '2px solid #444';
-        this.container.style.zIndex = '1000';
+        // The viewer is created before the emulator overlay; equal levels put it behind.
+        this.container.style.zIndex = '1100';
         this.container.style.flexDirection = 'column';
         this.container.style.padding = '10px';
         this.container.style.color = '#eee';

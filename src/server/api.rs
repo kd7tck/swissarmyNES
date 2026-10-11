@@ -9,6 +9,7 @@ use crate::compiler::{
     preprocessor,
     source_map::LinkedSourceMap as SourceMap,
 };
+use crate::server::game_design::{GameDesign, FLOW_FILE, MAIN_SOURCE, TEST_BOOT_FRAMES};
 use crate::server::project::{self, ProjectAssets};
 use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use base64::{engine::general_purpose, Engine as _};
@@ -65,6 +66,15 @@ pub fn compile_source(
     project_name: Option<String>,
     assets: Option<ProjectAssets>,
 ) -> Result<(Vec<u8>, SourceMap), String> {
+    compile_source_with_design(source, project_name, assets, None)
+}
+
+fn compile_source_with_design(
+    source: Option<String>,
+    project_name: Option<String>,
+    assets: Option<ProjectAssets>,
+    design: Option<&GameDesign>,
+) -> Result<(Vec<u8>, SourceMap), String> {
     // Resolve source
     let source_code = if let Some(s) = source {
         s
@@ -79,20 +89,28 @@ pub fn compile_source(
     };
 
     // Resolve assets
+    let loaded_project = project_name
+        .as_ref()
+        .and_then(|name| project::get_project(name).ok());
+    let generated_flow = design.or_else(|| {
+        loaded_project
+            .as_ref()
+            .and_then(|project| project.metadata.design.as_ref())
+    });
     let resolved_assets = if let Some(a) = assets {
         Some(a)
-    } else if let Some(ref name) = project_name {
-        match project::get_project(name) {
-            Ok(p) => p.assets,
-            Err(_) => None,
-        }
     } else {
-        None
+        loaded_project
+            .as_ref()
+            .and_then(|project| project.assets.clone())
     };
 
     if let Some(assets) = &resolved_assets {
         assets.validate_for_compile()?;
     }
+    let flow_source = generated_flow
+        .map(|design| design.source(resolved_assets.as_ref().ok_or("Game flow needs assets")?))
+        .transpose()?;
 
     // 1. Lexing
     let mut lexer = Lexer::new(&source_code);
@@ -114,7 +132,15 @@ pub fn compile_source(
     let p_name = project_name.clone();
     let provider = |filename: &str| -> Result<String, String> {
         if let Some(name) = &p_name {
-            let contents = project::read_file(name, filename)?;
+            let contents = if filename == FLOW_FILE {
+                if let Some(source) = &flow_source {
+                    source.clone()
+                } else {
+                    project::read_file(name, filename)?
+                }
+            } else {
+                project::read_file(name, filename)?
+            };
             sources
                 .borrow_mut()
                 .insert(filename.to_string(), contents.clone());
@@ -350,10 +376,18 @@ pub async fn delete_file(Path((name, filename)): Path<(String, String)>) -> impl
 #[derive(Deserialize)]
 pub struct CreateProjectRequest {
     name: String,
+    source: Option<String>,
+    assets: Option<ProjectAssets>,
+    design: Option<GameDesign>,
 }
 
 pub async fn create_project(Json(payload): Json<CreateProjectRequest>) -> impl IntoResponse {
-    match project::create_project(&payload.name) {
+    match project::create_project_with_content(
+        &payload.name,
+        payload.source.as_deref(),
+        payload.assets.as_ref(),
+        payload.design.as_ref(),
+    ) {
         Ok(_) => StatusCode::CREATED.into_response(),
         Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }
@@ -370,14 +404,153 @@ pub async fn get_project(Path(name): Path<String>) -> impl IntoResponse {
 pub struct SaveProjectRequest {
     source: Option<String>,
     assets: Option<project::ProjectAssets>,
+    design: Option<GameDesign>,
 }
 
 pub async fn save_project(
     Path(name): Path<String>,
     Json(payload): Json<SaveProjectRequest>,
 ) -> impl IntoResponse {
-    match project::save_project(&name, payload.source.as_deref(), payload.assets.as_ref()) {
+    match project::save_project_with_design(
+        &name,
+        payload.source.as_deref(),
+        payload.assets.as_ref(),
+        payload.design.as_ref(),
+    ) {
         Ok(_) => StatusCode::OK.into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, e).into_response(),
     }
+}
+
+#[derive(Deserialize)]
+pub struct FlowTestRequest {
+    #[serde(default = "default_test_frames")]
+    frames: u16,
+    test_id: Option<String>,
+}
+fn default_test_frames() -> u16 {
+    120
+}
+
+/// Bounded production-core execution runs a generated harness without replacing custom source.
+pub async fn test_game_flow(
+    Path(name): Path<String>,
+    Json(request): Json<FlowTestRequest>,
+) -> impl IntoResponse {
+    if request.frames == 0 || request.frames > 600 {
+        return (StatusCode::BAD_REQUEST, "Smoke tests need 1..600 frames").into_response();
+    }
+    let result = tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
+        let project = project::get_project(&name)?;
+        let design = project.metadata.design.ok_or("Enable Game Studio before testing its flow")?;
+        let selected_test = request.test_id.as_ref().map(|id| design.tests.iter().find(|test| test.id == *id).ok_or("Choose an existing saved flow test")).transpose()?;
+        // Compile and report the same owned design/assets snapshot, even if another save arrives.
+        let (rom, _) = compile_source_with_design(Some(MAIN_SOURCE.into()), Some(name), project.assets, Some(&design))?;
+        let mut emulator = swiss_emulator::Emulator::new();
+        emulator.load_rom(&rom).map_err(|error| format!("ROM load: {error:?}"))?;
+        let boot_frames = if selected_test.is_some() { TEST_BOOT_FRAMES } else { request.frames };
+        for _ in 0..boot_frames {
+            emulator.step().map_err(|error| format!("ROM execution: {error:?}"))?;
+            emulator.clear_audio_samples();
+        }
+        let mut state = flow_test_state(&emulator, &design)?;
+        let mut observations = Vec::new();
+        let mut total_frames = boot_frames;
+        let mut failure = None;
+        if let Some(test) = selected_test {
+            for (index, step) in test.steps.iter().enumerate() {
+                for button in 0..8 { emulator.set_button(0,button,step.buttons.iter().any(|key| key.button_index() == Some(button))); }
+                for _ in 0..step.frames {
+                    emulator.step().map_err(|error| format!("ROM execution: {error:?}"))?;
+                    emulator.clear_audio_samples();
+                }
+                total_frames += step.frames;
+                state = flow_test_state(&emulator, &design)?;
+                let mismatch = if step.expected_scene.as_ref().is_some_and(|expected| state["scene_id"] != *expected) {
+                    Some(format!("expected scene {}, got {}",step.expected_scene.as_ref().unwrap(),state["scene_id"]))
+                } else if step.expected_x.is_some_and(|expected| state["x"] != expected) {
+                    Some(format!("expected X {}, got {}",step.expected_x.unwrap(),state["x"]))
+                } else if step.expected_y.is_some_and(|expected| state["y"] != expected) {
+                    Some(format!("expected Y {}, got {}",step.expected_y.unwrap(),state["y"]))
+                } else if step.expected_pickups.is_some_and(|expected| state["pickups"] != expected) {
+                    Some(format!("expected pickups {}, got {}",step.expected_pickups.unwrap(),state["pickups"]))
+                } else if step.expected_active_entities.is_some_and(|expected| state["active_entities"] != expected) {
+                    Some(format!("expected active entities {}, got {}",step.expected_active_entities.unwrap(),state["active_entities"]))
+                } else {
+                    step.expected_variables.iter().find_map(|(id, expected)| {
+                        (state["variables"][id] != *expected).then(|| format!("expected variable {id} = {expected}, got {}", state["variables"][id]))
+                    })
+                };
+                observations.push(serde_json::json!({"step":index+1,"frames":total_frames,"state":state,"passed":mismatch.is_none()}));
+                if let Some(message) = mismatch { failure = Some(format!("Step {}: {message}",index+1)); break; }
+            }
+        }
+        state["passed"] = serde_json::json!(failure.is_none());
+        state["message"] = serde_json::json!(failure);
+        state["frames"] = serde_json::json!(total_frames);
+        state["rom_bytes"] = serde_json::json!(rom.len());
+        state["cpu_cycles"] = serde_json::json!(emulator.get_cpu_state().cycles);
+        state["observations"] = serde_json::json!(observations);
+        state["test_id"] = serde_json::json!(request.test_id);
+        state["scope"] = serde_json::json!(if selected_test.is_some() {"saved controller scenario in generated flow; custom main excluded"} else {"generated flow boot; no controller input"});
+        Ok(state)
+    }).await;
+    match result {
+        Ok(Ok(report)) => Json(report).into_response(),
+        Ok(Err(message)) => (StatusCode::BAD_REQUEST, message).into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Smoke test failed: {error}"),
+        )
+            .into_response(),
+    }
+}
+
+fn flow_test_state(
+    emulator: &swiss_emulator::Emulator,
+    design: &GameDesign,
+) -> Result<serde_json::Value, String> {
+    // Only the isolated harness fixes this declaration layout; custom source may allocate differently.
+    let ram = emulator.ram_snapshot();
+    let scene = design
+        .scenes
+        .get(usize::from(ram[0x5c0]))
+        .ok_or("Runtime selected an invalid scene")?;
+    if ram[0x5c8] != 255 {
+        return Err("Runtime did not load the selected world map".into());
+    }
+    let address = design.pickups_address();
+    let pickups = address
+        .map(|offset| u16::from_le_bytes([ram[offset], ram[offset + 1]]))
+        .unwrap_or(0);
+    let entities: Vec<_> = scene
+        .instances
+        .iter()
+        .enumerate()
+        .map(|(slot, instance)| {
+            let offset = address.unwrap() + 3 + slot * 9;
+            serde_json::json!({"id":instance.id,"entity":instance.entity,"active":ram[offset] != 0,
+            "x":u16::from_le_bytes([ram[offset+1],ram[offset+2]]),"y":instance.y})
+        })
+        .collect();
+    let active = entities
+        .iter()
+        .filter(|entity| entity["active"] == true)
+        .count();
+    let variables: serde_json::Map<String, serde_json::Value> = design
+        .variables
+        .iter()
+        .map(|variable| {
+            let offset = design.variable_address(&variable.id).unwrap();
+            (
+                variable.id.clone(),
+                serde_json::json!(u16::from_le_bytes([ram[offset], ram[offset + 1]])),
+            )
+        })
+        .collect();
+    Ok(
+        serde_json::json!({"scene_id":scene.id,"scene_name":scene.name,
+        "x":u16::from_le_bytes([ram[0x5c3],ram[0x5c4]]),"y":u16::from_le_bytes([ram[0x5c5],ram[0x5c6]]),
+        "pickups":pickups,"active_entities":active,"entities":entities,"variables":variables,"generated_ram_bytes":design.generated_ram_bytes()}),
+    )
 }

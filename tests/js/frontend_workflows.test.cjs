@@ -17,6 +17,173 @@ function editorFixture() {
     return {...f, editor, calls};
 }
 
+function bootstrapFixture() {
+    const f = editorFixture();
+    f.editor.emulator.clear_breakpoints = () => {};
+    f.window.projectManager = {currentProject: 'game', currentFile: 'main.swiss', loadRevision: 1, fileLoadRevision: 1};
+    f.editor.editor.value = 'SUB Main()\nEND SUB';
+    const initialized = deferred(), requests = [];
+    const memory = {buffer: new ArrayBuffer(65536)};
+    let imports = 0, initializations = 0;
+    const Emulator = class {};
+    f.editor.importEmulatorModule = async () => {
+        imports++;
+        return {Emulator, default: () => { initializations++; return initialized.promise; }};
+    };
+    f.window.addEventListener('request-compile-and-run', event => requests.push(event.detail));
+    return {...f, initialized, memory, Emulator, requests, imports: () => imports, initializations: () => initializations};
+}
+
+const settle = () => new Promise(resolve => setImmediate(resolve));
+test('generated read-only source cannot be changed by the custom Tab handler', () => {
+    const f = editorFixture();
+    f.editor.editor.value = 'Generated source';
+    f.editor.editor.readOnly = true;
+    f.editor.editor.selectionStart = 0; f.editor.editor.selectionEnd = 0;
+    const event = new f.Event('keydown', {key:'Tab'});
+    f.editor.handleKey(event);
+    assert.equal(f.editor.editor.value,'Generated source');
+    assert.equal(event.defaultPrevented,undefined);
+});
+function closeOverlay(f) {
+    const toolbar = f.elements.get('emulator-overlay').children[0];
+    toolbar.children.find(button => button.innerText === 'Close').click();
+}
+
+test('overlapping first Run and music preview initialize one core and compile only the latest request', async () => {
+    const f = bootstrapFixture();
+    const run = f.editor.runEmulator();
+    const preview = f.editor.runEmulator({previewTrackId: 2});
+    await settle();
+    f.initialized.resolve({memory: f.memory});
+    await Promise.all([run, preview]);
+    assert.equal(f.imports(), 1);
+    assert.equal(f.initializations(), 1);
+    assert.deepEqual(f.requests, [{previewTrackId: 2}]);
+    assert.equal(f.editor.wasmMemory, f.memory);
+    assert.equal(f.window.wasmMemory, f.memory);
+    assert.equal(f.editor.EmulatorClass, f.Emulator);
+});
+
+test('source edits and project/file reloads invalidate a Run waiting for the core', async () => {
+    const changes = [
+        f => f.editor.editor.dispatchEvent(new f.Event('input')),
+        f => f.window.dispatchEvent(new f.Event('project-loaded')),
+        f => { f.window.projectManager.currentFile = 'included.swiss'; },
+        f => { f.window.projectManager.fileLoadRevision += 2; },
+        f => { f.window.projectManager.loadRevision++; }
+    ];
+    for (const change of changes) {
+        const f = bootstrapFixture();
+        const run = f.editor.runEmulator();
+        await settle();
+        change(f);
+        f.initialized.resolve({memory: f.memory});
+        await run;
+        assert.deepEqual(f.requests, [], 'obsolete Run must not compile the newly selected source');
+        assert.equal(f.editor.wasmLoaded, true, 'the initialized core remains reusable');
+    }
+});
+
+test('closing the overlay cancels a Run waiting for initialization', async () => {
+    const f = bootstrapFixture();
+    f.editor.createEmulatorOverlay();
+    const run = f.editor.runEmulator();
+    await settle();
+    closeOverlay(f);
+    f.initialized.resolve({memory: f.memory});
+    await run;
+    assert.deepEqual(f.requests, []);
+    assert.equal(f.elements.get('emulator-overlay').style.display, 'none');
+    assert.equal(f.editor.emulatorRunning, false);
+    assert.equal(f.frames.size, 0);
+});
+
+test('a failed shared initialization reports once and a subsequent Run can retry', async () => {
+    const f = bootstrapFixture();
+    const first = f.editor.runEmulator(), latest = f.editor.runEmulator();
+    await settle();
+    f.initialized.reject(new Error('temporary WASM download failure'));
+    await Promise.all([first, latest]);
+    assert.equal(f.alerts.length, 1);
+    assert.equal(f.editor.wasmLoaded, false);
+    assert.equal(f.editor.wasmMemory, null);
+    assert.equal(f.window.wasmMemory, undefined);
+    assert.deepEqual(f.requests, []);
+    f.editor.importEmulatorModule = async () => ({Emulator: f.Emulator, default: async () => ({memory: f.memory})});
+    await f.editor.runEmulator();
+    assert.equal(f.editor.wasmLoaded, true);
+    assert.equal(f.requests.length, 1);
+});
+
+test('incomplete WASM exports cannot mark the core loaded or publish mismatched memory', async () => {
+    const f = bootstrapFixture();
+    const invalid = [
+        {Emulator: f.Emulator, default: async () => ({})},
+        {default: async () => ({memory: f.memory})}
+    ];
+    for (const module of invalid) {
+        f.editor.importEmulatorModule = async () => module;
+        await f.editor.runEmulator();
+        assert.equal(f.editor.wasmLoaded, false);
+        assert.equal(f.editor.wasmMemory, null);
+        assert.equal(f.editor.EmulatorClass, undefined);
+        assert.equal(f.window.wasmMemory, undefined);
+        assert.deepEqual(f.requests, []);
+    }
+    f.editor.importEmulatorModule = async () => ({Emulator: f.Emulator, default: async () => ({memory: f.memory})});
+    await f.editor.runEmulator();
+    assert.equal(f.editor.wasmLoaded, true);
+});
+
+test('closing during compilation prevents the late ROM from reopening the emulator', async () => {
+    const f = bootstrapFixture(), response = deferred();
+    f.window.projectManager.saveCurrentProject = async () => true;
+    f.context.fetch = () => response.promise;
+    f.context.atob = text => Buffer.from(text, 'base64').toString('binary');
+    f.load('static/js/app.js');
+    f.document.events.get('DOMContentLoaded').at(-1)();
+    f.editor.createEmulatorOverlay();
+    let loaded = 0;
+    f.editor.startEmulatorWithRom = () => { loaded++; };
+    const run = f.editor.runEmulator();
+    f.initialized.resolve({memory: f.memory});
+    await run;
+    await settle();
+    closeOverlay(f);
+    response.resolve({ok: true, json: async () => ({rom: 'AA==', map: {version: 1, sources: {}, entries: []}})});
+    await settle();
+    assert.equal(loaded, 0);
+    assert.equal(f.elements.get('emulator-overlay').style.display, 'none');
+    assert.deepEqual(f.alerts, []);
+});
+
+test('closing during a failed core load suppresses an obsolete error', async () => {
+    const f = bootstrapFixture();
+    f.editor.createEmulatorOverlay();
+    const run = f.editor.runEmulator();
+    await settle();
+    closeOverlay(f);
+    f.initialized.reject(new Error('late download failure'));
+    await run;
+    assert.deepEqual(f.alerts, []);
+    assert.deepEqual(f.requests, []);
+    assert.equal(f.editor.wasmLoaded, false);
+});
+
+test('reloading the same project during autosave invalidates its pending compile', async () => {
+    const save = deferred(), calls = [];
+    const f = domFixture(['code-editor'], {fetch: async url => { calls.push(url); return {ok: false}; }});
+    f.window.projectManager = {currentProject: 'game', saveCurrentProject: () => save.promise};
+    f.load('static/js/app.js'); f.document.events.get('DOMContentLoaded')[0]();
+    f.window.dispatchEvent(new f.Event('request-compile-and-run'));
+    f.window.dispatchEvent(new f.Event('project-loaded'));
+    save.resolve(true);
+    await settle();
+    assert.deepEqual(calls, []);
+    assert.deepEqual(f.alerts, []);
+});
+
 test('overlay reopening keeps one keyboard handler and both Shift keys hold Select', () => {
     const f = editorFixture();
     for (let i = 0; i < 3; i++) f.editor.createEmulatorOverlay();
@@ -155,6 +322,15 @@ test('project save failure aborts compile before issuing the compile API request
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(calls, ['/api/projects/old/files/main.swiss']);
     assert.ok(f.alerts.some(text => text.includes('Error saving file')));
+});
+
+test('project save retains actionable server validation errors for the owning project', async () => {
+    const message = "Scene 'Meadow' refers to missing music";
+    const f = projectFixture(async url => url.includes('/files/') ? {ok:true} : {ok:false,text:async()=>message});
+    assert.equal(await f.manager.saveCurrentProject(true),false);
+    assert.ok(f.alerts.some(text=>text.includes(message)));
+    assert.equal(f.manager.lastSaveError.project,'old');
+    assert.equal(f.manager.lastSaveError.message,message);
 });
 
 test('saving snapshots source/assets before a project switch during network IO', async () => {

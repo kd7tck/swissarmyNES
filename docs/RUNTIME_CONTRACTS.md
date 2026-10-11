@@ -46,6 +46,12 @@ Built-in PPU work precedes audio so active music/effects do not delay VRAM/scrol
 
 ## Frontend ownership
 
+Studio generates protected ordinary source from validated metadata; preview/tests compile an owned design/assets snapshot in the same production core and preserve custom main. Scene/entity/event schema, RAM/OAM limits, deferred entry/visit semantics and variable assertions are documented once in [Studio contracts](GAME_STUDIO.md). The bounded harness excludes custom-main/device/fidelity acceptance. [Checkpoint/evidence](IMPLEMENTATION_RESUME.md).
+
+First Run/music preview shares one WASM initialization. Constructor and memory exports publish together only after validation; failed initialization permits a later retry. Only the latest Run for the same source/project/file context may compile. Closing the emulator or reloading its project invalidates pending startup/compile results and suppresses obsolete errors. Static IDE assets use `Cache-Control: no-cache`, including conditional responses, so unversioned JS/WASM is revalidated on subsequent requests. The PPU debugger is layered above the emulator overlay.
+
+Full scaling fits the canvas into the remaining overlay height after the toolbar, including wrapped controls. The 1x and 2x modes retain intrinsic 256×240 and 512×480 content sizes. Full preserves the displayed image's aspect ratio and keeps Pause/Reset/Close within the viewport.
+
 Project saves serialize and retain source/assets/project identity for each request; failed saves abort compilation. A later edit or project switch invalidates pending compile responses. One keyboard binding owns an emulator session; keyboard and gamepad holds combine, and both Shift keys can hold Select independently. Pause/reset/reload cancels queued audio and rebases scheduling. Hidden/closed sessions release inputs. Source maps preserve file/bank identity and reject edited snapshots. PPU views validate lengths and recreate memory views after growth.
 
 The automated frontend harness verifies these workflows and graphics/SFX authoring round trips. Actual browser rendering, audible output, and physical controller observations require separately recorded evidence.

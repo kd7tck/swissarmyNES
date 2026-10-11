@@ -1,5 +1,21 @@
 target/
 .tools/
+# Compiled outputs and temporary archives never belong in source commits.
+*.exe
+*.dll
+*.pdb
+*.obj
+*.rlib
+*.rmeta
+*.so
+*.dylib
+*.wasm
+*.nes
+*.zip
+*.tmp
+*.bak
+/dist/
+/build/
 # Generated browser bindings and binaries are rebuilt from emulator/src.
 /static/wasm/
 # Pinned external test inputs: node scripts/fetch-test-fixtures.mjs

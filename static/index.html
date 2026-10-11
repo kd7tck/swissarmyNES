@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SwissArmyNES</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/game_studio.css">
     <link rel="stylesheet" href="/css/palette.css">
     <link rel="stylesheet" href="/css/chr.css">
     <link rel="stylesheet" href="/css/map.css">
@@ -49,6 +50,7 @@
             </div>
 
             <ul class="nav-links">
+                <li class="nav-item" data-target="studio"><a href="#studio">Game Studio</a></li>
                 <li class="nav-item active" data-target="code">
                     <a href="#code">Code</a>
                 </li>
@@ -76,6 +78,34 @@
             </ul>
         </aside>
         <main class="content">
+            <section id="studio" class="view">
+                <div class="studio-heading"><div><div class="studio-eyebrow">Design → Build → Play</div><h1>Game Studio</h1><p>Connect your scenes, art and audio. Build a playable flow, then add your own game systems.</p></div><strong id="studio-project">No project loaded</strong></div>
+                <div class="studio-card studio-controls"><label for="studio-new-name">New adventure project<input id="studio-new-name" value="my-adventure" maxlength="64"></label><button id="studio-create">Create playable starter</button><button id="studio-enable" hidden>Connect current project</button></div>
+                <div id="studio-status" role="status"></div>
+                <div id="studio-workspace" hidden>
+                    <div class="studio-controls"><button id="studio-save">Save design</button><button id="studio-run">Preview flow</button><button id="studio-test">Smoke test</button><button id="studio-code">Inspect generated code</button></div>
+                    <div id="studio-summary"></div>
+                    <div class="studio-layout">
+                        <div><div class="studio-card"><h2>Game design</h2><div class="studio-fields"><label class="studio-wide">Game title<input id="studio-title" maxlength="120"></label><label class="studio-wide">Core loop and design brief<textarea id="studio-brief" maxlength="4000"></textarea></label><label>Starting scene<select id="studio-start"></select></label><label>Player animation<select id="studio-animation"></select></label></div></div>
+                        <div class="studio-card" style="margin-top:16px"><div class="studio-controls"><h2>Scene graph</h2><button id="studio-add-scene">Add scene</button></div><div class="studio-scroll"><div id="studio-graph"></div></div><p class="studio-hint">Select a scene to assign its world map, player behavior and entry audio. Transitions run in their displayed order; the first matching trigger wins.</p></div></div>
+                        <div class="studio-card"><h2>Scene inspector</h2><div class="studio-fields"><label class="studio-wide">Scene name<input id="studio-scene-name" maxlength="28"></label><label class="studio-wide">World map<select id="studio-map"></select></label><label>Spawn X<input id="studio-x" type="number" min="0" max="240"></label><label>Spawn Y<input id="studio-y" type="number" min="0" max="224"></label><label class="studio-wide"><span><input id="studio-movement" type="checkbox"> Top-down movement with tile collision</span></label><label>Entry music<select id="studio-music"></select></label><label>Entry SFX<select id="studio-sfx"></select></label></div><h2 style="margin-top:20px">Transitions</h2><div id="studio-transitions"></div><div class="studio-controls"><button id="studio-add-transition">Add transition</button><button id="studio-remove-scene">Remove scene</button></div><p class="studio-hint">Timers count NES frames. Scene names support letters, digits, spaces and -_!?. Player preset uses a 16×16 hitbox; nonzero map tiles are solid.</p></div>
+                    </div>
+                    <div class="studio-layout studio-entities">
+                        <div class="studio-card"><div class="studio-controls"><h2>Scene placement</h2><button id="studio-place">Place entity</button></div><div class="studio-fields"><label>Entity to place<select id="studio-place-type"></select></label><label>Selected instance<select id="studio-instance"></select></label></div><div id="studio-placement" aria-label="Scene entity positions"></div><div class="studio-fields"><label>Instance X<input id="studio-instance-x" type="number" min="0" max="240"></label><label>Instance Y<input id="studio-instance-y" type="number" min="0" max="224"></label><label id="studio-door-field">Door destination<select id="studio-instance-target"></select></label><label id="studio-patrol-field">Patrol right endpoint<input id="studio-instance-end" type="number" min="1" max="240"></label></div><button id="studio-instance-remove">Remove instance</button><p id="studio-budget" class="studio-hint"></p><p class="studio-hint">Select a marker or choose an instance, then click the map to move it. Positions snap to 8 pixels; exact coordinates remain editable. Outlines show 16×16 hitboxes. Pickups count on contact; press A inside a door to enter. Pickups respawn when a room is entered. Patrols turn at walls and endpoints.</p></div>
+                        <div class="studio-card"><div class="studio-controls"><h2>Reusable entities</h2><button id="studio-entity-add">Add entity</button></div><div class="studio-fields"><label class="studio-wide">Definition<select id="studio-entity"></select></label><label class="studio-wide">Entity name<input id="studio-entity-name" maxlength="120"></label><label>Entity animation<select id="studio-entity-animation"></select></label><label>Behavior<select id="studio-entity-behavior"><option value="decoration">Decoration</option><option value="pickup">Pickup</option><option value="door">Door (press A)</option><option value="patrol">Horizontal patrol</option></select></label></div><button id="studio-entity-remove">Remove definition</button><p class="studio-hint">A definition supplies art and behavior to all its instances. Remove its instances before removing the definition. Art is edited in Sprites. Patrol is a moving object; enemy combat is a later system.</p></div>
+                    </div>
+                    <div class="studio-layout">
+                        <div class="studio-card"><div class="studio-controls"><h2>Game variables</h2><button id="studio-variable-add">Add variable</button></div><div id="studio-variables"></div><p class="studio-hint">Variables hold 0–65535 and persist between rooms. Initial values are restored by GameFlowStart. Names start with a letter and use letters, digits or underscores. Custom code can use gv_Name. Each variable uses two RAM bytes.</p></div>
+                        <div class="studio-card"><div class="studio-controls"><h2>Scene events</h2><button id="studio-events-add">Add event</button></div><div class="studio-fields"><label class="studio-wide">Ordered event<select id="studio-events-select"></select></label><label>Event name<input id="studio-event-name" maxlength="120"></label><label>Event scene<select id="studio-event-scene"></select></label><label>When<select id="studio-event-trigger"><option value="enter">On scene entry</option><option value="pressed">Button pressed</option><option value="held">Button held</option><option value="timer">After scene timer</option><option value="update">Every update</option></select></label><label id="studio-event-button-field">Event button<select id="studio-event-button"><option value="a">A</option><option value="b">B</option><option value="start">START</option><option value="select">SELECT</option><option value="up">UP</option><option value="down">DOWN</option><option value="left">LEFT</option><option value="right">RIGHT</option></select></label><label id="studio-event-timer-field">Event timer frames<input id="studio-event-frames" type="number" min="1" max="65535"></label><label><span><input id="studio-event-once" type="checkbox"> Once per scene visit</span></label></div><div class="studio-controls"><button id="studio-event-up">Move event earlier</button><button id="studio-event-down">Move event later</button><button id="studio-event-remove">Remove event</button></div><h2 style="margin-top:18px">All conditions must match</h2><div id="studio-event-conditions"></div><button id="studio-condition-add">Add condition</button><h2 style="margin-top:18px">Actions in order</h2><div id="studio-event-actions"></div><button id="studio-action-add">Add action</button><p class="studio-hint">Events run after scene transitions, movement and entity interactions. Matching events run in order; a scene change must be the final action and stops remaining events that update. Entry events run once on the next eligible update. Timer events default to once per visit; disable it to repeat after the threshold. Addition and subtraction clamp to 0–65535.</p></div>
+                    </div>
+                    <div class="studio-card studio-testing"><div class="studio-controls"><h2>Controller scenarios</h2><button id="studio-tests-add">Add test</button><button id="studio-tests-add-step">Add step</button><button id="studio-tests-remove">Remove test</button><button id="studio-tests-run">Run selected test</button></div>
+                        <div class="studio-fields"><label>Saved scenario<select id="studio-tests-select"></select></label><label>Scenario name<input id="studio-tests-name" maxlength="120"></label></div>
+                        <div id="studio-tests-steps"></div><pre id="studio-tests-result" aria-live="polite"></pre>
+                        <p class="studio-hint">Each run boots a fresh flow ROM for 10 frames, then holds the selected buttons for each step. Use a step with no buttons to release them. Assert a scene, X/Y position, pickup count, active entity count or game variables. Blank variable fields skip the assertion; 0 asserts zero. Total limit: 600 frames including boot. Your custom main.swiss is preserved.</p>
+                    </div>
+                    <p class="studio-hint">Your custom main.swiss stays editable. Flow preview and smoke tests use a separate harness. Include game_flow.swiss and call GameFlowStart / GameFlowUpdate to use the graph from your own code. Art, maps, animations, music and effects are edited in their existing workspaces.</p>
+                </div>
+            </section>
             <section id="code" class="view active">
                 <div class="toolbar">
                     <button id="btn-compile">Compile</button>
@@ -187,6 +217,10 @@
     <script src="/js/synth.js"></script>
     <script src="/js/sfx.js"></script>
     <script src="/js/envelopes.js"></script>
+    <script src="/js/studio_starter.js"></script>
+    <script src="/js/studio_entities.js"></script>
+    <script src="/js/studio_events.js"></script>
+    <script src="/js/game_studio.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

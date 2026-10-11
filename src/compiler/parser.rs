@@ -1063,6 +1063,11 @@ impl Parser {
                         self.advance();
                         "Tile".to_string()
                     }
+                    Token::Select => {
+                        // Button.Select shares a spelling with the SELECT statement keyword.
+                        self.advance();
+                        "Select".to_string()
+                    }
                     _ => {
                         return Err(format!(
                             "Line {}: Expected member name after '.'",

@@ -1,3 +1,4 @@
+use super::game_design::{GameDesign, FLOW_FILE};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -8,6 +9,8 @@ pub struct ProjectMetadata {
     pub name: String,
     pub created_at: u64, // Timestamp
     pub modified_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design: Option<GameDesign>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -181,14 +184,30 @@ pub fn list_projects() -> Result<Vec<String>, String> {
 }
 
 pub fn create_project(name: &str) -> Result<(), String> {
+    create_project_with_content(name, None, None, None)
+}
+
+pub fn create_project_with_content(
+    name: &str,
+    source: Option<&str>,
+    assets: Option<&ProjectAssets>,
+    design: Option<&GameDesign>,
+) -> Result<(), String> {
     validate_project_name(name)?;
+    if let Some(design) = design {
+        let assets = assets.ok_or("A Game Studio project needs its starter assets")?;
+        assets.validate_for_compile()?;
+        design.validate(assets)?;
+    }
 
     let project_path = Path::new(PROJECTS_DIR).join(name);
     if project_path.exists() {
         return Err("Project already exists".to_string());
     }
 
-    fs::create_dir_all(&project_path).map_err(|e| e.to_string())?;
+    fs::create_dir_all(PROJECTS_DIR).map_err(|e| e.to_string())?;
+    // Exclusive directory creation protects an existing project even under concurrent requests.
+    fs::create_dir(&project_path).map_err(|e| e.to_string())?;
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -199,13 +218,18 @@ pub fn create_project(name: &str) -> Result<(), String> {
         name: name.to_string(),
         created_at: now,
         modified_at: now,
+        design: design.cloned(),
     };
     let meta_json = serde_json::to_string_pretty(&metadata).map_err(|e| e.to_string())?;
     fs::write(project_path.join("project.json"), meta_json).map_err(|e| e.to_string())?;
 
     // Default source
     let default_source = "CONST BG_COLOR = $0F\n\nSUB Main()\n    ' Set Palette Address $3F00\n    POKE($2006, $3F)\n    POKE($2006, $00)\n    ' Write Color\n    POKE($2007, BG_COLOR)\nEND SUB";
-    fs::write(project_path.join("main.swiss"), default_source).map_err(|e| e.to_string())?;
+    fs::write(
+        project_path.join("main.swiss"),
+        source.unwrap_or(default_source),
+    )
+    .map_err(|e| e.to_string())?;
 
     // Default assets
     let default_assets = ProjectAssets {
@@ -221,7 +245,8 @@ pub fn create_project(name: &str) -> Result<(), String> {
         metasprites: vec![], // Start empty
         animations: vec![],  // Start empty
     };
-    let assets_json = serde_json::to_string_pretty(&default_assets).map_err(|e| e.to_string())?;
+    let assets_json = serde_json::to_string_pretty(assets.unwrap_or(&default_assets))
+        .map_err(|e| e.to_string())?;
     fs::write(project_path.join("assets.json"), assets_json).map_err(|e| e.to_string())?;
 
     Ok(())
@@ -266,11 +291,37 @@ pub fn save_project(
     source: Option<&str>,
     assets: Option<&ProjectAssets>,
 ) -> Result<(), String> {
+    save_project_with_design(name, source, assets, None)
+}
+
+pub fn save_project_with_design(
+    name: &str,
+    source: Option<&str>,
+    assets: Option<&ProjectAssets>,
+    design: Option<&GameDesign>,
+) -> Result<(), String> {
     validate_project_name(name)?;
 
     let project_path = Path::new(PROJECTS_DIR).join(name);
     if !project_path.exists() {
         return Err("Project not found".to_string());
+    }
+
+    let mut metadata = get_project(name)?.metadata;
+    if let Some(design) = design {
+        let existing = if assets.is_none() {
+            get_project(name)?.assets
+        } else {
+            None
+        };
+        let assets = assets
+            .or(existing.as_ref())
+            .ok_or("Game flow needs project assets")?;
+        design.validate(assets)?;
+        if metadata.design.is_none() && project_path.join(FLOW_FILE).exists() {
+            return Err("Rename your existing game_flow.swiss before enabling Game Studio; custom source was preserved".into());
+        }
+        metadata.design = Some(design.clone());
     }
 
     if let Some(src) = source {
@@ -283,17 +334,12 @@ pub fn save_project(
     }
 
     // Update modified time in metadata
-    let meta_path = project_path.join("project.json");
-    if let Ok(meta_content) = fs::read_to_string(&meta_path) {
-        if let Ok(mut metadata) = serde_json::from_str::<ProjectMetadata>(&meta_content) {
-            if let Ok(now) = SystemTime::now().duration_since(UNIX_EPOCH) {
-                metadata.modified_at = now.as_secs();
-                if let Ok(new_meta) = serde_json::to_string_pretty(&metadata) {
-                    let _ = fs::write(meta_path, new_meta);
-                }
-            }
-        }
-    }
+    metadata.modified_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+    let meta_json = serde_json::to_string_pretty(&metadata).map_err(|e| e.to_string())?;
+    fs::write(project_path.join("project.json"), meta_json).map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -322,6 +368,9 @@ pub fn list_files(project_name: &str) -> Result<Vec<String>, String> {
             }
         }
     }
+    if get_project(project_name)?.metadata.design.is_some() {
+        files.push(FLOW_FILE.to_string());
+    }
     files.sort();
     Ok(files)
 }
@@ -329,6 +378,12 @@ pub fn list_files(project_name: &str) -> Result<Vec<String>, String> {
 pub fn read_file(project_name: &str, file_name: &str) -> Result<String, String> {
     validate_project_name(project_name)?;
     validate_filename(file_name)?;
+    if file_name == FLOW_FILE {
+        let project = get_project(project_name)?;
+        if let Some(design) = project.metadata.design {
+            return design.source(project.assets.as_ref().ok_or("Game flow needs assets")?);
+        }
+    }
 
     let path = Path::new(PROJECTS_DIR).join(project_name).join(file_name);
     if !path.exists() {
@@ -340,6 +395,9 @@ pub fn read_file(project_name: &str, file_name: &str) -> Result<String, String> 
 pub fn write_file(project_name: &str, file_name: &str, content: &str) -> Result<(), String> {
     validate_project_name(project_name)?;
     validate_filename(file_name)?;
+    if file_name == FLOW_FILE && get_project(project_name)?.metadata.design.is_some() {
+        return Err("Generated game_flow.swiss is read-only; edit Game Studio or add custom code in another file".into());
+    }
 
     // Prevent overwriting system files via this API
     if file_name == "project.json" || file_name == "assets.json" {
@@ -358,6 +416,11 @@ pub fn write_file(project_name: &str, file_name: &str, content: &str) -> Result<
 pub fn delete_file(project_name: &str, file_name: &str) -> Result<(), String> {
     validate_project_name(project_name)?;
     validate_filename(file_name)?;
+    if file_name == FLOW_FILE && get_project(project_name)?.metadata.design.is_some() {
+        return Err(
+            "Generated game_flow.swiss cannot be deleted; it belongs to the scene graph".into(),
+        );
+    }
 
     if file_name == "main.swiss" {
         return Err("Cannot delete main entry point".to_string());
@@ -374,9 +437,11 @@ pub fn delete_file(project_name: &str, file_name: &str) -> Result<(), String> {
 }
 
 fn validate_project_name(name: &str) -> Result<(), String> {
-    if !name
-        .chars()
-        .all(|c| (c.is_ascii_lowercase() || c.is_ascii_digit()) || c == '_' || c == '-')
+    if name.is_empty()
+        || name.len() > 64
+        || !name
+            .chars()
+            .all(|c| (c.is_ascii_lowercase() || c.is_ascii_digit()) || c == '_' || c == '-')
     {
         return Err("Invalid project name: Only lowercase letters, numbers, underscores, and hyphens are allowed".to_string());
     }

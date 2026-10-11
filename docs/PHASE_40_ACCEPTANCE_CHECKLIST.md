@@ -1,8 +1,8 @@
 # Phase 40 acceptance worksheet
 
-Use with [the developer handoff](DEVELOPER_HANDOFF_THROUGH_PHASE_40.md) and [baseline audit](BASELINE_AUDIT.md).
+Use the [handoff](DEVELOPER_HANDOFF_THROUGH_PHASE_40.md) and [historical audit](BASELINE_AUDIT.md). Unchecked gates remain pending; checked entries record focused evidence only. For signoff attach implementation commit, command/result, fixture/evidence, platform and reviewer/date. Historical Completed labels and proposed tasks are insufficient.
 
-All items start pending. Historical roadmap completion labels do not check these boxes. For each item, add a completion commit/PR, automated command and result, fixture/evidence path, and reviewer/date. A proposed task is not an audit pass.
+October 11 checkpoint: 350 local tests and bounded [browser evidence](BROWSER_ACCEPTANCE_2026-10-10.md) cover current Studio/editor work. Cleanup and a local commit are authorized. Physical-controller/fidelity, current remote host-matrix and complete release acceptance remain pending; [resume](IMPLEMENTATION_RESUME.md) is authoritative.
 
 ## Foundation gates
 
@@ -96,10 +96,10 @@ All items start pending. Historical roadmap completion labels do not check these
 
 Implementation commit: **Pending**
 
-Core version / patch revision: **Pending**
+Core version / patch: TetaNES 0.12.2 plus patches/tetanes-core-0.12.2.patch; see [ownership](EMULATOR_ARCHITECTURE.md).
 
-Canonical ROM SHA-256 / log SHA-256 / records compared: **Pending**
+Canonical ROM/trace hashes and pinned revision: [fixture provenance](../emulator/tests/fixtures/PROVENANCE.md);8,991 native/generated-WASM records match.
 
-CI run and browser evidence: **Pending**
+CI/browser evidence: earlier PR162 host/WASM CI38065116804/38065320107; [October browser summary](BROWSER_ACCEPTANCE_2026-10-10.md). Current checkpoint remote matrix still pending.
 
 Reviewer / date: **Pending**

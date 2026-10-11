@@ -22,3 +22,8 @@ this patch does not imply unrestricted NES 2.0 board support.
 
 When editing the patch, regenerate the dependency, run the native cartridge and
 CPU regressions, rebuild WASM, and run `node --test tests/js/*.test.cjs`.
+
+[Setup/verifier](../README.md#verification) pins Rust 1.98.0 and wasm-bindgen
+0.2.106. Prepare the core only while Cargo is idle. An abandoned `.tools/core-prepare-*`
+directory can be removed after confirming the active `.tools/tetanes-core` is intact;
+do not delete the active dependency or installed build tools during temporary cleanup.

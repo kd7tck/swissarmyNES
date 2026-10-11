@@ -1,0 +1,49 @@
+#studio { gap: 18px; }
+.studio-heading { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; }
+.studio-heading h1 { margin:0; font-size:28px; }
+.studio-eyebrow { color:#5dd8cc; text-transform:uppercase; letter-spacing:2px; font-size:11px; }
+.studio-heading p, .studio-hint { color:#9ca9b8; margin:8px 0; line-height:1.5; }
+.studio-card { padding:18px; border:1px solid #354357; border-radius:10px; background:#222a36; }
+.studio-card h2 { margin:0 0 12px; font-size:17px; }
+.studio-controls { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.studio-controls button { border-radius:6px; }
+#studio label { display:flex; flex-direction:column; gap:6px; color:#bfcedf; font-size:13px; }
+#studio input:not([type=checkbox]), #studio select, #studio textarea { padding:9px; background:#151b24; border:1px solid #445267; border-radius:5px; color:#ecf3ff; font:inherit; box-sizing:border-box; min-width:0; }
+#studio textarea { min-height:80px; resize:vertical; }
+.studio-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.studio-fields .studio-wide { grid-column:1/-1; }
+.studio-layout { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(280px,1fr); gap:16px; margin-top:16px; align-items:start; }
+.studio-scroll { overflow:auto; border:1px solid #344358; border-radius:8px; background:#151c27; margin:14px 0; }
+#studio-graph { position:relative; }
+.studio-connections { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.studio-connections path { stroke:#60b9d9; stroke-width:2; fill:none; }
+.studio-scene { position:absolute; width:210px; min-height:98px; white-space:pre-line; text-align:left; line-height:1.7; background:#263951; border:1px solid #577ca8; border-radius:9px; }
+.studio-scene[data-selected=true] { background:#164956; border-color:#74e4d0; }
+.studio-transition { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:10px; }
+.studio-transition select { flex:1; }
+.studio-transition input { width:110px; }
+.studio-transition button { background:#53313b; }
+#studio-status { padding:12px 16px; border-radius:7px; background:#183c38; color:#c5f5e7; line-height:1.5; }
+#studio-status[data-error=true] { background:#4a2830; color:#ffd1d1; }
+#studio-summary { color:#a8cbdd; margin:14px 0; }
+.studio-testing { margin-top:18px; }
+.studio-entities { grid-template-columns:minmax(320px,1.5fr) minmax(280px,1fr); }
+#studio-placement { position:relative; aspect-ratio:256/240; width:100%; max-width:512px; margin:16px auto; background:#121923; cursor:crosshair; }
+#studio-placement canvas { width:100%; height:100%; image-rendering:pixelated; display:block; }
+#studio .studio-instance, .studio-spawn { position:absolute; width:6.25%; height:6.6667%; padding:0; box-sizing:border-box; border:2px solid #8dbae0; background:#19395f66; color:white; font-size:11px; border-radius:2px; text-align:center; }
+#studio .studio-instance[data-behavior=pickup] { border-color:#f5d45b; }
+#studio .studio-instance[data-behavior=door] { border-color:#c59cff; }
+#studio .studio-instance[data-behavior=patrol] { border-color:#f99385; }
+#studio .studio-instance[data-selected=true] { outline:2px solid #62ffcf; z-index:2; }
+.studio-spawn { border-color:#62ffcf; background:#235b3966; pointer-events:none; }
+#studio-budget[data-error=true] { color:#ffabb4; }
+.studio-test-step { border-top:1px solid #3d4a5d; margin-top:14px; padding-top:14px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+.studio-rule-row { display:flex; flex-wrap:wrap; align-items:end; gap:8px; margin:12px 0; padding-top:12px; border-top:1px solid #3d4a5d; }
+.studio-rule-row label { flex:1; min-width:100px; }
+.studio-rule-row input { width:100%; }
+.studio-test-buttons { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:14px; }
+#studio .studio-test-buttons label { display:inline-flex; flex-direction:row; align-items:center; }
+#studio-tests-result { white-space:pre-wrap; color:#a3f0ce; line-height:1.6; }
+#studio-tests-result[data-error=true] { color:#ffabb4; }
+#studio [hidden] { display:none !important; }
+@media(max-width:1100px) { .studio-layout { grid-template-columns:1fr; } }

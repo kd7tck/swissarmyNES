@@ -16,6 +16,8 @@ class SwissEditor {
         this.volume = 0.5;
         this.scale = 2; // 1, 2, or 3 (Full)
         this.wasmLoaded = false;
+        this.wasmLoadPromise = null;
+        this.runRevision = 0;
         this.wasmMemory = null;
         this.frameCount = 0;
         this.frameRequest = null;
@@ -57,13 +59,14 @@ class SwissEditor {
         if (!this.editor) return;
 
         // Bind events
-        this.editor.addEventListener('input', () => { this.update(); this.syncBreakpoints(); this.clearDebugHighlight(); this.hideAddressTooltip(); });
+        this.editor.addEventListener('input', () => { this.invalidatePendingRun(); this.update(); this.syncBreakpoints(); this.clearDebugHighlight(); this.hideAddressTooltip(); });
         this.editor.addEventListener('scroll', () => this.syncScroll());
         this.editor.addEventListener('keydown', (e) => this.handleKey(e));
         // Global input handlers belong to the editor, not each reopening of the overlay.
         document.addEventListener('keydown', (e) => this.handleEmulatorInput(e, true));
         document.addEventListener('keyup', (e) => this.handleEmulatorInput(e, false));
         window.addEventListener('project-loaded', () => {
+            this.invalidatePendingRun();
             this.sourceMap = { version: 1, sources: {}, entries: [] };
             this.breakpoints.clear();
             this.breakpointFiles.clear();
@@ -73,6 +76,7 @@ class SwissEditor {
             this.update();
         });
         window.addEventListener('blur', () => this.releaseInputs());
+        window.addEventListener('game-design-changed', () => this.invalidatePendingRun());
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 this.releaseInputs();
@@ -169,6 +173,7 @@ class SwissEditor {
     }
 
     handleKey(e) {
+        if (this.editor.readOnly) return;
         if (e.key === 'Tab') {
             e.preventDefault();
             const start = this.editor.selectionStart;
@@ -302,35 +307,78 @@ class SwissEditor {
             .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
-    async runEmulator(options = {}) {
-        console.log("Starting emulator...");
-        if (!this.wasmLoaded) {
-            try {
-                const module = await import('/wasm/swiss_emulator.js');
+    importEmulatorModule() {
+        return import('/wasm/swiss_emulator.js');
+    }
+
+    ensureEmulatorCore() {
+        if (this.wasmLoaded) return Promise.resolve();
+        if (!this.wasmLoadPromise) {
+            // wasm-bindgen initialization must finish once before any ROM owns its memory.
+            this.wasmLoadPromise = (async () => {
+                const module = await this.importEmulatorModule();
                 const initResult = await module.default();
-                this.EmulatorClass = module.Emulator;
-
-                if (initResult && initResult.memory) {
-                    this.wasmMemory = initResult.memory;
-                } else if (module.memory) {
-                    this.wasmMemory = module.memory;
-                } else if (window.wasm_bindgen && window.wasm_bindgen.memory) {
-                    this.wasmMemory = window.wasm_bindgen.memory;
+                const memory = initResult?.memory || module.memory || window.wasm_bindgen?.memory;
+                if (typeof module.Emulator !== 'function' || !memory?.buffer) {
+                    throw new Error('Emulator core is missing its constructor or memory export.');
                 }
-
+                // Publish the constructor and memory together only after validation succeeds.
+                this.EmulatorClass = module.Emulator;
+                this.wasmMemory = memory;
+                window.wasmMemory = memory;
                 this.wasmLoaded = true;
-                // Expose globally for ppu viewer
-                window.wasmMemory = this.wasmMemory;
-            } catch (e) {
+            })().finally(() => { this.wasmLoadPromise = null; });
+        }
+        return this.wasmLoadPromise;
+    }
+
+    invalidatePendingRun() {
+        this.runRevision++;
+        // app.js also discards compile responses when a session is superseded or closed.
+        window.dispatchEvent(new CustomEvent('emulator-run-invalidated'));
+    }
+
+    async runEmulator(options = {}) {
+        this.invalidatePendingRun();
+        const revision = this.runRevision;
+        const manager = window.projectManager;
+        const project = manager?.currentProject;
+        const file = manager?.currentFile;
+        const loadRevision = manager?.loadRevision;
+        const fileLoadRevision = manager?.fileLoadRevision;
+        const source = this.editor.value;
+        const current = () => revision === this.runRevision && manager === window.projectManager &&
+            project === manager?.currentProject && file === manager?.currentFile &&
+            loadRevision === manager?.loadRevision && fileLoadRevision === manager?.fileLoadRevision &&
+            source === this.editor.value;
+        console.log("Starting emulator...");
+        try {
+            await this.ensureEmulatorCore();
+        } catch (e) {
+            if (current()) {
                 console.error("Failed to load WASM:", e);
                 alert("Failed to load emulator core.");
-                return;
             }
+            return;
         }
+        if (!current()) return;
 
         // Request compilation from app.js
         const event = new CustomEvent('request-compile-and-run', {detail: options});
         window.dispatchEvent(event);
+    }
+
+    closeEmulator() {
+        this.invalidatePendingRun();
+        this.emulatorRunning = false;
+        this.cancelFrame();
+        this.releaseInputs();
+        this.stopAudio();
+        const overlay = document.getElementById('emulator-overlay');
+        if (overlay) overlay.style.display = 'none';
+        this.suspendAudio();
+        this.clearDebugHighlight();
+        if (this.ppuViewer.hide) this.ppuViewer.hide();
     }
 
     startEmulatorWithRom(romData, sourceMap) {
@@ -386,7 +434,8 @@ class SwissEditor {
             Object.assign(overlay.style, {
                 position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
                 backgroundColor: 'rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column',
-                justifyContent: 'center', alignItems: 'center', zIndex: '1000'
+                justifyContent: 'center', alignItems: 'center', zIndex: '1000',
+                padding: '12px', boxSizing: 'border-box'
             });
 
             // Toolbar
@@ -394,6 +443,11 @@ class SwissEditor {
             toolbar.style.marginBottom = '10px';
             toolbar.style.display = 'flex';
             toolbar.style.gap = '10px';
+            toolbar.style.flexShrink = '0';
+            toolbar.style.flexWrap = 'wrap';
+            toolbar.style.justifyContent = 'center';
+            toolbar.style.maxWidth = '100%';
+            toolbar.style.boxSizing = 'border-box';
             toolbar.style.backgroundColor = '#333';
             toolbar.style.padding = '10px';
             toolbar.style.borderRadius = '5px';
@@ -443,24 +497,18 @@ class SwissEditor {
             const btnClose = document.createElement('button');
             btnClose.innerText = 'Close';
             btnClose.style.backgroundColor = '#d9534f';
-            btnClose.onclick = () => {
-                this.emulatorRunning = false;
-                this.cancelFrame();
-                this.releaseInputs();
-                this.stopAudio();
-                overlay.style.display = 'none';
-                this.suspendAudio();
-                this.clearDebugHighlight();
-                if(this.ppuViewer.hide) this.ppuViewer.hide();
-            };
+            btnClose.onclick = () => this.closeEmulator();
 
             toolbar.append(btnPlay, btnReset, btn1x, btn2x, btnFull, btnMem, btnPpu, volContainer, btnClose);
             overlay.appendChild(toolbar);
 
             const mainArea = document.createElement('div');
+            mainArea.id = 'emulator-main-area';
             mainArea.style.display = 'flex';
             mainArea.style.gap = '20px';
             mainArea.style.alignItems = 'flex-start';
+            mainArea.style.minHeight = '0';
+            mainArea.style.maxWidth = '100%';
 
             const canvas = document.createElement('canvas');
             canvas.id = 'emulator-canvas';
@@ -468,6 +516,8 @@ class SwissEditor {
             canvas.height = 240;
             canvas.style.imageRendering = 'pixelated';
             canvas.style.border = '2px solid #fff';
+            canvas.style.minWidth = '0';
+            canvas.style.minHeight = '0';
 
             // Memory Viewer Container
             const memViewer = document.createElement('div');
@@ -626,13 +676,21 @@ class SwissEditor {
     setScale(s) {
         this.scale = s;
         if (!this.canvas) return;
+        const mainArea = document.getElementById('emulator-main-area');
+        if (mainArea) {
+            // Full uses the remaining flex height after the toolbar, including wrapped controls.
+            mainArea.style.flex = s === 0 ? '1 1 0' : '0 1 auto';
+            mainArea.style.width = s === 0 ? '100%' : 'auto';
+        }
         if (s === 0) {
-            this.canvas.style.width = '100vw';
-            this.canvas.style.height = '100vh';
+            this.canvas.style.width = '100%';
+            this.canvas.style.height = '100%';
+            this.canvas.style.boxSizing = 'border-box';
             this.canvas.style.objectFit = 'contain';
         } else {
             this.canvas.style.width = (256 * s) + 'px';
             this.canvas.style.height = (240 * s) + 'px';
+            this.canvas.style.boxSizing = 'content-box';
             this.canvas.style.objectFit = 'unset';
         }
     }

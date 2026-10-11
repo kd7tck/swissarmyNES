@@ -1,4 +1,5 @@
 # Emulator ownership and cartridge boundary
+October 11 checkpoint: Studio flow/entity/event tests execute an owned design/assets snapshot in a blocking worker through this production core. The isolated harness preserves custom source. [Current evidence](IMPLEMENTATION_RESUME.md) · [Studio contracts](GAME_STUDIO.md). Cleanup/local commit is authorized; publishing/complete phase acceptance remain separate.
 
 SwissArmyNES executes tetanes-core 0.12.2 in both native tests and the WASM build. The compiler targets mapper 1 with eight 16 KiB PRG banks. The dependency is reconstructed by scripts/prepare-core.mjs from the checksum-pinned 0.12.2 archive plus patches/tetanes-core-0.12.2.patch, and Cargo.lock resolves its ignored local directory. Native and WASM use the same corrected CPU/core; do not introduce a separate CPU solely for validation.
 
@@ -23,12 +24,9 @@ This is not complete architecture acceptance. In particular:
 
 Do not mark phase 39 or 40 complete based on the focused cartridge and debugger tests.
 
-
 Compiler mapper writes: generated PRG switching uses 07F0 as desired bank and 07F2 as interrupt retry flag. Each attempt resets the serial register and writes all five PRG bits. NMI/IRQ epilogues flag interrupted attempts for retry; wrappers preserve 07F1 return scratch. This protocol assumes fixed-upper-bank mode and generated writes. Arbitrary inline assembly writes need separate coordination.
 
-
 Dynamic interrupt binding uses one-byte selectors at 07F8 (NMI) and 07F9 (IRQ). Zero keeps the startup pointer. Nonzero indexes resolve immutable fixed-bank low/high ROM address tables; banked SUB handlers use generated trampolines. ON accepts zero-argument routines and publishes its selector in one store, avoiding torn pointers when interrupted or when rebinding from a handler.
-
 
 Interrupt temporary storage comprises 00-0F, 14-17 and F0-F7, saved directly on the stack, plus 07F1 and CPU registers. Persistent controller/text/sprite/scroll/RNG state is not rolled back. Idle audio channels are skipped. Idle NMI including DMA measures 1136 CPU cycles. Under three looping tonal effects plus DMC, built-in PPU writes finish at 964–1324 cycles, before the 2273-cycle NTSC vblank deadline; full handler completion is 4294–5204 cycles, within a frame. User handlers must budget their own PPU work. Runtime reachability pruning retains called helpers while freeing fixed-bank capacity.
 

@@ -1,64 +1,37 @@
 # SwissArmyNES: developer handoff through phase 40
 
-Prepared against commit `4610516840d7991bce7e1d879e1f4e2fa831f10e` (2026-09-12), retrieved from <https://github.com/kd7tck/swissarmyNES>. Audit performed September 12–13, 2026. This is an execution plan, not a claim that the listed repairs or phases have been completed.
+**October11 checkpoint:** use [resume](IMPLEMENTATION_RESUME.md) for current source/evidence and [runtime contracts](RUNTIME_CONTRACTS.md) for implemented behavior. Local cleanup/documentation/commit is authorized; no push requested. This handoff is a requirements/acceptance reference, not a list of missing features. Inspect existing implementation before applying each repair.
 
-**Outcome:** a developer can clone the project, build both Rust and browser artifacts, create/save/compile/run a game, use all phase 1–38 features, inspect cartridges and bus behavior, and demonstrate phase 40 CPU accuracy with a reproducible canonical nestest comparison.
-
-**First task:** repair the production compilation path. At the audited commit, workspace tests pass while `POST /api/compile` returns HTTP 400 for even an empty `Main`. Do not start by implementing another CPU.
+Historical audit: commit4610516840d7991bce7e1d879e1f4e2fa831f10e, September12–13,2026. Production compilation, shared native/WASM integration and many runtime/core repairs subsequently landed. [Baseline audit](BASELINE_AUDIT.md) retains exact failures. The original expanded handoff is available in Git at178f1de:docs/DEVELOPER_HANDOFF_THROUGH_PHASE_40.md. The numbered foundation/per-phase walkthroughs below are preserved in full.
 
 ## Contents
 
-1. [Scope and operating rules](#1-scope-and-operating-rules)
-2. [Verified baseline and implementation map](#2-verified-baseline-and-implementation-map)
-3. [Execution order and prerequisites](#3-execution-order-and-prerequisites)
-4. [Repair the shared foundation](#4-repair-the-shared-foundation)
-5. [Close phases 1–10](#5-close-phases-110-language-and-project-foundations)
-6. [Close phases 11–20](#6-close-phases-1120-game-runtime)
-7. [Close phases 21–30, including 25a–25d](#7-close-phases-2130-audio-and-visual-authoring)
-8. [Close phases 31–38](#8-close-phases-3138-browser-emulator-and-debugging)
-9. [Implement and prove phase 39](#9-phase-39-repository-ingestion-and-buscartridge-architecture)
-10. [Implement and prove phase 40](#10-phase-40-ricoh-2a03-cpu-hardening)
-11. [Release acceptance and handover](#11-release-acceptance-and-handover)
+1. [Scope](#1-scope-and-operating-rules)
+2. [Implementation map](#2-verified-baseline-and-implementation-map)
+3. [Execution order](#3-execution-order-and-prerequisites)
+4. [Shared foundation](#4-repair-the-shared-foundation)
+5. [Phases1–10](#5-close-phases-110-language-and-project-foundations)
+6. [Phases11–20](#6-close-phases-1120-game-runtime)
+7. [Phases21–30/25a–d](#7-close-phases-2130-audio-and-visual-authoring)
+8. [Phases31–38](#8-close-phases-3138-browser-emulator-and-debugging)
+9. [Phase39](#9-phase-39-repository-ingestion-and-buscartridge-architecture)
+10. [Phase40](#10-phase-40-ricoh-2a03-cpu-hardening)
+11. [Release/handover](#11-release-acceptance-and-handover)
 12. [References](#12-references)
-
-Companion files: `docs/BASELINE_AUDIT.md` records evidence and limitations; `docs/PHASE_40_ACCEPTANCE_CHECKLIST.md` is the sign-off worksheet. Paths in this document are relative to the repository root unless explicitly described as dependency paths. Names marked **new** are proposed files or APIs to implement; they do not exist at the audit baseline.
 
 ## 1. Scope and operating rules
 
-1. Read `AGENTS.md`, then `DESIGN.md`, then this handoff. Use current `DESIGN.md` phase numbering. Phase 39 is **Repository Ingestion & Bus/Cartridge Architecture**; phase 40 is **Ricoh 2A03 CPU Core Hardening**. The old Brain instruction “Start Phase 39: Mappers - MMC1” is stale.
-2. Treat a “Completed” heading as historical status. Retain working implementation; repair or add only what its completion criteria and the concrete gaps below require. A compiler test that searches assembly text does not establish runtime correctness.
-3. Keep Rust/Axum and the plain HTML/CSS/JavaScript frontend. Preserve Windows, macOS, Linux, and browser compatibility. Do not introduce egui, imgui, cpal, Tauri, or a frontend framework in this assignment; those are outside the requested phase boundary.
-4. Use the existing TetaNES core as the starting architecture. Audit, expose, test, and patch it where necessary. `emulator/src/lib.rs` is a wrapper, not an in-repository CPU implementation. Dependencies can satisfy behavior, but their presence alone cannot satisfy phase acceptance.
-5. Record the architecture in **new** `docs/architecture/emulator-core.md`: version, ownership of CPU/bus/mapper/cartridge state, extension points, and upstream patch strategy. If an actual core replacement is proposed, obtain a separate architecture decision before doing it; the default plan below does not require a replacement.
-6. Phase 39's named `Mapper` abstraction must connect to execution. A trait that is only exercised by a mock while the browser uses unrelated behavior is not completion. Section 9 specifies how to handle the mismatch with TetaNES's existing mapper interfaces.
-7. Preserve the existing compiler's mapper-1 output while restoring it. NROM support for test fixtures is a phase 39 prerequisite; a new compiler mapper-selection feature is not required. Do not silently change all generated games to mapper 0 to make nestest easier.
-8. Do not broaden into phases 41–47. Preserve existing PPU/APU/mapper behavior inherited from TetaNES because phases 31–38 depend on it. New general MMC3 support, new PPU/APU implementations, save states, rewind, desktop packaging, and asset libraries are outside this handoff.
-9. For each task, make a focused commit or PR with the failing reproduction, implementation, relevant automated tests, and manual evidence if applicable. Fix the assertion's underlying requirement; do not weaken tests or change a golden trace to match broken behavior.
-10. Update the README, DESIGN status, and AGENTS Brain when a milestone actually passes. Preserve existing comments unless incorrect; correct stale comments around ROM size, memory ownership, generated artifacts, and roadmap numbering.
+- Read AGENTS/DESIGN/current resume first. Historical Completed headings are not acceptance. This reference covers phases1–40; later Studio expansion/ROM import follows its separate user-approved roadmap.
+- Keep Rust/Axum, vanilla frontend and the existing TetaNES core. Dependency ownership is in [emulator architecture](EMULATOR_ARCHITECTURE.md); do not create a second CPU or replace the core to satisfy a fixture.
+- Preserve compiler MMC1 output (8×16KiB PRG/8KiB CHR), source, assets and existing working behavior. NROM fixtures do not justify changing generated games to mapper0.
+- Make named mapper operations reach actual production CPU/PPU routing, not a mock-only abstraction. Paths are repository-relative; proposed files/API names in historical steps may differ from the maintained implementation.
+- Add reproducing tests before repairs; never weaken assertions/golden traces. Record commands, commit, platform, fixture/provenance, results and manual evidence in the [worksheet](PHASE_40_ACCEPTANCE_CHECKLIST.md). Timeouts fail; boot success alone is insufficient.
+- UI evidence must cover create/edit/save/reload/compile/run. Source maps must preserve file/bank identity; emulator observations must not mutate guest state. Hardware/audio fidelity needs separate device evidence.
+- Deliver only source/build inputs, tests, docs and notices. Generated files stay ignored. Commit/push only within current user authorization.
 
 ## 2. Verified baseline and implementation map
 
-### 2.1 What was observed
-
-| Item | Audit result | Consequence |
-|---|---|---|
-| Repository | Clean clone of the commit above | Recheck HEAD before implementing this plan |
-| Rust environment | rustc 1.98.0, Cargo 1.98.0, Windows MSVC target | Other platforms and WASM still need CI proof |
-| Workspace tests | `cargo test --workspace --all-targets --locked` passed | Existing coverage does not prove browser compilation |
-| Emulator tests | `swiss-emulator` ran **zero tests** | Add tests around the actual emulator integration |
-| Formatting | `cargo fmt --all -- --check` passed | Keep this gate |
-| Strict Clippy | `cargo clippy --workspace --all-targets --locked -- -D warnings` passed | Native quality gate, not end-to-end acceptance |
-| Production compile | Three direct API probes returned HTTP 400 assembler errors | Release blocker; see R02 |
-| Source map | Rust pairs `(line,address)`; hover/breakpoints expect triples `(line,bank,address)`; active-line lookup still expects pairs | One versioned contract must replace the conflicting formats |
-| Runtime generation | `generate_banks` omits helpers emitted by `generate` | Test and use the production path consistently |
-| Bank state | `current_prg_bank` appears in generated instructions but no definition was found; debugger reads `$07F0` | Define/reserve compiler state and use mapper-derived debugger identity |
-| ROM output | Assembler unconditionally emits 128 KiB PRG, 8 KiB CHR, mapper 1 | Existing tests have stale 40 KiB comments; protect mapper-1 compatibility |
-| Project world assets | API injects only `nametables.first()`; world contains indices | Multiple screens are not yet proven to survive compile/runtime |
-| WASM distribution | JS, declarations, and two `.wasm` files tracked under `static/wasm`; native Linux `emulator/wasm-pack` also tracked | Establish portable, reproducible artifact generation |
-| Dependency cartridge parser | TetaNES 0.12.2 rejects trainers; inspected NES 2.0 path combines ROM size nibbles as bank counts | Close format gaps explicitly instead of assuming full NES 2.0 coverage |
-| PPU palettes | Core writes a 16×2 RGBA palette image; wrapper exposes 4 KiB and UI treats it as one long row | Replace guessed buffer dimensions with a documented contract |
-
-See the companion audit for exact API errors and the scope of verification. Source-derived risks in this plan require a reproducing test before being reported as a runtime failure.
+[September baseline observations](BASELINE_AUDIT.md) and [current implementation status](IMPLEMENTATION_PROGRESS.md) separate historical failures from repairs. Assembly-string unit tests do not substitute for API-produced ROM execution. The current host/WASM checks and supported limits are linked from resume/contracts.
 
 ### 2.2 Where to work
 
@@ -81,8 +54,6 @@ Dependency source paths below mean the downloaded `tetanes-core-0.12.2/src/` dir
 
 ## 3. Execution order and prerequisites
 
-### 3.1 Milestones and dependencies
-
 | Order | Work package | Must be complete first | Exit evidence |
 |---|---|---|---|
 | M0 | Capture baseline and reconcile docs | Clone | Reproduction commands and status inventory |
@@ -95,47 +66,9 @@ Dependency source paths below mean the downloaded `tetanes-core-0.12.2/src/` dir
 | M7 | Phase 40 CPU contract and nestest validation | M6 | Full pinned trace and supplemental CPU tests pass |
 | M8 | Clean-checkout release acceptance and documentation | M7 | Completed sign-off worksheet and reproducible artifacts |
 
-Build a small headless harness in M1 around the existing core so earlier phases can be executed. M7 strengthens that harness and establishes CPU correctness; it does not require waiting until M7 to run games. Repeat affected compiler runtime tests after CPU repairs.
+Use a headless production-core harness early; later CPU hardening strengthens it and reruns affected game/compiler fixtures. Follow [README setup and verification](../README.md#setup): Rust1.98.0, Node22+, pinned core preparation and wasm-bindgen0.2.106. Do not use the historical tracked Linux wasm-pack executable or stale0.13.1 recipe. Inspect local changes before fetching/pulling; never discard another developer's work.
 
-### 3.2 Initial setup commands
-
-Run from a terminal with Git, Rust stable, and the platform's Rust linker/toolchain available. On Windows use the MSVC C++ build tools. Use an installed host-native wasm-pack; do not execute the checked-in Linux binary on Windows/macOS.
-
-```text
-git clone https://github.com/kd7tck/swissarmyNES.git
-cd swissarmyNES
-git status --short
-git rev-parse HEAD
-rustc --version
-cargo --version
-cargo fetch --locked
-cargo test --workspace --all-targets --locked
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-rustup target add wasm32-unknown-unknown
-```
-
-For an existing checkout, inspect local changes first, then `git fetch origin` and `git pull --ff-only` on its intended branch. Never discard a developer's changes to reproduce this baseline. If HEAD differs, compare the relevant files and update this handoff's findings before acting on them.
-
-Initial WASM build recipe, to verify and then codify in R01:
-
-```text
-cargo install wasm-pack --version 0.13.1 --locked
-cargo check -p swiss-emulator --target wasm32-unknown-unknown --locked
-wasm-pack build emulator --target web --out-dir ../static/wasm --out-name swiss_emulator
-cargo run --locked
-```
-
-Open `http://127.0.0.1:3000`. Version 0.13.1 is the version recorded by the repository stamp, not a recommendation to float to the newest tool. Verify compatibility with the lockfile and select/pin a replacement only if this version cannot reproduce the build. Ensure the WASM build honors Cargo.lock; inspect the installed wasm-pack's argument support and document its locked-build option or use a locked Cargo build plus the matching wasm-bindgen CLI. Regeneration can change tracked artifacts; inspect that diff.
-
-### 3.3 Evidence standard for every phase
-
-1. Give each acceptance program an identifier, source/asset fixture, deterministic expected result, and maximum frames/instructions. A timeout is a failure, not a skip.
-2. Call `compile_source` for integration tests and cover `POST /api/compile` separately. Keep lexer/codegen unit tests as smaller diagnostic tests.
-3. Load the produced ROM in the same emulator backend used by the browser. Run to a known marker, frame count, or breakpoint. Read results without modifying emulated state.
-4. For a UI feature, record create → edit → save → reload → compile → run. Check both data persistence and the produced game. A screenshot of the editor alone is insufficient.
-5. Record automated command, result, platform, commit, and evidence location in the acceptance worksheet. For hardware input/audio tests, identify the browser/device used.
-6. Mark a phase complete only when every required item passes; record any optional enhancement separately. Do not use a blanket “1–38 complete” without the per-phase evidence.
+For each phase: inspect the listed implementation/tests, execute its production fixture with bounded frames/instructions, compare real RAM/pixels/audio/state, and attach evidence. Preserve working APIs; satisfy an equivalent maintained contract when an old proposed file name differs. Phase signoff requires every mandatory criterion and the final host/browser/device gates.
 
 ## 4. Repair the shared foundation
 
@@ -980,49 +913,15 @@ Use multiple small linked fixtures if the entire demonstration exceeds the compi
 
 ### 11.2 Required final checks
 
-```text
-cargo check --workspace --all-targets --locked
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --all-targets --locked
-cargo check -p swiss-emulator --target wasm32-unknown-unknown --locked
-git diff --check
-```
-
-Also run the pinned WASM artifact generation, browser automation command, canonical comparison, and host CI matrix. Publish the exact browser command after R01 establishes its harness; do not leave placeholders in the final developer README.
+Run the [portable verifier](../README.md#verification), production canonical trace tests, actual browser walkthrough and Windows/macOS/Linux/WASM CI against the same implementation. The verifier covers formatting, native tests, strict Clippy, WASM generation and JS tests. Also run cargo check --workspace --all-targets --locked and git diff --check. A configured CI matrix is not proof of a completed run.
 
 ### 11.3 Required handover files and sign-off
 
-1. Updated `README.md` with clean setup, run/test commands, WASM packaging, example usage, and actual supported limits.
-2. Updated `DESIGN.md` marking only proven phases complete; explain the addressing-mode counting convention without changing the phase's intended CPU coverage.
-3. Updated `AGENTS.md` Brain with actual architecture, memory map, known limitations, test commands, and phase 41 as the next roadmap phase only when this acceptance is complete.
-4. Architecture record, mapper contract, cartridge format support matrix, CPU opcode coverage table, and fixture provenance/hashes.
-5. A completed `docs/PHASE_40_ACCEPTANCE_CHECKLIST.md` with commit/test/evidence links for every phase and 25 subphase.
-6. CI artifacts containing test results, screenshots/audio evidence where applicable, canonical comparison report, and built browser assets tied to a commit.
-7. A short release note listing user-visible repairs, schema migrations, compatibility limits, and any later-phase backlog. Do not leave missing required phase functionality in that backlog while marking it complete.
+Provide README/setup, DESIGN/current status, AGENTS/recovery state, architecture/runtime/schema/coverage/fixture notices, completed worksheet, commit-bound CI/browser/device evidence and release notes with supported limits. Only advance the next roadmap phase after all required gates pass; unimplemented mandatory features cannot be relabeled as optional backlog.
 
-### 11.4 Suggested review-sized delivery sequence
+### 11.4 Review-sized delivery
 
-| PR | Deliverable | Review gate |
-|---|---|---|
-| 1 | Baseline documentation, workspace/native/WASM CI | Failures and package coverage reproducible |
-| 2 | API compile regression and runtime path repair | Minimal and feature-specific API fixtures boot |
-| 3 | Bank/RAM placement, startup, cross-bank correctness | Boundary and reset/call fixtures pass |
-| 4 | Source-map schema and provenance | Byte-accurate file/bank/range tests pass |
-| 5 | Native/runtime and browser harnesses | Deterministic tests exercise production code |
-| 6 | Language phase 1–10 repairs and acceptance | All ten phase evidence rows complete |
-| 7 | Game-runtime phase 11–20 repairs and acceptance | Input/render/gameplay evidence complete |
-| 8 | Audio phase 21–25d repairs | Audio schema and playback round-trips pass |
-| 9 | Visual phase 26–30 repairs | World map bytes and animations work in ROM |
-| 10 | WASM lifecycle/input/pacing, phases 31–34 | Fresh browser build and lifecycle tests pass |
-| 11 | Breakpoints/memory/PPU views, phases 35–38 | Correct debug identity and buffer tests pass |
-| 12 | Phase 39 cartridge metadata/parser | Format and malformed-input fixtures pass |
-| 13 | Phase 39 mapper/bus integration | Actual core uses tested abstraction |
-| 14 | Phase 40 native trace and pinned fixtures | Runner/parser failure tests pass |
-| 15 | CPU coverage, timing/interrupt/unofficial repairs | Full nestest plus supplemental tests pass |
-| 16 | Clean-checkout release acceptance and docs | All sign-offs complete |
-
-This table describes review boundaries, not a fixed estimate. Split a row further when needed; maintain the milestone dependencies. R05 can be introduced incrementally before its standalone cleanup PR to support earlier repair tests.
+Follow milestone dependencies M0–M8, separating compiler/placement/source-map fixes, language/runtime/audio/art acceptance, browser/debugger work, cartridge/bus integration and CPU/trace verification. Keep failing reproductions, implementation, regression tests and relevant observations together. The user controls whether to commit, merge or publish.
 
 ## 12. References
 
@@ -1036,7 +935,7 @@ The local source audit is the basis for repository-specific findings. Use these 
 - [CPU addressing modes](https://www.nesdev.org/wiki/Addressing_modes): address and timing behavior.
 - [CPU interrupts](https://www.nesdev.org/wiki/CPU_interrupts): interrupt entry and timing edge cases.
 - [CPU unofficial opcodes](https://www.nesdev.org/wiki/CPU_unofficial_opcodes): opcode classifications.
-- [nestest collection and reference log](https://github.com/christopherpow/nes-test-roms/tree/master/other): choose and pin the ROM/log pair; this handoff does not bundle or assert a passing canonical run.
+- [nestest collection and reference log](https://github.com/christopherpow/nes-test-roms/tree/master/other): choose and pin the ROM/log pair; fixtures are pinned and canonical native/WASM matches are recorded in PROVENANCE.md; broader acceptance remains separate.
 - [SingleStepTests 65x02](https://github.com/SingleStepTests/65x02): supplemental instruction/bus test data; select the CPU variant deliberately.
 
 Some NESdev pages blocked direct retrieval during this audit; indexed source excerpts and the locally downloaded locked core were used where available. Verify the complete relevant format/timing specification during implementation and record it beside the fixtures. No future behavior or unexecuted test in this document is represented as an audit pass.

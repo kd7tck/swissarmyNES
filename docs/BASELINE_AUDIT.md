@@ -1,4 +1,5 @@
 # Baseline audit for the phase 40 developer handoff
+**Historical evidence:** this audit describes September 12–13, 2026. Compilation and many runtime/core defects were subsequently repaired. The tables/reproductions remain audit evidence, not today's task list. Use [current checkpoint](IMPLEMENTATION_RESUME.md), [runtime contracts](RUNTIME_CONTRACTS.md) and [acceptance worksheet](PHASE_40_ACCEPTANCE_CHECKLIST.md); the user authorized October 11 cleanup and a local commit.
 
 Repository: <https://github.com/kd7tck/swissarmyNES>
 

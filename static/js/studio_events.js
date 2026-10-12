@@ -8,7 +8,7 @@ class StudioEvents {
         this.field('event-name').addEventListener('input',()=>{
             const event=this.event();if(!event)return;event.name=this.field('event-name').value;studio.changed();this.eventOptions();
         });
-        this.field('event-scene').onchange=()=>{const event=this.event();if(event){event.scene=this.field('event-scene').value;studio.changed();this.eventOptions();}};
+        this.field('event-scene').onchange=()=>{const event=this.event();if(event){event.scene=this.field('event-scene').value;studio.changed();this.render();}};
         this.field('event-trigger').onchange=()=>{
             const event=this.event();if(!event)return;const kind=this.field('event-trigger').value;
             event.trigger=kind==='timer' ? {kind,frames:120} : ['pressed','held'].includes(kind) ? {kind,button:'a'} : {kind};
@@ -34,9 +34,10 @@ class StudioEvents {
     id(prefix,items) { let index=1;while(items.some(item=>item.id===`${prefix}-${index}`))index++;return `${prefix}-${index}`; }
     update() { this.studio.changed();this.render();this.studio.entityEditor.drawPlacement(); }
     static ramBytes(design) {
-        const slots=Math.max(0,...design.scenes.map(scene=>scene.instances?.length || 0));
+        const slots=Math.max(0,...design.scenes.map(scene=>StudioEntities.slots(design,scene)));
+        const spawners=Math.max(0,...design.scenes.map(scene=>StudioEntities.spawners(design,scene).length));
         return 9+(design.animation ? 5 : 0)+(slots ? 3+slots*9 : 0)+(design.variables?.length || 0)*2+
-            (design.events?.length ? 1+(slots ? 0 : 1)+design.events.length : 0);
+            (design.events?.length ? 1+(slots ? 0 : 1)+design.events.length : 0)+(design.combat ? 4+slots : 0)+(spawners ? spawners*4+5 : 0)+((design.animation && design.player_visual?.face_movement) || design.combat?.attack_mode==='facing' ? 1 : 0)+(design.combat?.attack_cooldown_frames>0 ? 2 : 0);
     }
 
     addVariable() {
@@ -133,14 +134,17 @@ class StudioEvents {
         const vars=design.variables.map(variable=>({value:variable.id,label:variable.name}));
         event.conditions.forEach((condition,index)=>{
             const row=document.createElement('div');row.className='studio-rule-row';const prefix=`Condition ${index+1}`;
-            const sources=[...vars.map(variable=>({value:`var:${variable.value}`,label:variable.label})),...['pickups','x','y','ticks'].map(kind=>({value:kind,label:{pickups:'Pickup count',x:'Player X',y:'Player Y',ticks:'Scene timer'}[kind]}))];
-            this.select(row,`${prefix} source`,sources,condition.source.kind==='variable' ? `var:${condition.source.variable}` : condition.source.kind,value=>{condition.source=value.startsWith('var:') ? {kind:'variable',variable:value.slice(4)} : {kind:value};});
+            const sources=[...vars.map(variable=>({value:`var:${variable.value}`,label:variable.label})),...['pickups','x','y','ticks','health','defeated'].map(kind=>({value:kind,label:{pickups:'Pickup count',x:'Player X',y:'Player Y',ticks:'Scene timer',health:'Player health',defeated:'Enemies defeated'}[kind]}))];
+            const scene=design.scenes.find(scene=>scene.id===event.scene);
+            sources.push(...StudioEntities.spawners(design,scene).map(instance=>({value:`spawn:${instance.id}`,label:`${design.entities.find(entity=>entity.id===instance.entity)?.name} (${instance.id}) spawn count`})));
+            const value=condition.source.kind==='variable' ? `var:${condition.source.variable}` : condition.source.kind==='spawned' ? `spawn:${condition.source.instance}` : condition.source.kind;
+            this.select(row,`${prefix} source`,sources,value,value=>{condition.source=value.startsWith('var:') ? {kind:'variable',variable:value.slice(4)} : value.startsWith('spawn:') ? {kind:'spawned',instance:value.slice(6)} : {kind:value};});
             this.select(row,`${prefix} comparison`,['equal','not_equal','less','less_equal','greater','greater_equal'].map((value,index)=>({value,label:['=','≠','<','≤','>','≥'][index]})),condition.comparison,value=>{condition.comparison=value;});
             this.number(row,`${prefix} value`,condition.value,value=>{condition.value=value;});this.remove(row,`Remove condition ${index+1}`,()=>event.conditions.splice(index,1));this.field('event-conditions').appendChild(row);
         });
         event.actions.forEach((action,index)=>{
             const row=document.createElement('div');row.className='studio-rule-row';const prefix=`Action ${index+1}`;
-            this.select(row,`${prefix} kind`,['set','add','subtract','scene','music','sfx','stop_music'].map((value,index)=>({value,label:['Set variable','Add to variable','Subtract from variable','Change scene','Play music','Play SFX','Stop music'][index]})),action.kind,value=>{event.actions[index]=this.defaultAction(value);});
+            this.select(row,`${prefix} kind`,['set','add','subtract','scene','music','sfx','stop_music','restart'].map((value,index)=>({value,label:['Set variable','Add to variable','Subtract from variable','Change scene','Play music','Play SFX','Stop music','Restart game'][index]})),action.kind,value=>{event.actions[index]=this.defaultAction(value);});
             if(['set','add','subtract'].includes(action.kind)){
                 this.select(row,`${prefix} variable`,vars,action.variable,value=>{action.variable=value;});this.number(row,`${prefix} value`,action.value,value=>{action.value=value;});
             } else if(action.kind==='scene')this.select(row,`${prefix} destination`,design.scenes.map(scene=>({value:scene.id,label:scene.name})),action.scene,value=>{action.scene=value;});
@@ -159,6 +163,17 @@ class StudioEvents {
 
     renderAssertions(row,step,index) {
         const design=this.studio.design,expectations=step.expected_variables || {};
+        const scene=design.scenes.find(scene=>scene.id===(step.expected_scene || this.studio.selectedScene));
+        const spawns=step.expected_spawns || {};
+        const spawnerIds=[...new Set([...StudioEntities.spawners(design,scene).map(instance=>instance.id),...Object.keys(spawns)])];
+        for(const id of spawnerIds) {
+            const instance=design.scenes.flatMap(scene=>scene.instances).find(instance=>instance.id===id);
+            const entity=design.entities.find(entity=>entity.id===instance?.entity && entity.behavior==='spawner');
+            const label=`Step ${index+1} expected spawns ${entity?.name || 'Missing spawner'} (${id})`;
+            const wrapper=document.createElement('label');wrapper.textContent=label;const input=document.createElement('input');
+            input.type='number';input.min=0;input.max=65535;input.value=spawns[id] ?? '';input.setAttribute('aria-label',label);
+            input.addEventListener('input',()=>{step.expected_spawns ||= {};if(input.value==='')delete step.expected_spawns[id];else step.expected_spawns[id]=Number(input.value);this.studio.changed();});wrapper.appendChild(input);row.appendChild(wrapper);
+        }
         const ids=[...new Set([...design.variables.map(variable=>variable.id),...Object.keys(expectations)])];
         for(const id of ids){
             const variable=design.variables.find(variable=>variable.id===id),label=`Step ${index+1} expected variable ${variable?.name || `Missing: ${id}`}`;

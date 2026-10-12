@@ -1,6 +1,42 @@
 use swiss_emulator::Emulator;
 use swissarmynes::server::api::compile_source;
 
+// Both audio interrupt fixtures place ready=42 on source line3. Require the actual
+// linked completion PC as well as RAM; power-on RAM can already contain42.
+fn ready_audio_deck(
+    rom: &[u8],
+    map: &swissarmynes::compiler::source_map::LinkedSourceMap,
+) -> tetanes_core::control_deck::ControlDeck {
+    use tetanes_core::{
+        control_deck::ControlDeck,
+        mem::{Read, Write},
+    };
+    let boundary = map
+        .entries
+        .iter()
+        .find(|entry| {
+            entry.file == "main.swiss" && entry.line == 3
+            // The SUB epilogue also inherits this source line. Stop after the
+            // actual STA ready, not after RTS (which jumps somewhere else).
+            && rom.get(entry.rom_offset..entry.rom_offset + 3) == Some(&[0x8d, 0xc0, 0x05])
+        })
+        .expect("Fixture needs its linked STA ready assignment");
+    assert_eq!(boundary.bank, 0);
+    let ready_pc = u16::try_from(boundary.cpu_end).unwrap();
+    let mut deck = ControlDeck::new();
+    deck.load_rom("audio-interrupt.nes", &mut &rom[..]).unwrap();
+    // Keep random RAM elsewhere and deliberately exercise the colliding sentinel.
+    deck.cpu_mut().bus.write(0x5c0, 42);
+    for _ in 0..200_000 {
+        if deck.cpu().pc == ready_pc && deck.cpu().bus.peek(0x5c0) == 42 {
+            return deck;
+        }
+        deck.clock_instr()
+            .expect("Production startup must complete before interrupt injection");
+    }
+    panic!("Audio fixture did not reach its linked completion boundary");
+}
+
 #[test]
 fn main_in_switchable_bank_and_interrupt_in_fixed_bank_execute() {
     let source = "DIM ready AS BYTE\nDIM ticks AS BYTE\nBANK 3\nSUB Main()\nLET ready = 42\nPOKE($2000, $80)\nEND SUB\nINTERRUPT NMI()\nLET ticks = ticks + 1\nEND INTERRUPT";
@@ -399,22 +435,13 @@ fn interrupts_preserve_helper_arguments_and_audio_temporaries() {
 
 #[test]
 fn idle_nmi_with_dma_fits_ntsc_vblank_budget() {
-    use tetanes_core::{control_deck::ControlDeck, mem::Read};
-    let (rom, _) = compile_source(
+    let (rom, map) = compile_source(
         Some("DIM ready AS BYTE\nSUB Main()\nLET ready = 42\nEND SUB".into()),
         None,
         None,
     )
     .unwrap();
-    let mut deck = ControlDeck::new();
-    deck.load_rom("nmi-budget.nes", &mut &rom[..]).unwrap();
-    for _ in 0..200000 {
-        if deck.cpu().bus.peek(0x5c0) == 42 {
-            break;
-        }
-        deck.clock_instr().unwrap();
-    }
-    assert_eq!(deck.cpu().bus.peek(0x5c0), 42);
+    let mut deck = ready_audio_deck(&rom, &map);
     for _ in 0..2 {
         let pc = deck.cpu().pc;
         let sp = deck.cpu().sp;
@@ -439,26 +466,15 @@ fn idle_nmi_with_dma_fits_ntsc_vblank_budget() {
 
 #[test]
 fn sound_update_visits_active_channels_once_and_leaves_inactive_state_alone() {
-    use tetanes_core::{
-        control_deck::ControlDeck,
-        mem::{Read, Write},
-    };
-    let (rom, _) = compile_source(
+    use tetanes_core::mem::{Read, Write};
+    let (rom, map) = compile_source(
         Some("DIM ready AS BYTE\nSUB Main()\nLET ready = 42\nEND SUB".into()),
         None,
         None,
     )
     .unwrap();
     for active_mask in [0b0101, 0b1010, 0b1111] {
-        let mut deck = ControlDeck::new();
-        deck.load_rom("channel-update.nes", &mut &rom[..]).unwrap();
-        for _ in 0..200000 {
-            if deck.cpu().bus.peek(0x5c0) == 42 {
-                break;
-            }
-            deck.clock_instr().unwrap();
-        }
-        assert_eq!(deck.cpu().bus.peek(0x5c0), 42);
+        let mut deck = ready_audio_deck(&rom, &map);
         for channel in 0..4u16 {
             let base = 0x300 + channel * 0x20;
             if active_mask & (1 << channel) != 0 {

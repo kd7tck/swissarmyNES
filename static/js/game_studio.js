@@ -352,7 +352,7 @@ class GameStudio {
             const choices = [{id:'',name:'No scene assertion'},...this.design.scenes];
             if (step.expected_scene && !this.design.scenes.some(scene=>scene.id===step.expected_scene)) choices.push({id:step.expected_scene,name:`Missing scene: ${step.expected_scene}`});
             for (const scene of choices) { const option=document.createElement('option');option.value=scene.id;option.textContent=scene.name;expected.appendChild(option); }
-            expected.value=step.expected_scene || ''; expected.onchange=()=>{step.expected_scene=expected.value || null;this.changed();};
+            expected.value=step.expected_scene || ''; expected.onchange=()=>{step.expected_scene=expected.value || null;this.changed();this.renderTests();};
             wrapper.appendChild(expected); row.appendChild(wrapper);
             number('expected X',step.expected_x,value=>{step.expected_x=value==='' ? null : Number(value);},65535);
             number('expected Y',step.expected_y,value=>{step.expected_y=value==='' ? null : Number(value);},65535);
@@ -366,6 +366,11 @@ class GameStudio {
             row.appendChild(buttons);
             number('expected pickups',step.expected_pickups,value=>{step.expected_pickups=value==='' ? null : Number(value);},65535);
             number('expected active entities',step.expected_active_entities,value=>{step.expected_active_entities=value==='' ? null : Number(value);},16);
+            // Keep stored assertions visible even after combat is disabled; missing state must fail.
+            if(this.design.combat || step.expected_health != null || step.expected_defeated != null) {
+                number('expected health',step.expected_health,value=>{step.expected_health=value==='' ? null : Number(value);},255);
+                number('expected defeated',step.expected_defeated,value=>{step.expected_defeated=value==='' ? null : Number(value);},65535);
+            }
             this.eventEditor.renderAssertions(row,step,index);
             const remove=document.createElement('button');remove.textContent=`Remove step ${index + 1}`;
             remove.onclick=()=>{if(test.steps.length>1){test.steps.splice(index,1);this.changed();this.renderTests();}};
@@ -384,8 +389,9 @@ class GameStudio {
             const response=await fetch(`/api/projects/${project}/flow/test`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({test_id:id})});
             if(!response.ok)throw new Error(await response.text());
             const report=await response.json();if(!current())return;
-            const lines=(report.observations || []).map(item=>`Step ${item.step}: ${item.passed ? 'PASS' : 'FAIL'} · ${item.state.scene_name} · X=${item.state.x} Y=${item.state.y} · pickups=${item.state.pickups ?? 0} active=${item.state.active_entities ?? 0}${Object.entries(item.state.variables || {}).map(([id,value])=>` · ${this.design.variables.find(variable=>variable.id===id)?.name || id}=${value}`).join('')} · frame ${item.frames}`);
-            output.textContent=`${report.passed ? 'PASS' : 'FAIL'} · ${test.name} · ${report.frames} frames · ${report.cpu_cycles.toLocaleString()} CPU cycles\n${lines.join('\n')}${report.message ? '\n'+report.message : ''}\nScope: ${report.scope}`;
+            const lines=(report.observations || []).map(item=>`Step ${item.step}: ${item.passed ? 'PASS' : 'FAIL'} · ${item.state.scene_name} · X=${item.state.x} Y=${item.state.y} · pickups=${item.state.pickups ?? 0} active=${item.state.active_entities ?? 0}${item.state.health != null ? ` · health=${item.state.health} defeated=${item.state.defeated}` : ''}${Object.entries(item.state.spawners || {}).map(([id,state])=>` · ${id} spawns=${state.spawned} alive=${state.active}`).join('')}${Object.entries(item.state.variables || {}).map(([id,value])=>` · ${this.design.variables.find(variable=>variable.id===id)?.name || id}=${value}`).join('')} · frame ${item.frames}`);
+            const reuse=report.asset_reuse;
+            output.textContent=`${report.passed ? 'PASS' : 'FAIL'} · ${test.name} · ${report.frames} frames · ${report.cpu_cycles.toLocaleString()} CPU cycles\n${lines.join('\n')}${report.message ? '\n'+report.message : ''}${reuse ? `\nShared assets: ${reuse.unique_metasprites}/${reuse.metasprites} metasprites · ${reuse.unique_animations}/${reuse.animations} animations · ${reuse.metadata_bytes_saved} metadata bytes saved` : ''}\nScope: ${report.scope}`;
             output.dataset.error=String(!report.passed);
         } catch(error) {if(current()){output.textContent=error.message;output.dataset.error='true';}}
     }

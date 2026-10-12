@@ -34,6 +34,8 @@
 #studio .studio-instance[data-behavior=pickup] { border-color:#f5d45b; }
 #studio .studio-instance[data-behavior=door] { border-color:#c59cff; }
 #studio .studio-instance[data-behavior=patrol] { border-color:#f99385; }
+#studio .studio-instance[data-behavior=enemy] { border-color:#ff637c; background:#8a203666; }
+#studio .studio-instance[data-behavior=spawner] { border:2px dashed #69ddff; background:#194d5f66; }
 #studio .studio-instance[data-selected=true] { outline:2px solid #62ffcf; z-index:2; }
 .studio-spawn { border-color:#62ffcf; background:#235b3966; pointer-events:none; }
 #studio-budget[data-error=true] { color:#ffabb4; }

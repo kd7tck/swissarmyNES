@@ -8,6 +8,11 @@ function fixture(fetch = async () => ({ok:true,json:async()=>({})})) {
         'title','brief','start','animation','scene-name','map','x','y','movement','music','sfx','status','workspace','project','graph','transitions','summary','new-name',
         'tests-add','tests-add-step','tests-remove','tests-run','tests-select','tests-name','tests-steps','tests-result',
         'entity-add','entity-remove','entity','entity-name','entity-animation','entity-behavior','place','place-type',
+        ...['player','entity'].flatMap(owner=>['x','y','width','height'].map(key=>`${owner}-hitbox-${key}`)),
+        'combat-enabled','combat-fields','combat-health','combat-immunity','combat-damage','combat-reach','combat-button','combat-death','combat-mode','combat-cooldown','enemy-fields','enemy-health','enemy-damage','enemy-motion','enemy-range',
+        'spawner-fields','spawner-target','spawner-capacity','spawner-interval','spawner-delay','spawner-total',
+        ...['player','entity'].flatMap(owner=>['palette','flip_x','flip_y','face_movement'].map(key=>`${owner}-${key}`)),
+        'entity-color-variant','variant-color1','variant-color2','variant-color3',
         'instance','instance-x','instance-y','instance-target','instance-end','instance-remove','placement','budget','door-field','patrol-field',
         'variable-add','variables','events-add','events-select','event-name','event-scene','event-trigger','event-button','event-frames','event-once',
         'event-button-field','event-timer-field','event-remove','event-up','event-down','condition-add','action-add','event-conditions','event-actions'];
@@ -24,6 +29,103 @@ function fixture(fetch = async () => ({ok:true,json:async()=>({})})) {
     return {...f,studio,calls,starter,field:id=>f.elements.get(`studio-${id}`)};
 }
 
+function addSpawner(f) {
+    const editor=f.studio.entityEditor;
+    editor.addDefinition();f.field('entity-behavior').value='enemy';f.field('entity-behavior').onchange();const target=editor.definitionId;
+    editor.addDefinition();f.field('entity-name').value='Enemy nest';f.field('entity-name').dispatchEvent(new f.Event('input'));
+    f.field('entity-behavior').value='spawner';f.field('entity-behavior').onchange();const spawner=editor.definitionId;
+    f.studio.selectedScene='meadow';f.studio.render();editor.place();
+    return {editor,target,spawner,instance:editor.instanceId};
+}
+
+test('color variants share animation and CHR and change only an unused palette color',()=>{
+    const f=fixture(),editor=f.studio.entityEditor;editor.addDefinition();
+    f.window.projectManager.assets.metasprites[1].tiles[0].attr=1;f.window.projectManager.assets.metasprites[2].tiles[0].attr=2;
+    f.field('entity-name').value='😀'.repeat(30);f.field('entity-name').dispatchEvent(new f.Event('input'));
+    const original=editor.definition(),assets=f.studio.assets(),chr=JSON.stringify(assets.chr_bank),frames=JSON.stringify(assets.animations),metas=JSON.stringify(assets.metasprites);
+    const old=assets.palettes.find(palette=>palette.name==='SP0').colors.slice();
+    editor.colorVariant();const variant=editor.definition();assert.notEqual(variant.id,original.id);assert.equal(variant.animation,original.animation);assert.equal(variant.visual.palette,3);
+    assert.match(f.field('status').textContent,/Shared HeroWalk/);
+    f.field('variant-color2').value='41';f.field('variant-color2').onchange();
+    assert.equal(f.studio.assets().palettes.find(palette=>palette.name==='SP3').colors[2],41);
+    assert.deepEqual(f.studio.assets().palettes.find(palette=>palette.name==='SP0').colors,old);
+    assert.equal(JSON.stringify(f.studio.assets().chr_bank),chr);assert.equal(JSON.stringify(f.studio.assets().animations),frames);assert.equal(JSON.stringify(f.studio.assets().metasprites),metas);
+    assert.ok(Buffer.byteLength(variant.name)<=120);
+});
+
+test('fully occupied sprite palettes cannot be overwritten by automatic color variant creation',()=>{
+    const f=fixture();f.window.projectManager.assets.metasprites[0].tiles[0].attr=3;
+    f.window.projectManager.assets.metasprites[1].tiles[0].attr=1;f.window.projectManager.assets.metasprites[2].tiles[0].attr=2;
+    const before=JSON.stringify(f.studio.assets().palettes),count=f.studio.design.entities.length;
+    f.studio.entityEditor.colorVariant();assert.equal(f.studio.design.entities.length,count);assert.equal(JSON.stringify(f.studio.assets().palettes),before);
+    assert.match(f.field('status').textContent,/All four sprite palettes/);
+});
+
+test('palette variant edits cannot mutate a different project during switching',()=>{
+    const f=fixture();f.field('entity-palette').value='0';f.field('entity-palette').onchange();
+    const palettes=JSON.stringify(f.window.projectManager.assets.palettes),count=f.studio.design.entities.length;
+    f.window.projectManager.currentProject='different';f.field('variant-color2').value='41';f.field('variant-color2').onchange();f.studio.entityEditor.colorVariant();
+    assert.equal(JSON.stringify(f.window.projectManager.assets.palettes),palettes);assert.equal(f.studio.design.entities.length,count);
+});
+
+test('visual facing and mirror controls snapshot without copying frames and allocate only player facing state',()=>{
+    const f=fixture();f.studio.selectedScene='meadow';f.studio.render();
+    f.field('entity-palette').value='2';f.field('entity-palette').onchange();
+    for(const id of ['entity-flip_x','entity-flip_y','entity-face_movement','player-face_movement']) {f.field(id).checked=true;f.field(id).onchange();}
+    const data=f.studio.getData();assert.equal(data.entities[0].visual.palette,2);assert.equal(data.entities[0].visual.flip_x,true);assert.equal(data.entities[0].visual.flip_y,true);
+    assert.equal(data.player_visual.face_movement,true);assert.match(f.field('budget').textContent,/45\/560 bytes/);
+    assert.equal(f.studio.assets().animations.length,3);assert.equal(f.studio.assets().metasprites.length,4);
+    f.studio.load('adventure',StudioStarter.build().design);assert.equal(f.field('entity-flip_x').checked,false);assert.equal(f.field('player-face_movement').checked,false);
+});
+
+test('spawner settings capture immediately and budgets reserve empty pool capacity',()=>{
+    const f=fixture(),{editor,spawner}=addSpawner(f);
+    assert.equal(f.field('spawner-fields').hidden,false);assert.equal(f.field('entity-animation').disabled,true);
+    assert.match(f.field('budget').textContent,/6\/16 runtime slots.*24\/64 sprites.*90\/560 bytes/);
+    for(const [id,value] of [['spawner-capacity',3],['spawner-interval',45],['spawner-delay',12],['spawner-total',9]]) {
+        f.field(id).value=String(value);f.field(id).dispatchEvent(new f.Event('input'));
+    }
+    const data=f.studio.getData().entities.find(entity=>entity.id===spawner).spawner;
+    assert.equal(data.capacity,3);assert.equal(data.interval_frames,45);assert.equal(data.initial_delay_frames,12);assert.equal(data.total,9);
+    assert.match(f.field('budget').textContent,/7\/16 runtime slots.*28\/64 sprites.*100\/560 bytes/);
+    assert.equal(editor.instance().patrol_end_x,null);
+});
+
+test('spawner enemy references protect deletion and retain changed missing targets for repair',()=>{
+    const f=fixture(),{editor,target,spawner}=addSpawner(f);
+    f.field('entity').value=target;f.field('entity').onchange();editor.removeDefinition();
+    assert.ok(f.studio.design.entities.some(entity=>entity.id===target));assert.match(f.field('status').textContent,/spawner.*reference/);
+    f.field('entity-hitbox-x').value='4';f.field('entity-hitbox-x').dispatchEvent(new f.Event('input'));
+    f.field('entity-hitbox-width').value='8';f.field('entity-hitbox-width').dispatchEvent(new f.Event('input'));
+    f.field('entity').value=spawner;f.field('entity').onchange();
+    assert.equal(f.field('entity-hitbox-width').disabled,true);assert.equal(f.field('entity-hitbox-width').value,8);
+    const marker=f.field('placement').children.at(-1);assert.equal(marker.style.left,`${52/256*100}%`);
+    f.field('entity').value=target;f.field('entity').onchange();f.field('entity-behavior').value='decoration';f.field('entity-behavior').onchange();
+    f.field('entity').value=spawner;f.field('entity').onchange();assert.match(f.field('spawner-target').children[0].textContent,/Missing reference/);
+    assert.equal(editor.definition().spawner.entity,target);
+});
+
+test('spawn count assertions preserve zero and removed emitters and follow expected scene scope',()=>{
+    const f=fixture(),{editor,instance}=addSpawner(f);
+    let row=f.field('tests-steps').children[0];
+    let input=row.children.find(child=>child.textContent.includes(`expected spawns Enemy nest (${instance})`)).children[0];
+    input.value='0';input.dispatchEvent(new f.Event('input'));assert.equal(f.studio.getData().tests[0].steps[0].expected_spawns[instance],0);
+    editor.removeInstance();row=f.field('tests-steps').children[0];
+    input=row.children.find(child=>child.textContent.includes(`Missing spawner (${instance})`)).children[0];
+    assert.equal(input.value,0);input.value='';input.dispatchEvent(new f.Event('input'));assert.deepEqual(Object.keys(f.studio.getData().tests[0].steps[0].expected_spawns),[]);
+    editor.place();f.studio.design.tests[0].steps[0].expected_scene='title';f.studio.renderTests();
+    assert.ok(f.field('tests-steps').children[0].children.every(child=>!child.textContent.includes('expected spawns')));
+});
+
+test('spawner conditions stay scene scoped and namespace separate from variable references',()=>{
+    const f=fixture(),{instance}=addSpawner(f),events=f.studio.eventEditor;events.addEvent();f.field('condition-add').click();
+    let source=f.field('event-conditions').children[0].children[0].children[0];source.value=`spawn:${instance}`;source.onchange();
+    assert.equal(events.event().conditions[0].source.kind,'spawned');assert.equal(events.event().conditions[0].source.instance,instance);
+    f.field('event-scene').value='title';f.field('event-scene').onchange();source=f.field('event-conditions').children[0].children[0].children[0];
+    assert.match(source.children[0].textContent,/Missing reference/);assert.equal(events.event().conditions[0].source.instance,instance);
+    f.studio.load('adventure',StudioStarter.build().design);assert.equal(f.field('spawner-fields').hidden,true);assert.equal(f.studio.design.entities.some(entity=>entity.behavior==='spawner'),false);
+});
+
 test('starter creates independent editable art, audio, map and game-flow data', () => {
     const first = StudioStarter.build(), second = StudioStarter.build();
     first.assets.chr_bank[0] = 99; first.design.scenes[0].name = 'Changed';
@@ -32,6 +134,93 @@ test('starter creates independent editable art, audio, map and game-flow data', 
     assert.equal(second.assets.nametables.length,3);
     assert.equal(second.assets.animations[0].frames.length,2);
     assert.equal(second.design.scenes[0].transitions[0].target,'meadow');
+});
+
+test('combat enables with enemies, captures settings and cannot disable referenced behavior',()=>{
+    const f=fixture(),editor=f.studio.entityEditor;
+    editor.addDefinition();f.field('entity-behavior').value='enemy';f.field('entity-behavior').onchange();
+    assert.equal(f.studio.getData().combat.health,3);assert.equal(f.field('combat-enabled').checked,true);
+    assert.equal(f.field('enemy-fields').hidden,false);
+    f.field('combat-health').value='9';f.field('combat-health').dispatchEvent(new f.Event('input'));
+    f.field('enemy-health').value='2';f.field('enemy-health').dispatchEvent(new f.Event('input'));
+    assert.equal(f.studio.getData().combat.health,9);assert.equal(editor.definition().enemy.health,2);
+    f.field('combat-enabled').checked=false;f.field('combat-enabled').onchange();
+    assert.equal(f.field('combat-enabled').checked,true);assert.match(f.field('status').textContent,/enemy definitions/);
+    f.studio.selectedScene='meadow';f.studio.render();editor.place();
+    assert.equal(editor.instance().patrol_end_x,null);assert.equal(f.field('patrol-field').hidden,false);
+    f.field('instance-end').value='';f.field('instance-end').dispatchEvent(new f.Event('input'));
+    assert.equal(editor.instance().patrol_end_x,null);
+    assert.match(f.field('budget').textContent,/20\/64 sprites.*61\/560 bytes/);
+});
+
+test('facing attacks and pursuit settings persist, reset with project loads and share the facing byte',()=>{
+    const f=fixture(),editor=f.studio.entityEditor;
+    editor.addDefinition();f.field('entity-behavior').value='enemy';f.field('entity-behavior').onchange();
+    assert.equal(f.field('combat-mode').value,'all_directions');assert.equal(f.field('enemy-motion').value,'patrol');
+    assert.equal(f.field('enemy-range').disabled,true);
+    f.studio.selectedScene='meadow';f.studio.render();editor.place();
+    const ram=()=>f.studio.eventEditor.constructor.ramBytes(f.studio.design);
+    const base=ram();
+    f.field('combat-mode').value='facing';f.field('combat-mode').onchange();
+    assert.equal(ram(),base+1);
+    f.field('player-face_movement').checked=true;f.field('player-face_movement').onchange();
+    assert.equal(ram(),base+1);
+    f.field('enemy-motion').value='pursue';f.field('enemy-motion').onchange();
+    assert.equal(f.field('enemy-range').disabled,false);
+    f.field('enemy-range').value='48';f.field('enemy-range').dispatchEvent(new f.Event('input'));
+    f.field('instance-end').value='96';f.field('instance-end').dispatchEvent(new f.Event('input'));
+    const data=f.studio.getData();assert.equal(data.combat.attack_mode,'facing');
+    assert.equal(data.entities.at(-1).enemy.motion,'pursue');assert.equal(data.entities.at(-1).enemy.detection_range,48);
+    assert.equal(data.scenes[1].instances.at(-1).patrol_end_x,96);
+    f.studio.load('adventure',data);assert.equal(f.field('combat-mode').value,'facing');
+    editor.definitionId=data.entities.at(-1).id;editor.render();assert.equal(f.field('enemy-motion').value,'pursue');
+    f.studio.load('adventure',StudioStarter.build().design);assert.equal(f.field('combat-mode').value,'all_directions');
+    assert.equal(f.field('enemy-motion').value,'patrol');assert.equal(f.field('enemy-range').value,64);
+});
+
+test('attack cooldown edits persist and immediately update the optional two-byte RAM budget',()=>{
+    const f=fixture();f.field('combat-enabled').checked=true;f.field('combat-enabled').onchange();
+    const ram=()=>f.studio.eventEditor.constructor.ramBytes(f.studio.design),base=ram();
+    assert.equal(f.field('combat-cooldown').value,0);
+    f.field('combat-cooldown').value='12';f.field('combat-cooldown').dispatchEvent(new f.Event('input'));
+    assert.equal(f.studio.getData().combat.attack_cooldown_frames,12);assert.equal(ram(),base+2);
+    assert.match(f.field('budget').textContent,new RegExp(`${base+2}/560 bytes`));
+    f.studio.load('adventure',f.studio.getData());assert.equal(f.field('combat-cooldown').value,12);
+    f.field('combat-cooldown').value='0';f.field('combat-cooldown').dispatchEvent(new f.Event('input'));
+    assert.equal(ram(),base);assert.equal(f.studio.getData().combat.attack_cooldown_frames,0);
+    const legacy=f.studio.getData();delete legacy.combat.attack_cooldown_frames;
+    f.studio.load('adventure',legacy);assert.equal(f.field('combat-cooldown').value,0);
+});
+
+test('collision edits and markers use offsets without moving art or placement origins',()=>{
+    const f=fixture();f.studio.selectedScene='meadow';f.studio.render();
+    for(const [id,value] of [['entity-hitbox-x',4],['entity-hitbox-width',8],['player-hitbox-y',8],['player-hitbox-height',8]]) {
+        f.field(id).value=String(value);f.field(id).dispatchEvent(new f.Event('input'));
+    }
+    const snapshot=f.studio.getData();assert.equal(snapshot.entities[0].hitbox.width,8);
+    assert.equal(snapshot.scenes[1].instances[0].x,80);assert.equal(snapshot.player_hitbox.y,8);
+    const spawn=f.field('placement').children[1],coin=f.field('placement').children[2];
+    assert.equal(spawn.style.top,`${136/240*100}%`);assert.equal(spawn.style.height,`${8/240*100}%`);
+    assert.equal(coin.style.left,`${84/256*100}%`);assert.equal(coin.style.width,`${8/256*100}%`);
+    f.studio.load('adventure',StudioStarter.build().design);
+    assert.equal(f.field('entity-hitbox-width').value,16);assert.equal(f.field('player-hitbox-y').value,0);
+    assert.equal(f.studio.getData().combat,undefined);
+});
+
+test('combat assertions preserve zero and missing state while restart and health rules are editable',()=>{
+    const f=fixture();f.field('combat-enabled').checked=true;f.field('combat-enabled').onchange();
+    let row=f.field('tests-steps').children[0];let health=row.children[7].children[0],defeated=row.children[8].children[0];
+    health.value='0';health.dispatchEvent(new f.Event('input'));defeated.value='1';defeated.dispatchEvent(new f.Event('input'));
+    f.field('combat-enabled').checked=false;f.field('combat-enabled').onchange();
+    row=f.field('tests-steps').children[0];assert.equal(row.children[7].children[0].value,0);
+    assert.equal(f.studio.getData().tests[0].steps[0].expected_health,0);
+    const editor=f.studio.eventEditor;editor.addEvent();f.field('condition-add').click();
+    let source=f.field('event-conditions').children[0].children[0].children[0];
+    source.value='health';source.onchange();assert.equal(editor.event().conditions[0].source.kind,'health');
+    const action=f.field('event-actions').children[0].children[0].children[0];action.value='restart';action.onchange();
+    assert.equal(editor.event().actions[0].kind,'restart');
+    health=f.field('tests-steps').children[0].children[7].children[0];health.value='';health.dispatchEvent(new f.Event('input'));
+    assert.equal(f.studio.getData().tests[0].steps[0].expected_health,null);
 });
 
 test('variable and event edits capture unblurred values and retain stable references on rename', () => {

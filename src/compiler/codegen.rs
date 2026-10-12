@@ -3,6 +3,7 @@ use crate::compiler::ast::{
     BinaryOperator, DataType, Expression, Program, Statement, StatementKind, TopLevel,
     TopLevelKind, UnaryOperator,
 };
+use crate::compiler::source_map::AssetReuseStats;
 use crate::compiler::symbol_table::{SymbolKind, SymbolTable};
 use std::collections::HashMap;
 
@@ -16,9 +17,11 @@ const VAR_START_RAM: u16 = 0x05C0;
 
 pub type Assembly = Vec<String>;
 pub type SourceMap = Vec<(usize, u16)>;
+type AnimationDataKey = (bool, Vec<(String, u8)>);
 
 // KEEP
 pub struct CodeGenerator {
+    pub asset_reuse: AssetReuseStats,
     symbol_table: SymbolTable,
     output: Assembly,
     banks: std::collections::HashMap<u8, Assembly>,
@@ -253,6 +256,7 @@ impl CodeGenerator {
 
     pub fn new(symbol_table: SymbolTable) -> Self {
         Self {
+            asset_reuse: Default::default(),
             symbol_table,
             output: Vec::new(),
             banks: std::collections::HashMap::new(),
@@ -1966,7 +1970,17 @@ impl CodeGenerator {
 
         // Runtime_Anim_Draw
         // Input: $14 (X), $15 (Y), $16/$17 (State Ptr)
-        self.emit("Runtime_Anim_Draw:".to_string());
+        for (label, draw) in [
+            ("Runtime_Anim_Draw", "Runtime_SpriteDraw"),
+            ("Runtime_Anim_DrawVariant", "Runtime_SpriteDrawVariant"),
+        ] {
+            self.emit(format!("{label}:"));
+            self.emit("  JSR Runtime_Anim_DrawFrame".into());
+            self.emit(format!("  JMP {draw}"));
+        }
+        // Both draw paths resolve the same state/frame table. Share this code in the
+        // fixed bank; tail-calling the renderer keeps the extra call cost small.
+        self.emit("Runtime_Anim_DrawFrame:".into());
 
         // Copy State Ptr to $02/$03
         self.emit("  LDA $16".to_string());
@@ -1996,8 +2010,7 @@ impl CodeGenerator {
         self.emit("  LDA ($04), Y".to_string());
         self.emit("  STA $17".to_string()); // Store in Argument 2 High
 
-        // Call Sprite Draw (X/Y already in $14/$15)
-        self.emit("  JSR Runtime_SpriteDraw".to_string());
+        // Return the frame pointer to the selected renderer wrapper.
         self.emit("  RTS".to_string());
 
         // Add A*3 to the animation pointer using 16-bit arithmetic. Metadata stores
@@ -3128,6 +3141,60 @@ impl CodeGenerator {
     }
 
     fn generate_user_data(&mut self, program: &Program) -> Result<(), String> {
+        let mut meta_groups: HashMap<Vec<u8>, Vec<String>> = HashMap::new();
+        let mut meta_payloads = HashMap::new();
+        let mut canonical_meta = HashMap::new();
+        self.asset_reuse = Default::default();
+        for decl in &program.declarations {
+            if let TopLevelKind::Metasprite(name, tiles) = &decl.kind {
+                let payload = self.metasprite_payload(tiles)?;
+                self.asset_reuse.metasprites += 1;
+                self.asset_reuse.metadata_before_dedup += payload.len();
+                let group = meta_groups.entry(payload.clone()).or_default();
+                if group.is_empty() {
+                    self.asset_reuse.metadata_after_dedup += payload.len();
+                }
+                group.push(name.clone());
+                canonical_meta.insert(name.clone(), group[0].clone());
+                meta_payloads.insert(name.clone(), payload);
+            }
+        }
+        let mut animation_groups: HashMap<AnimationDataKey, Vec<String>> = HashMap::new();
+        let mut animation_keys = HashMap::new();
+        for decl in &program.declarations {
+            if let TopLevelKind::Animation(name, frames, loops) = &decl.kind {
+                let key = (
+                    *loops,
+                    frames
+                        .iter()
+                        .map(|frame| {
+                            Ok((
+                                canonical_meta
+                                    .get(&frame.metasprite)
+                                    .ok_or_else(|| {
+                                        format!("Missing metasprite '{}'", frame.metasprite)
+                                    })?
+                                    .clone(),
+                                frame.duration,
+                            ))
+                        })
+                        .collect::<Result<Vec<_>, String>>()?,
+                );
+                self.asset_reuse.animations += 1;
+                self.asset_reuse.metadata_before_dedup += 2 + frames.len() * 3;
+                let group = animation_groups.entry(key.clone()).or_default();
+                if group.is_empty() {
+                    self.asset_reuse.metadata_after_dedup += 2 + frames.len() * 3;
+                }
+                group.push(name.clone());
+                animation_keys.insert(name.clone(), key);
+            }
+        }
+        self.asset_reuse.unique_metasprites = meta_groups.len();
+        self.asset_reuse.unique_animations = animation_groups.len();
+        self.asset_reuse.metadata_bytes_saved =
+            self.asset_reuse.metadata_before_dedup - self.asset_reuse.metadata_after_dedup;
+        let mut emitted = std::collections::HashSet::new();
         self.emit("".to_string());
         self.emit("; --- User Data ---".to_string());
         self.emit("USER_DATA_START:".to_string());
@@ -3177,18 +3244,30 @@ impl CodeGenerator {
                 if tiles.len() > 255 {
                     return Err(format!("Metasprite '{name}' supports at most 255 tiles"));
                 }
-                self.emit(format!("{}:", name));
-                self.emit(format!("  db ${:02X}", tiles.len() as u8));
-                for tile in tiles {
-                    let x = self.resolve_constant(&tile.x)? as i8;
-                    let y = self.resolve_constant(&tile.y)? as i8;
-                    let t = self.resolve_constant(&tile.tile)? as u8;
-                    let a = self.resolve_constant(&tile.attr)? as u8;
+                if emitted.contains(name) {
+                    continue;
+                }
+                let payload = &meta_payloads[name];
+                for alias in &meta_groups[payload] {
+                    self.emit(format!("{alias}:"));
+                    emitted.insert(alias.clone());
+                }
+                self.emit(format!("  db ${:02X}", payload[0]));
+                for record in payload[1..payload.len() - 2].chunks(4) {
                     self.emit(format!(
-                        "  db ${:02X}, ${:02X}, ${:02X}, ${:02X}",
-                        x as u8, y as u8, t, a
+                        "  db {}",
+                        record
+                            .iter()
+                            .map(|byte| format!("${byte:02X}"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     ));
                 }
+                self.emit(format!(
+                    "  db ${:02X}, ${:02X}",
+                    payload[payload.len() - 2],
+                    payload[payload.len() - 1]
+                ));
             } else if let TopLevelKind::Animation(name, frames, loops) = &decl.kind {
                 // Retain validation for direct codegen callers that bypass semantic analysis.
                 if frames.is_empty()
@@ -3199,15 +3278,24 @@ impl CodeGenerator {
                         "Animation '{name}' requires 1..255 frames with durations 1..255"
                     ));
                 }
-                self.emit(format!("{}:", name));
+                if emitted.contains(name) {
+                    continue;
+                }
+                let key = &animation_keys[name];
+                let aliases = &animation_groups[key];
+                for alias in aliases {
+                    self.emit(format!("{alias}:"));
+                    emitted.insert(alias.clone());
+                }
                 self.output
                     .push(format!("  db ${:02X}", frames.len() as u8));
                 self.output
                     .push(format!("  db ${:02X}", if *loops { 1 } else { 0 }));
                 for (i, frame) in frames.iter().enumerate() {
-                    let lbl = format!("{}_f{}", name, i);
-                    self.output
-                        .push(format!("{}: WORD {}", lbl, frame.metasprite));
+                    for alias in aliases {
+                        self.emit(format!("{alias}_f{i}:"));
+                    }
+                    self.emit(format!("  WORD {}", canonical_meta[&frame.metasprite]));
                     self.emit(format!("  db ${:02X}", frame.duration));
                 }
             } else if let TopLevelKind::Metatile(name, tiles, attr) = &decl.kind {
@@ -3243,6 +3331,34 @@ impl CodeGenerator {
         }
         self.emit("".to_string());
         Ok(())
+    }
+
+    fn metasprite_payload(
+        &self,
+        tiles: &[crate::compiler::ast::MetaspriteTile],
+    ) -> Result<Vec<u8>, String> {
+        if tiles.len() > 255 {
+            return Err("Metasprite supports at most 255 tiles".into());
+        }
+        let mut payload = vec![tiles.len() as u8];
+        let mut xs = Vec::new();
+        let mut ys = Vec::new();
+        for tile in tiles {
+            let x = self.resolve_constant(&tile.x)? as i8;
+            let y = self.resolve_constant(&tile.y)? as i8;
+            xs.push(i16::from(x));
+            ys.push(i16::from(y));
+            payload.extend([
+                x as u8,
+                y as u8,
+                self.resolve_constant(&tile.tile)? as u8,
+                self.resolve_constant(&tile.attr)? as u8,
+            ]);
+        }
+        // Footer preserves the legacy count/tile layout and supplies signed-frame mirror pivots.
+        payload.push((xs.iter().min().unwrap_or(&0) + xs.iter().max().unwrap_or(&0)) as u8);
+        payload.push((ys.iter().min().unwrap_or(&0) + ys.iter().max().unwrap_or(&0)) as u8);
+        Ok(payload)
     }
 
     fn resolve_constant(&self, expr: &Expression) -> Result<i32, String> {
@@ -3515,6 +3631,56 @@ impl CodeGenerator {
         self.emit("SpriteDraw_Done:".to_string());
         self.emit("  RTS".to_string());
         self.emit("".to_string());
+        self.generate_sprite_variant_helpers();
+    }
+
+    fn generate_sprite_variant_helpers(&mut self) {
+        // Only styled callers pay for palette/whole-frame mirroring; legacy Draw stays fast.
+        let setup="Runtime_SpriteDrawVariant:\n  LDA $09\n  AND #$C0\n  STA $09\n  LDA $08\n  CMP #$FF\n  BEQ SpriteVariant_PaletteReady\n  AND #3\n  STA $08\nSpriteVariant_PaletteReady:\n  LDA $16\n  STA $02\n  LDA $17\n  STA $03\n  LDY #0\n  LDA ($02), Y\n  STA $04\n  LDA $09\n  BEQ SpriteVariant_Data\n  LDA #0\n  STA $0B\n  LDA $04\n  ASL\n  ROL $0B\n  ASL\n  ROL $0B\n  CLC\n  ADC #1\n  STA $0A\n  LDA $0B\n  ADC #0\n  STA $0B\n  LDA $02\n  CLC\n  ADC $0A\n  STA $00\n  LDA $03\n  ADC $0B\n  STA $01\n  LDY #0\n  LDA ($00), Y\n  STA $0A\n  INY\n  LDA ($00), Y\n  STA $0B\nSpriteVariant_Data:\n  INC $02\n  BNE SpriteVariant_DataReady\n  INC $03\nSpriteVariant_DataReady:\n  LDX $19\nSpriteVariant_Loop:\n  LDA $04\n  BEQ SpriteVariant_Done\n  DEC $04\n  LDA $1B\n  CMP #64\n  BCS SpriteVariant_Done\n  LDY #0\n  LDA $09\n  AND #$40\n  BEQ SpriteVariant_NormalX\n  LDA $0A\n  SEC\n  SBC ($02), Y\n  JMP SpriteVariant_AddX\nSpriteVariant_NormalX:\n  LDA ($02), Y\nSpriteVariant_AddX:\n  CLC\n  ADC $14\n  STA $05\n  INY\n  LDA $09\n  AND #$80\n  BEQ SpriteVariant_NormalY\n  LDA $0B\n  SEC\n  SBC ($02), Y\n  JMP SpriteVariant_AddY\nSpriteVariant_NormalY:\n  LDA ($02), Y\nSpriteVariant_AddY:\n  CLC\n  ADC $15\n  STA $06\n  INY\n  LDA ($02), Y\n  PHA\n  INY\n  LDA ($02), Y\n  EOR $09\n  STA $0C\n  LDA $08\n  CMP #$FF\n  BEQ SpriteVariant_KeepPalette\n  LDA $0C\n  AND #$FC\n  ORA $08\n  JMP SpriteVariant_Attribute\nSpriteVariant_KeepPalette:\n  LDA $0C\nSpriteVariant_Attribute:\n  PHA\n  LDA $06\n  STA $0200, X\n  INX\n  PLA\n  STA $0201, X\n  PLA\n  STA $0200, X\n  INX\n  INX\n  LDA $05\n  STA $0200, X\n  INX\n  STX $19\n  INC $1B\n  LDA $02\n  CLC\n  ADC #4\n  STA $02\n  BCC SpriteVariant_Next\n  INC $03\nSpriteVariant_Next:\n  JMP SpriteVariant_Loop\nSpriteVariant_Done:\n  RTS";
+        for line in setup.lines() {
+            self.emit(line.into());
+        }
+    }
+
+    fn generate_variant_draw(
+        &mut self,
+        args: &[Expression],
+        animation: bool,
+    ) -> Result<(), String> {
+        for arg in &args[..2] {
+            self.generate_expression(arg)?;
+            self.emit("  PHA".into());
+        }
+        if animation {
+            let address = self.get_static_address(&args[2])?;
+            self.emit(format!("  LDA #${:02X}", address as u8));
+            self.emit("  PHA".into());
+            self.emit(format!("  LDA #${:02X}", (address >> 8) as u8));
+            self.emit("  PHA".into());
+        } else {
+            self.generate_expression(&args[2])?;
+            self.emit("  PHA".into());
+            self.emit("  TXA".into());
+            self.emit("  PHA".into());
+        }
+        for arg in &args[3..] {
+            self.generate_expression(arg)?;
+            self.emit("  PHA".into());
+        }
+        // Stage arguments on the CPU stack so later expressions cannot clobber earlier ones.
+        for address in [0x09, 0x08, 0x17, 0x16, 0x15, 0x14] {
+            self.emit("  PLA".into());
+            self.emit(format!("  STA ${address:02X}"));
+        }
+        self.emit(format!(
+            "  JSR {}",
+            if animation {
+                "Runtime_Anim_DrawVariant"
+            } else {
+                "Runtime_SpriteDrawVariant"
+            }
+        ));
+        Ok(())
     }
 
     fn generate_text_helpers(&mut self) {
@@ -3976,6 +4142,9 @@ impl CodeGenerator {
                                 return Ok(());
                             }
                         } else if base_name.eq_ignore_ascii_case("Sprite") {
+                            if member.eq_ignore_ascii_case("DrawVariant") {
+                                return self.generate_variant_draw(args, false);
+                            }
                             if member.eq_ignore_ascii_case("Draw") {
                                 // Arg 0: X -> $14
                                 self.generate_expression(&args[0])?;
@@ -4065,6 +4234,9 @@ impl CodeGenerator {
                             self.emit(format!("{done}:"));
                             return Ok(());
                         } else if base_name.eq_ignore_ascii_case("Animation") {
+                            if member.eq_ignore_ascii_case("DrawVariant") {
+                                return self.generate_variant_draw(args, true);
+                            }
                             if member.eq_ignore_ascii_case("Play") {
                                 // Arg 0: State (Address)
                                 let state_addr = self.get_static_address(&args[0])?;

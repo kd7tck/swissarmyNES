@@ -17,7 +17,7 @@ RAM and NVRAM share backend storage, with declared battery partitions owned by
 the emulator wrapper's snapshot/restore/reset policy. Mapper allocations that
 disagree with NES 2.0 declarations are rejected before replacing the active game.
 Unsupported NROM geometries and board capabilities are reported explicitly.
-See [runtime contracts](../docs/RUNTIME_CONTRACTS.md) for the supported boundary;
+See [runtime contracts](../docs/DESIGN.md#runtime-contracts) for the supported boundary;
 this patch does not imply unrestricted NES 2.0 board support.
 
 When editing the patch, regenerate the dependency, run the native cartridge and

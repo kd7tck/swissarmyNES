@@ -1,5 +1,8 @@
 //! Scene authoring produces ordinary source through the same compiler as hand-written games.
+use super::game_combat::{CombatSettings, EnemyMotion, EnemySettings, Hitbox};
 use super::game_events::{GameEvent, GameVariable};
+use super::game_spawners::SpawnerSettings;
+use super::game_visuals::SpriteVisual;
 use super::project::ProjectAssets;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -26,6 +29,12 @@ pub struct GameDesign {
     pub variables: Vec<GameVariable>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<GameEvent>,
+    #[serde(default)]
+    pub player_hitbox: Hitbox,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub combat: Option<CombatSettings>,
+    #[serde(default, skip_serializing_if = "SpriteVisual::is_default")]
+    pub player_visual: SpriteVisual,
 }
 
 pub const TEST_BOOT_FRAMES: u16 = 10;
@@ -52,8 +61,14 @@ pub struct TestStep {
     pub expected_pickups: Option<u16>,
     #[serde(default)]
     pub expected_active_entities: Option<u8>,
+    #[serde(default)]
+    pub expected_health: Option<u8>,
+    #[serde(default)]
+    pub expected_defeated: Option<u16>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub expected_variables: BTreeMap<String, u16>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub expected_spawns: BTreeMap<String, u16>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -82,6 +97,14 @@ pub struct EntityDefinition {
     pub name: String,
     pub animation: String,
     pub behavior: EntityBehavior,
+    #[serde(default)]
+    pub hitbox: Hitbox,
+    #[serde(default)]
+    pub enemy: EnemySettings,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spawner: Option<SpawnerSettings>,
+    #[serde(default, skip_serializing_if = "SpriteVisual::is_default")]
+    pub visual: SpriteVisual,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -91,6 +114,8 @@ pub enum EntityBehavior {
     Pickup,
     Door,
     Patrol,
+    Enemy,
+    Spawner,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -147,7 +172,11 @@ impl GameDesign {
     pub fn entity_slots(&self) -> usize {
         self.scenes
             .iter()
-            .map(|scene| scene.instances.len())
+            .map(|scene| {
+                self.scene_entities(scene)
+                    .map(|roles| roles.len())
+                    .unwrap_or(scene.instances.len())
+            })
             .max()
             .unwrap_or(0)
     }
@@ -158,7 +187,12 @@ impl GameDesign {
     }
 
     pub fn generated_ram_bytes(&self) -> usize {
-        self.entity_ram_bytes() + self.event_ram_bytes()
+        self.entity_ram_bytes()
+            + self.event_ram_bytes()
+            + self.combat_ram_bytes()
+            + self.spawner_ram_bytes()
+            + self.visual_ram_bytes()
+            + self.attack_ram_bytes()
     }
 
     pub(super) fn entity_ram_bytes(&self) -> usize {
@@ -177,13 +211,10 @@ impl GameDesign {
             .map(|name| animation_sprites(name, assets))
             .transpose()?
             .unwrap_or(0);
-        for instance in &scene.instances {
-            let definition = self
-                .entities
-                .iter()
-                .find(|entity| entity.id == instance.entity)
-                .ok_or("An instance refers to a missing entity definition")?;
-            count += animation_sprites(&definition.animation, assets)?;
+        for role in self.scene_entities(scene)? {
+            if role.definition.behavior != EntityBehavior::Spawner {
+                count += animation_sprites(&role.definition.animation, assets)?;
+            }
         }
         Ok(count)
     }
@@ -294,7 +325,9 @@ impl GameDesign {
             {
                 return Err("Entities need unique 1..64-byte IDs and 1..120-byte names".into());
             }
-            animation_sprites(&entity.animation, assets)?;
+            if entity.behavior != EntityBehavior::Spawner {
+                animation_sprites(&entity.animation, assets)?;
+            }
         }
         let mut instance_ids = HashSet::new();
         for scene in &self.scenes {
@@ -332,7 +365,11 @@ impl GameDesign {
                         entity.name
                     ));
                 }
-                if entity.behavior == EntityBehavior::Patrol
+                if (entity.behavior == EntityBehavior::Patrol
+                    || (matches!(
+                        entity.behavior,
+                        EntityBehavior::Enemy | EntityBehavior::Spawner
+                    ) && instance.patrol_end_x.is_some()))
                     && !instance
                         .patrol_end_x
                         .is_some_and(|end| end > instance.x && end <= 240)
@@ -363,6 +400,12 @@ impl GameDesign {
                 return Err("Choose an existing animation with a valid source identifier".into());
             }
         }
+        self.validate_spawners()?;
+        self.validate_combat()?;
+        self.player_visual.validate()?;
+        for entity in &self.entities {
+            entity.visual.validate()?;
+        }
         self.validate_events(assets)?;
         if self.tests.len() > 32 {
             return Err("A project supports at most 32 saved flow tests".into());
@@ -383,6 +426,11 @@ impl GameDesign {
             let mut frames = u32::from(TEST_BOOT_FRAMES);
             for step in &test.steps {
                 if step.expected_variables.len() > 32
+                    || step.expected_spawns.len() > 16
+                    || step
+                        .expected_spawns
+                        .keys()
+                        .any(|id| id.is_empty() || id.len() > 64)
                     || step
                         .expected_variables
                         .keys()
@@ -440,7 +488,24 @@ impl GameDesign {
             }
         }
         self.event_declarations(&mut source);
+        self.combat_declarations(&mut source);
+        self.spawner_declarations(&mut source);
+        if self.visual_ram_bytes() > 0 {
+            source.push_str("DIM gf_player_facing AS BYTE\n");
+        }
+        self.attack_declarations(&mut source);
         source.push_str("\nSUB GameFlowStart()\n");
+        if self.attack_ram_bytes() > 0 {
+            source.push_str("    gf_attack_cooldown = 0\n    gf_attacking = 0\n");
+        }
+        if let Some(combat) = &self.combat {
+            writeln!(
+                source,
+                "    gf_health = {}\n    gf_invulnerable = 0\n    gf_defeated = 0",
+                combat.health
+            )
+            .unwrap();
+        }
         for variable in &self.variables {
             writeln!(source, "    gv_{} = {}", variable.name, variable.initial).unwrap();
         }
@@ -454,6 +519,12 @@ impl GameDesign {
         )
         .unwrap();
         source.push_str("\nSUB GameFlowEnter()\n    PPU.Ctrl($10)\n    PPU.Mask(0)\n    Sound.Stop()\n    gf_ticks = 0\n");
+        if self.attack_ram_bytes() > 0 {
+            source.push_str("    gf_attacking = 0\n");
+        }
+        if self.visual_ram_bytes() > 0 {
+            source.push_str("    gf_player_facing = 0\n");
+        }
         if self.entity_slots() > 0 || !self.events.is_empty() {
             source.push_str("    gf_changed = 255\n");
         }
@@ -477,20 +548,51 @@ impl GameDesign {
             if let Some(id) = scene.sfx {
                 writeln!(source, "        PLAY_SFX({id})").unwrap();
             }
-            for (slot, instance) in scene.instances.iter().enumerate() {
-                let entity = self
-                    .entities
-                    .iter()
-                    .find(|entity| entity.id == instance.entity)
-                    .unwrap();
+            for role in self.scene_entities(scene).unwrap() {
+                if role.spawned_by.is_some() || role.definition.behavior == EntityBehavior::Spawner
+                {
+                    continue;
+                }
+                let slot = role.slot;
+                let instance = role.instance;
+                let entity = role.definition;
                 writeln!(source,"        gf_e{slot}_active = 255\n        gf_e{slot}_x = {}\n        gf_e{slot}_dir = 0\n        Animation.Play(gf_e{slot}_anim, {})",instance.x,entity.animation).unwrap();
             }
         }
         source.push_str("    END SELECT\n");
+        if self.combat.is_some() {
+            // Room entry never heals the player; restart explicitly restores initial combat state.
+            source.push_str("    IF gf_health = 0 THEN\n        gf_movable = 0\n    END IF\n");
+            for slot in 0..self.entity_slots() {
+                writeln!(source, "    gf_e{slot}_health = 0").unwrap();
+            }
+            source.push_str("    SELECT CASE gf_scene\n");
+            for (index, scene) in self.scenes.iter().enumerate() {
+                writeln!(source, "    CASE {index}").unwrap();
+                for role in self.scene_entities(scene).unwrap() {
+                    let slot = role.slot;
+                    let entity = role.definition;
+                    if entity.behavior == EntityBehavior::Enemy && role.spawned_by.is_none() {
+                        writeln!(
+                            source,
+                            "        gf_e{slot}_health = {}",
+                            entity.enemy.health
+                        )
+                        .unwrap();
+                    }
+                }
+            }
+            source.push_str("    END SELECT\n");
+        }
+        self.spawner_entry(&mut source);
         if let Some(name) = &self.animation {
             writeln!(source, "    Animation.Play(gf_anim, {name})").unwrap();
         }
         source.push_str("    PPU.Mask($1E)\n    PPU.Ctrl($90)\nEND SUB\n\nSUB GameFlowUpdate()\n    Controller.Read()\n");
+        self.attack_tick(&mut source);
+        if self.combat.is_some() {
+            source.push_str("    IF gf_invulnerable > 0 THEN\n        gf_invulnerable = gf_invulnerable - 1\n    END IF\n");
+        }
         if self.entity_slots() > 0 || !self.events.is_empty() {
             source.push_str("    gf_changed = 0\n");
         }
@@ -530,8 +632,12 @@ impl GameDesign {
         if self.scenes.iter().any(|scene| scene.movement) {
             source.push_str("    IF gf_movable THEN\n        GameFlowMove()\n    END IF\n");
         }
+        self.attack_update(&mut source);
         if self.entity_slots() > 0 {
             source.push_str("    GameFlowEntities()\n");
+        }
+        if self.spawner_slots() > 0 {
+            source.push_str("    GameFlowSpawners()\n");
         }
         if !self.events.is_empty() {
             source.push_str("    GameFlowEvents()\n");
@@ -540,9 +646,19 @@ impl GameDesign {
             source.push_str("    Sprite.Clear()\n");
         }
         if self.animation.is_some() {
-            source.push_str(
-                "    Animation.Update(gf_anim)\n    Animation.Draw(gf_x, gf_y, gf_anim)\n",
-            );
+            if self.combat.is_some() {
+                source.push_str("    IF gf_health > 0 THEN\n");
+            }
+            writeln!(
+                source,
+                "    Animation.Update(gf_anim)\n    {}",
+                self.player_visual
+                    .draw("gf_x", "gf_y", "gf_anim", "gf_player_facing")
+            )
+            .unwrap();
+            if self.combat.is_some() {
+                source.push_str("    END IF\n");
+            }
         }
         if self.entity_slots() > 0 {
             source.push_str("    GameFlowDrawEntities()\n");
@@ -550,49 +666,66 @@ impl GameDesign {
         source.push_str("    Scroll.Set(0, 0)\nEND SUB\n");
         if self.scenes.iter().any(|scene| scene.movement) {
             source.push_str("\nSUB GameFlowMove()\n");
-            for (button, coordinate, guard, x1, y1, x2, y2, operation) in [
+            if self.visual_ram_bytes() > 0 {
+                source.push_str("    IF Controller.IsHeld(Button.Left) THEN\n        gf_player_facing = 255\n    END IF\n    IF Controller.IsHeld(Button.Right) THEN\n        gf_player_facing = 0\n    END IF\n");
+            }
+            let p = self.player_hitbox;
+            let right = u16::from(p.x) + u16::from(p.width);
+            let bottom = u16::from(p.y) + u16::from(p.height);
+            let middle_x = u16::from(p.x) + u16::from((p.width - 1) / 2);
+            let middle_y = u16::from(p.y) + u16::from((p.height - 1) / 2);
+            // A 16px edge at an unaligned origin may span three tiles, including an interior tile.
+            for (button, coordinate, guard, x1, y1, x2, y2, x3, y3, operation) in [
                 (
                     "Left",
                     "gf_x",
                     "gf_x > 0",
-                    "gf_x - 1",
-                    "gf_y",
-                    "gf_x - 1",
-                    "gf_y + 15",
+                    format!("gf_x + {} - 1", p.x),
+                    format!("gf_y + {}", p.y),
+                    format!("gf_x + {} - 1", p.x),
+                    format!("gf_y + {}", bottom - 1),
+                    format!("gf_x + {} - 1", p.x),
+                    format!("gf_y + {middle_y}"),
                     "-",
                 ),
                 (
                     "Right",
                     "gf_x",
                     "gf_x < 240",
-                    "gf_x + 16",
-                    "gf_y",
-                    "gf_x + 16",
-                    "gf_y + 15",
+                    format!("gf_x + {right}"),
+                    format!("gf_y + {}", p.y),
+                    format!("gf_x + {right}"),
+                    format!("gf_y + {}", bottom - 1),
+                    format!("gf_x + {right}"),
+                    format!("gf_y + {middle_y}"),
                     "+",
                 ),
                 (
                     "Up",
                     "gf_y",
                     "gf_y > 0",
-                    "gf_x",
-                    "gf_y - 1",
-                    "gf_x + 15",
-                    "gf_y - 1",
+                    format!("gf_x + {}", p.x),
+                    format!("gf_y + {} - 1", p.y),
+                    format!("gf_x + {}", right - 1),
+                    format!("gf_y + {} - 1", p.y),
+                    format!("gf_x + {middle_x}"),
+                    format!("gf_y + {} - 1", p.y),
                     "-",
                 ),
                 (
                     "Down",
                     "gf_y",
                     "gf_y < 224",
-                    "gf_x",
-                    "gf_y + 16",
-                    "gf_x + 15",
-                    "gf_y + 16",
+                    format!("gf_x + {}", p.x),
+                    format!("gf_y + {bottom}"),
+                    format!("gf_x + {}", right - 1),
+                    format!("gf_y + {bottom}"),
+                    format!("gf_x + {middle_x}"),
+                    format!("gf_y + {bottom}"),
                     "+",
                 ),
             ] {
-                writeln!(source, "    IF Controller.IsHeld(Button.{button}) AND {guard} THEN\n        IF Collision.Tile({x1}, {y1}) = 0 AND Collision.Tile({x2}, {y2}) = 0 THEN\n            {coordinate} = {coordinate} {operation} 1\n        END IF\n    END IF").unwrap();
+                writeln!(source, "    IF Controller.IsHeld(Button.{button}) AND {guard} THEN\n        IF Collision.Tile({x1}, {y1}) = 0 AND Collision.Tile({x2}, {y2}) = 0 AND Collision.Tile({x3}, {y3}) = 0 THEN\n            {coordinate} = {coordinate} {operation} 1\n        END IF\n    END IF").unwrap();
             }
             source.push_str("END SUB\n");
         }
@@ -600,6 +733,8 @@ impl GameDesign {
             self.entity_source(&mut source, &indices);
         }
         self.event_source(&mut source);
+        self.spawner_source(&mut source);
+        self.spawn_enemy_templates(&mut source, &indices);
         Ok(source)
     }
 
@@ -612,32 +747,45 @@ impl GameDesign {
             .filter(|(_, scene)| !scene.instances.is_empty())
         {
             writeln!(source, "    CASE {index}").unwrap();
-            for (slot, instance) in scene.instances.iter().enumerate() {
-                let entity = self
-                    .entities
-                    .iter()
-                    .find(|entity| entity.id == instance.entity)
-                    .unwrap();
+            for role in self.scene_entities(scene).unwrap() {
+                if role.definition.behavior == EntityBehavior::Spawner {
+                    continue;
+                }
+                let slot = role.slot;
+                let instance = role.instance;
+                let entity = role.definition;
                 writeln!(
                     source,
                     "        IF gf_changed = 0 AND gf_e{slot}_active THEN"
                 )
                 .unwrap();
-                if entity.behavior == EntityBehavior::Patrol {
-                    let end = instance.patrol_end_x.unwrap();
-                    writeln!(source,"            IF gf_e{slot}_dir = 0 THEN\n                IF gf_e{slot}_x >= {end} THEN\n                    gf_e{slot}_dir = 255\n                ELSE\n                    IF Collision.Tile(gf_e{slot}_x + 16, {}) = 0 AND Collision.Tile(gf_e{slot}_x + 16, {}) = 0 THEN\n                        gf_e{slot}_x = gf_e{slot}_x + 1\n                    ELSE\n                        gf_e{slot}_dir = 255\n                    END IF\n                END IF\n            ELSE\n                IF gf_e{slot}_x <= {} THEN\n                    gf_e{slot}_dir = 0\n                ELSE\n                    IF Collision.Tile(gf_e{slot}_x - 1, {}) = 0 AND Collision.Tile(gf_e{slot}_x - 1, {}) = 0 THEN\n                        gf_e{slot}_x = gf_e{slot}_x - 1\n                    ELSE\n                        gf_e{slot}_dir = 0\n                    END IF\n                END IF\n            END IF",instance.y,u16::from(instance.y)+15,instance.x,instance.y,u16::from(instance.y)+15).unwrap();
+                if role.spawned_by.is_some() {
+                    // A worker may enter another room on death. Never restore old slot state afterward.
+                    self.spawn_enemy_call(source, scene, &role, index);
+                    source.push_str("        END IF\n");
+                    continue;
+                }
+                if entity.behavior == EntityBehavior::Patrol
+                    || (entity.behavior == EntityBehavior::Enemy && instance.patrol_end_x.is_some())
+                {
+                    self.enemy_movement_source(source, entity, instance, slot);
                 }
                 if matches!(
                     entity.behavior,
                     EntityBehavior::Pickup | EntityBehavior::Door
                 ) {
-                    writeln!(source,"            IF gf_movable AND Collision.Rect(gf_x, gf_y, 16, 16, gf_e{slot}_x, {}, 16, 16) THEN",instance.y).unwrap();
+                    let p = self.player_hitbox;
+                    let e = entity.hitbox;
+                    writeln!(source,"            IF gf_movable AND Collision.Rect(gf_x + {}, gf_y + {}, {}, {}, gf_e{slot}_x + {}, {}, {}, {}) THEN",p.x,p.y,p.width,p.height,e.x,u16::from(instance.y)+u16::from(e.y),e.width,e.height).unwrap();
                     if entity.behavior == EntityBehavior::Pickup {
                         writeln!(source,"                gf_e{slot}_active = 0\n                IF gf_pickups < 65535 THEN\n                    gf_pickups = gf_pickups + 1\n                END IF").unwrap();
                     } else {
                         writeln!(source,"                IF Controller.IsPressed(Button.A) THEN\n                    gf_scene = {}\n                    GameFlowEnter()\n                END IF",indices[instance.target_scene.as_deref().unwrap()]).unwrap();
                     }
                     source.push_str("            END IF\n");
+                }
+                if entity.behavior == EntityBehavior::Enemy {
+                    self.enemy_source(source, entity, slot, instance.y, indices);
                 }
                 source.push_str("        END IF\n");
             }
@@ -652,11 +800,56 @@ impl GameDesign {
             .filter(|(_, scene)| !scene.instances.is_empty())
         {
             writeln!(source, "    CASE {index}").unwrap();
-            for (slot, instance) in scene.instances.iter().enumerate() {
-                writeln!(source,"        IF gf_e{slot}_active THEN\n            Animation.Update(gf_e{slot}_anim)\n            Animation.Draw(gf_e{slot}_x, {}, gf_e{slot}_anim)\n        END IF",instance.y).unwrap();
+            for role in self.scene_entities(scene).unwrap() {
+                if role.definition.behavior == EntityBehavior::Spawner {
+                    continue;
+                }
+                let slot = role.slot;
+                let instance = role.instance;
+                writeln!(source,"        IF gf_e{slot}_active THEN\n            Animation.Update(gf_e{slot}_anim)\n            {}\n        END IF",role.definition.visual.draw(&format!("gf_e{slot}_x"),&instance.y.to_string(),&format!("gf_e{slot}_anim"),&format!("gf_e{slot}_dir"))).unwrap();
             }
         }
         source.push_str("    END SELECT\nEND SUB\n");
+    }
+
+    pub(super) fn enemy_movement_source(
+        &self,
+        source: &mut String,
+        entity: &EntityDefinition,
+        instance: &EntityInstance,
+        slot: usize,
+    ) {
+        if entity.behavior != EntityBehavior::Enemy || entity.enemy.motion == EnemyMotion::Patrol {
+            self.patrol_source(source, entity, instance, slot);
+            return;
+        }
+        let end = instance.patrol_end_x.unwrap();
+        let e = entity.hitbox;
+        let top = u16::from(instance.y) + u16::from(e.y);
+        let bottom = top + u16::from(e.height) - 1;
+        let middle = top + u16::from((e.height - 1) / 2);
+        let right = u16::from(e.x) + u16::from(e.width);
+        let range = entity.enemy.detection_range;
+        let y = instance.y;
+        // Compare added endpoints so detection at X/Y=0 never underflows WORD arithmetic.
+        // Pursuit shares slot direction/facing, needs no extra RAM, and stops outside range.
+        writeln!(source, "            IF gf_movable AND (gf_health > 0) AND (gf_x <= gf_e{slot}_x + {range}) AND (gf_e{slot}_x <= gf_x + {range}) AND (gf_y <= {y} + {range}) AND ({y} <= gf_y + {range}) THEN\n                IF gf_x < gf_e{slot}_x THEN\n                    gf_e{slot}_dir = 255\n                    IF gf_e{slot}_x > {} THEN\n                        IF Collision.Tile(gf_e{slot}_x + {} - 1, {top}) = 0 AND Collision.Tile(gf_e{slot}_x + {} - 1, {bottom}) = 0 AND Collision.Tile(gf_e{slot}_x + {} - 1, {middle}) = 0 THEN\n                            gf_e{slot}_x = gf_e{slot}_x - 1\n                        END IF\n                    END IF\n                ELSE\n                    IF gf_x > gf_e{slot}_x THEN\n                        gf_e{slot}_dir = 0\n                        IF gf_e{slot}_x < {end} THEN\n                            IF Collision.Tile(gf_e{slot}_x + {right}, {top}) = 0 AND Collision.Tile(gf_e{slot}_x + {right}, {bottom}) = 0 AND Collision.Tile(gf_e{slot}_x + {right}, {middle}) = 0 THEN\n                                gf_e{slot}_x = gf_e{slot}_x + 1\n                            END IF\n                        END IF\n                    END IF\n                END IF\n            END IF", instance.x, e.x, e.x, e.x).unwrap();
+    }
+
+    fn patrol_source(
+        &self,
+        source: &mut String,
+        entity: &EntityDefinition,
+        instance: &EntityInstance,
+        slot: usize,
+    ) {
+        let end = instance.patrol_end_x.unwrap();
+        let e = entity.hitbox;
+        let top = u16::from(instance.y) + u16::from(e.y);
+        let bottom = top + u16::from(e.height) - 1;
+        let middle = top + u16::from((e.height - 1) / 2);
+        let right = u16::from(e.x) + u16::from(e.width);
+        writeln!(source,"            IF gf_e{slot}_dir = 0 THEN\n                IF gf_e{slot}_x >= {end} THEN\n                    gf_e{slot}_dir = 255\n                ELSE\n                    IF Collision.Tile(gf_e{slot}_x + {right}, {top}) = 0 AND Collision.Tile(gf_e{slot}_x + {right}, {bottom}) = 0 AND Collision.Tile(gf_e{slot}_x + {right}, {middle}) = 0 THEN\n                        gf_e{slot}_x = gf_e{slot}_x + 1\n                    ELSE\n                        gf_e{slot}_dir = 255\n                    END IF\n                END IF\n            ELSE\n                IF gf_e{slot}_x <= {} THEN\n                    gf_e{slot}_dir = 0\n                ELSE\n                    IF Collision.Tile(gf_e{slot}_x + {} - 1, {top}) = 0 AND Collision.Tile(gf_e{slot}_x + {} - 1, {bottom}) = 0 AND Collision.Tile(gf_e{slot}_x + {} - 1, {middle}) = 0 THEN\n                        gf_e{slot}_x = gf_e{slot}_x - 1\n                    ELSE\n                        gf_e{slot}_dir = 0\n                    END IF\n                END IF\n            END IF",instance.x,e.x,e.x,e.x).unwrap();
     }
 }
 

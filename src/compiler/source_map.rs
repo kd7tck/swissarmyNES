@@ -8,6 +8,18 @@ pub struct LinkedSourceMap {
     /// Exact source snapshots identify the revision without hash collisions.
     pub sources: std::collections::BTreeMap<String, String>,
     pub entries: Vec<SourceRange>,
+    pub asset_reuse: AssetReuseStats,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct AssetReuseStats {
+    pub metasprites: usize,
+    pub unique_metasprites: usize,
+    pub animations: usize,
+    pub unique_animations: usize,
+    pub metadata_before_dedup: usize,
+    pub metadata_after_dedup: usize,
+    pub metadata_bytes_saved: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -49,6 +61,7 @@ impl LinkedSourceMap {
         Self {
             version: 1,
             sources: Default::default(),
+            asset_reuse: Default::default(),
             entries,
         }
     }

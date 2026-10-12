@@ -306,6 +306,7 @@ fn compile_source_with_design(
         .map_err(|e| format!("Assembler Error: {:?}", e))?;
 
     let mut map = SourceMap::from_layout(layout);
+    map.asset_reuse = codegen.asset_reuse.clone();
     map.sources = sources.into_inner();
     Ok((rom, map))
 }
@@ -445,7 +446,7 @@ pub async fn test_game_flow(
         let design = project.metadata.design.ok_or("Enable Game Studio before testing its flow")?;
         let selected_test = request.test_id.as_ref().map(|id| design.tests.iter().find(|test| test.id == *id).ok_or("Choose an existing saved flow test")).transpose()?;
         // Compile and report the same owned design/assets snapshot, even if another save arrives.
-        let (rom, _) = compile_source_with_design(Some(MAIN_SOURCE.into()), Some(name), project.assets, Some(&design))?;
+        let (rom, source_map) = compile_source_with_design(Some(MAIN_SOURCE.into()), Some(name), project.assets, Some(&design))?;
         let mut emulator = swiss_emulator::Emulator::new();
         emulator.load_rom(&rom).map_err(|error| format!("ROM load: {error:?}"))?;
         let boot_frames = if selected_test.is_some() { TEST_BOOT_FRAMES } else { request.frames };
@@ -476,16 +477,23 @@ pub async fn test_game_flow(
                     Some(format!("expected pickups {}, got {}",step.expected_pickups.unwrap(),state["pickups"]))
                 } else if step.expected_active_entities.is_some_and(|expected| state["active_entities"] != expected) {
                     Some(format!("expected active entities {}, got {}",step.expected_active_entities.unwrap(),state["active_entities"]))
+                } else if step.expected_health.is_some_and(|expected| state["health"] != expected) {
+                    Some(format!("expected health {}, got {}",step.expected_health.unwrap(),state["health"]))
+                } else if step.expected_defeated.is_some_and(|expected| state["defeated"] != expected) {
+                    Some(format!("expected defeated {}, got {}",step.expected_defeated.unwrap(),state["defeated"]))
                 } else {
-                    step.expected_variables.iter().find_map(|(id, expected)| {
+                    step.expected_spawns.iter().find_map(|(id,expected)| {
+                        (state["spawners"][id]["spawned"] != *expected).then(|| format!("expected spawner {id} count = {expected}, got {}",state["spawners"][id]["spawned"]))
+                    }).or_else(|| step.expected_variables.iter().find_map(|(id, expected)| {
                         (state["variables"][id] != *expected).then(|| format!("expected variable {id} = {expected}, got {}", state["variables"][id]))
-                    })
+                    }))
                 };
                 observations.push(serde_json::json!({"step":index+1,"frames":total_frames,"state":state,"passed":mismatch.is_none()}));
                 if let Some(message) = mismatch { failure = Some(format!("Step {}: {message}",index+1)); break; }
             }
         }
         state["passed"] = serde_json::json!(failure.is_none());
+        state["asset_reuse"] = serde_json::json!(source_map.asset_reuse);
         state["message"] = serde_json::json!(failure);
         state["frames"] = serde_json::json!(total_frames);
         state["rom_bytes"] = serde_json::json!(rom.len());
@@ -523,16 +531,26 @@ fn flow_test_state(
     let pickups = address
         .map(|offset| u16::from_le_bytes([ram[offset], ram[offset + 1]]))
         .unwrap_or(0);
-    let entities: Vec<_> = scene
-        .instances
+    let roles = design.scene_entities(scene)?;
+    let entities: Vec<_> = roles
         .iter()
-        .enumerate()
-        .map(|(slot, instance)| {
+        .map(|role| {
+            let slot=role.slot;let instance=role.instance;
             let offset = address.unwrap() + 3 + slot * 9;
-            serde_json::json!({"id":instance.id,"entity":instance.entity,"active":ram[offset] != 0,
-            "x":u16::from_le_bytes([ram[offset+1],ram[offset+2]]),"y":instance.y})
+            let health = design.combat_address().and_then(|base| {
+                (role.definition.behavior == super::game_design::EntityBehavior::Enemy).then_some(ram[base+4+slot])
+            });
+            serde_json::json!({"id":role.id,"entity":role.definition.id,"slot":slot,"spawned_by":role.spawned_by.map(|parent| &parent.id),"active":ram[offset] != 0,
+            "x":u16::from_le_bytes([ram[offset+1],ram[offset+2]]),"y":instance.y,"health":health})
         })
         .collect();
+    let spawners:serde_json::Map<String,serde_json::Value>=design.scene_spawners(scene).iter().map(|(instance,settings)| {
+        let base=design.spawner_address(scene,&instance.id).unwrap();
+        let alive=roles.iter().filter(|role| role.spawned_by.is_some_and(|parent| parent.id==instance.id)
+            && ram[address.unwrap()+3+role.slot*9]!=0).count();
+        (instance.id.clone(),serde_json::json!({"spawned":u16::from_le_bytes([ram[base+2],ram[base+3]]),
+            "remaining_frames":u16::from_le_bytes([ram[base],ram[base+1]]),"active":alive,"capacity":settings.capacity,"entity":settings.entity}))
+    }).collect();
     let active = entities
         .iter()
         .filter(|entity| entity["active"] == true)
@@ -551,6 +569,10 @@ fn flow_test_state(
     Ok(
         serde_json::json!({"scene_id":scene.id,"scene_name":scene.name,
         "x":u16::from_le_bytes([ram[0x5c3],ram[0x5c4]]),"y":u16::from_le_bytes([ram[0x5c5],ram[0x5c6]]),
-        "pickups":pickups,"active_entities":active,"entities":entities,"variables":variables,"generated_ram_bytes":design.generated_ram_bytes()}),
+        "pickups":pickups,"active_entities":active,"entities":entities,"variables":variables,"spawners":spawners,
+        "health":design.combat_address().map(|base| ram[base]),
+        "invulnerable":design.combat_address().map(|base| ram[base+1]),
+        "defeated":design.combat_address().map(|base| u16::from_le_bytes([ram[base+2],ram[base+3]])),
+        "generated_ram_bytes":design.generated_ram_bytes()}),
     )
 }

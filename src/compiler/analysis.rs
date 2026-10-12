@@ -490,15 +490,31 @@ impl SemanticAnalyzer {
                                 return;
                             }
                         } else if base_name.eq_ignore_ascii_case("Sprite") {
-                            if member.eq_ignore_ascii_case("Draw") {
-                                if args.len() != 3 {
+                            if member.eq_ignore_ascii_case("Draw")
+                                || member.eq_ignore_ascii_case("DrawVariant")
+                            {
+                                let expected = if member.eq_ignore_ascii_case("DrawVariant") {
+                                    5
+                                } else {
+                                    3
+                                };
+                                if args.len() != expected {
                                     self.errors.push(
-                                        "Sprite.Draw expects 3 arguments (x, y, metasprite)"
-                                            .to_string(),
+                                        format!("Sprite.{member} expects {expected} arguments (x, y, metasprite{})",if expected==5 {", palette, flip flags"} else {""}),
                                     );
                                 } else {
                                     self.analyze_expression(&args[0]);
                                     self.analyze_expression(&args[1]);
+                                    for arg in args.iter().skip(3) {
+                                        self.analyze_expression(arg);
+                                    }
+                                    if expected == 5 {
+                                        if let Expression::Integer(palette) = args[3] {
+                                            if !(0..=3).contains(&palette) && palette != 255 {
+                                                self.errors.push("Sprite variant palette must be 0..3 or 255 to preserve tile palettes".into());
+                                            }
+                                        }
+                                    }
                                     // 3rd arg is metasprite name, but we can't easily validate type here
                                     // if it's passed as a variable (pointer).
                                     // If it's an identifier, we can check if it's a metasprite.
@@ -605,16 +621,32 @@ impl SemanticAnalyzer {
                                     }
                                 }
                                 return;
-                            } else if member.eq_ignore_ascii_case("Draw") {
-                                if args.len() != 3 {
+                            } else if member.eq_ignore_ascii_case("Draw")
+                                || member.eq_ignore_ascii_case("DrawVariant")
+                            {
+                                let expected = if member.eq_ignore_ascii_case("DrawVariant") {
+                                    5
+                                } else {
+                                    3
+                                };
+                                if args.len() != expected {
                                     self.errors.push(
-                                        "Animation.Draw expects 3 arguments (x, y, state)"
-                                            .to_string(),
+                                        format!("Animation.{member} expects {expected} arguments (x, y, state{})",if expected==5 {", palette, flip flags"} else {""}),
                                     );
                                 } else {
                                     self.analyze_expression(&args[0]);
                                     self.analyze_expression(&args[1]);
                                     self.analyze_expression(&args[2]);
+                                    for arg in args.iter().skip(3) {
+                                        self.analyze_expression(arg);
+                                    }
+                                    if expected == 5 {
+                                        if let Expression::Integer(palette) = args[3] {
+                                            if !(0..=3).contains(&palette) && palette != 255 {
+                                                self.errors.push("Sprite variant palette must be 0..3 or 255 to preserve tile palettes".into());
+                                            }
+                                        }
+                                    }
                                     if let Some(DataType::Struct(name)) =
                                         self.resolve_type(&args[2])
                                     {

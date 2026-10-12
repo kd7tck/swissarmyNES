@@ -6,8 +6,11 @@ use axum::{
 use tower_http::{services::ServeDir, set_header::SetResponseHeader};
 
 pub mod api;
+pub mod game_combat;
 pub mod game_design;
 pub mod game_events;
+pub mod game_spawners;
+pub mod game_visuals;
 pub mod project;
 
 pub fn app() -> Router {

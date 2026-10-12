@@ -1,4 +1,4 @@
-//! Bounded visual rules compile to ordinary SwissBASIC, with no second runtime.
+//! Bounded visual rules compile to ordinary SANBasic, with no second runtime.
 use super::{game_design::GameDesign, game_design::Trigger, project::ProjectAssets};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fmt::Write};
@@ -49,6 +49,9 @@ pub enum ConditionSource {
     X,
     Y,
     Ticks,
+    Health,
+    Defeated,
+    Spawned { instance: String },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -72,6 +75,7 @@ pub enum EventAction {
     Music { track: u8 },
     Sfx { effect: u8 },
     StopMusic,
+    Restart,
 }
 
 impl GameDesign {
@@ -147,6 +151,19 @@ impl GameDesign {
                 ));
             }
             for condition in &event.conditions {
+                if let ConditionSource::Spawned { instance } = &condition.source {
+                    let scene = self
+                        .scenes
+                        .iter()
+                        .find(|scene| scene.id == event.scene)
+                        .unwrap();
+                    if self.spawner_address(scene, instance).is_none() {
+                        return Err(format!(
+                            "Event '{}' condition needs an existing spawner instance in its scene",
+                            event.name
+                        ));
+                    }
+                }
                 if let ConditionSource::Variable { variable } = &condition.source {
                     if !variable_ids.contains(variable.as_str()) {
                         return Err(format!(
@@ -172,6 +189,12 @@ impl GameDesign {
                         if !scenes.contains(scene.as_str()) || index + 1 != event.actions.len() {
                             return Err(format!("Event '{}' scene change must be its final action and target an existing scene", event.name));
                         }
+                    }
+                    EventAction::Restart if index + 1 != event.actions.len() => {
+                        return Err(format!(
+                            "Event '{}' restart must be its final action",
+                            event.name
+                        ));
                     }
                     EventAction::Music { track }
                         if usize::from(*track) >= assets.audio_tracks.len() =>
@@ -246,6 +269,31 @@ impl GameDesign {
                     ConditionSource::X => "gf_x".into(),
                     ConditionSource::Y => "gf_y".into(),
                     ConditionSource::Ticks => "gf_ticks".into(),
+                    ConditionSource::Health => if self.combat.is_some() {
+                        "gf_health"
+                    } else {
+                        "0"
+                    }
+                    .into(),
+                    ConditionSource::Defeated => if self.combat.is_some() {
+                        "gf_defeated"
+                    } else {
+                        "0"
+                    }
+                    .into(),
+                    ConditionSource::Spawned { instance } => {
+                        let scene = self
+                            .scenes
+                            .iter()
+                            .find(|scene| scene.id == event.scene)
+                            .unwrap();
+                        let index = self
+                            .scene_spawners(scene)
+                            .iter()
+                            .position(|(item, _)| item.id == *instance)
+                            .unwrap();
+                        format!("gf_sp{index}_spawned")
+                    }
                 };
                 let op = match condition.comparison {
                     Comparison::Equal => "=",
@@ -303,6 +351,7 @@ impl GameDesign {
                         writeln!(source, "            PLAY_SFX({effect})").unwrap()
                     }
                     EventAction::StopMusic => source.push_str("            Sound.Stop()\n"),
+                    EventAction::Restart => source.push_str("            GameFlowStart()\n"),
                 }
             }
             source.push_str("        END IF\n    END IF\n");
